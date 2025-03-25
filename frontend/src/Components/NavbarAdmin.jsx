@@ -7,7 +7,7 @@ const NavbarAdmin = ({ toggleSidebar }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   return (
-    <div className="navbar bg-base-100 px-4 shadow-md">
+    <div className="navbar bg-base-100 px-4 shadow-sm">
       {/* Left Section - Hamburger + Logo */}
       <div className="flex-1 flex items-center">
         {/* Sidebar Toggle Button (Mobile) */}
@@ -16,7 +16,7 @@ const NavbarAdmin = ({ toggleSidebar }) => {
         </button>
         <a className="ml-4 text-xl text-blue-700 font-bold">BDCNHS Gradebook</a>
       </div>
-
+ 
       {/* Right Section */}
       <div className="flex-none">
         {/* Desktop View - User Info (Hidden on Small Screens) */}
@@ -40,7 +40,7 @@ const NavbarAdmin = ({ toggleSidebar }) => {
                   <FontAwesomeIcon icon={faUser} className="text-gray-900 text-xl mr-2" />
                   <span className="text-lg font-semibold">Albert Einstein</span>
                 </li>
-                <li className="px-4 text-sm text-gray-500">Faculty Member</li>
+                <li className="px-4 text-sm text-gray-500">Admin</li>
               </ul>
             )}
           </div>

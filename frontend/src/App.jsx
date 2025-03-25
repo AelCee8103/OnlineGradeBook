@@ -10,6 +10,12 @@ import Attendance from './Pages/Attendance';
 import Register from './Pages/Register';
 import AdminDashboard from './Admin/AdminDashboard';
 import Adminregister from './Admin/adminregister';
+import ManageClass from './Admin/ManageClass';
+import ManageStudent from "./Admin/ManageStudents";
+import ManageFaculty from "./Admin/ManageFaculty";
+import ManageGrades from './Admin/ManageGrades';
+import ValidationRequest from './Admin/ValidationRequest';
+import ArchiveRecords from './Admin/ArchiveRecords';
 
 
 function App() {
@@ -17,18 +23,29 @@ function App() {
 
   return (
     <>
-       <BrowserRouter>
+     <BrowserRouter>
      <Routes>
-      <Route path='/admin-login' element={<AdminLogin  />}></Route>|
+      <Route path='/admin-login' element={<AdminLogin  />}></Route>
+      <Route path='/admin-manage-students' element={<ManageStudent  />}></Route>
       <Route path='/admin-dashboard' element={<AdminDashboard  />}></Route>
+      <Route path='/admin-manage-faculty' element={<ManageFaculty />}></Route>
+      <Route path='/admin-manage-classes' element={<ManageClass />}></Route>
+      <Route path='/admin-manage-grades' element={<ManageGrades />}></Route>
+      <Route path='/admin-validation-request' element={<ValidationRequest />}></Route>
+      <Route path='/admin-archive-records' element={<ArchiveRecords />}></Route>
       <Route path='/admin-register' element={<Adminregister />}></Route>
+
+    
+     
+      
+
       <Route path='/faculty-login' element={<FacultyLogin  />}></Route>
       <Route path='/faculty-dashboard' element={<FacultyDashboard />}></Route>
-      <Route path='/class-advisory' element={<ClassAdvisory />}></Route>
-      <Route path='/classes' element={<Classes />}></Route>
-      <Route path='/grades' element={<Grades />}></Route>
-      <Route path='/attendance' element={<Attendance />}></Route>
-      <Route path='/register' element={<Register />}></Route>
+      <Route path='/faculty-class-advisory' element={<ClassAdvisory />}></Route>
+      <Route path='/faculty-classes' element={<Classes />}></Route>
+      <Route path='/faculty-grades' element={<Grades />}></Route>
+      <Route path='/faculty-attendance' element={<Attendance />}></Route>
+      <Route path='/faculty-register' element={<Register />}></Route>
      </Routes>
     </BrowserRouter>
     </>

@@ -83,7 +83,7 @@ const verifyToken = (req, res, next) => {
 
 
 // Route for fetching faculty dashboard data
-router.get('/faculty-dashboard', verifyToken, async (req, res) => {
+router.get(['/faculty-dashboard', '/faculty-class-advisory', '/faculty-classes', '/faculty-grades', '/faculty-attendance'],verifyToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
 
@@ -97,13 +97,16 @@ router.get('/faculty-dashboard', verifyToken, async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(200).json({ user: rows[0] });  // ✅ 'return' added
+    return res.status(200).json({ user: rows[0] });  // 'return' added
 
   } catch (err) {
     console.error("Error fetching faculty data:", err.message);
-    return res.status(500).json({ message: "Server Error", error: err.message }); // ✅ 'return' added
+    return res.status(500).json({ message: "Server Error", error: err.message }); // 'return' added
   }
+
+  
 });
+
 
 
 // Admin Registration
@@ -181,7 +184,7 @@ const verifyAdminToken = (req, res, next) => {
 };
 
 // Admin Dashboard (Protected Route)
-router.get('/admin-dashboard', verifyAdminToken, async (req, res) => {
+router.get(['/admin-dashboard','/admin-manage-students', '/admin-manage-faculty', '/admin-manage-grades', '/admin-manage-classes', '/admin-validation-request', '/admin-archive-records', '/admin-enrollment'], verifyAdminToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
 
@@ -200,6 +203,83 @@ router.get('/admin-dashboard', verifyAdminToken, async (req, res) => {
   } catch (err) {
     console.error("Error fetching admin data:", err.message);
     return res.status(500).json({ message: "Server Error", error: err.message });
+  }
+});
+
+
+
+//Subjects
+router.post('/admin-enrollment', async (req, res) => {
+  const { SubjectCode, SubjectName, gradelevel, Slots } = req.body;
+  const GradeLevel = gradelevel; // Use GradeLevel variable in the database query
+  // Basic validation
+  if (!SubjectCode || !SubjectName || !GradeLevel || !Slots) {
+    return res.status(400).json({ message: "All fields are required" });
+  }
+
+  try {
+    const db = await connectToDatabase();
+
+    // Check if subject already exists
+    const [existingSubject] = await db.query(
+      'SELECT * FROM enrollmentsubject WHERE SubjectCode = ?',
+      [SubjectCode]
+    );
+
+    if (existingSubject.length > 0) {
+      return res.status(400).json({ message: "Subject with this code already exists" });
+    }
+
+    // Insert new subject
+    await db.query(
+      'INSERT INTO enrollmentsubject(SubjectCode, SubjectName, GradeLevel, Slots) VALUES (?, ?, ?, ?)',
+      [SubjectCode, SubjectName, GradeLevel, Slots]
+    );
+
+    res.status(201).json({ message: "Subject added successfully" });
+  } catch (err) {
+    console.error("Database Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+//Get All Subjects
+router.get('/get-subjects', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const [subjects] = await db.query('SELECT * FROM enrollmentsubject');
+    res.json(subjects);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const { SubjectCode, SubjectName, GradeLevel, Slots } = req.body;
+
+  try {
+    const db = await connectToDatabase();
+    await db.query(
+      'UPDATE subjects SET SubjectCode = ?, SubjectName = ?, GradeLevel = ?, Slots = ? WHERE SubjectID = ?',
+      [SubjectCode, SubjectName, GradeLevel, Slots, id]
+    );
+    res.json({ message: "Subject updated successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const db = await connectToDatabase();
+    await db.query('DELETE FROM subjects WHERE SubjectID = ?', [id]);
+    res.json({ message: "Subject deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

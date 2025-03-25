@@ -1,39 +1,43 @@
 import React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faHome, faChalkboardTeacher, faUsers, faClipboardList, faUserCheck, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
 import Logo from "../assets/logo.png";
+import { faHome, faChalkboardTeacher, faUsers, faClipboardList, faUserCheck, faSignOutAlt } from "@fortawesome/free-solid-svg-icons";
 
 const FacultySidePanel = ({ isSidebarOpen, toggleSidebar }) => {
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    localStorage.removeItem("token"); // Clear token or any auth info
-    navigate("/faculty-login"); // Redirect to faculty login
-  };
+  const location = useLocation();  // Hook to get current path
 
   const menuItems = [
     { label: "Dashboard", icon: faHome, link: "/faculty-dashboard" },
-    { label: "Class Advisory", icon: faChalkboardTeacher, link: "/class-advisory" },
-    { label: "Classes", icon: faUsers, link: "/classes" },
-    { label: "Grades", icon: faClipboardList, link: "/grades" },
-    { label: "Attendance", icon: faUserCheck, link: "/attendance" },
+    { label: "Class Advisory", icon: faChalkboardTeacher, link: "/faculty-class-advisory" },
+    { label: "Classes", icon: faUsers, link: "/faculty-classes" },
+    { label: "Grades", icon: faClipboardList, link: "/faculty-grades" },
+    { label: "Attendance", icon: faUserCheck, link: "/faculty-attendance" },
   ];
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    navigate("/faculty-login");
+  };
+
+  const isActive = (path) => location.pathname === path;
 
   return (
     <>
       {/* Desktop Sidebar */}
-      <div className="hidden md:flex flex-col w-64 h-screen bg-white shadow-lg p-6 rounded-r-xl">
+      <div className="hidden md:flex flex-col w-64 h-screen bg-white shadow-lg p-6 rounded-r-xl overflow-y-auto">
         <div className="flex justify-center mb-4">
           <img src={Logo} alt="Faculty Logo" className="w-24 h-24 object-contain" />
         </div>
-        <h2 className="text-2xl font-bold text-green-800 text-center mb-6">Faculty Dashboard</h2>
+        <h2 className="text-2xl font-bold text-green-700 text-center mb-6">Faculty Panel</h2>
 
-        <ul className="space-y-4">
+        <ul className="space-y-4 flex-1">
           {menuItems.map((item, index) => (
             <li key={index}>
               <Link
-                className="flex items-center px-5 py-3 text-lg font-medium text-gray-700 rounded-lg transition-all duration-300 hover:bg-green-900 hover:text-white"
+                className={`flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 
+                  ${isActive(item.link) ? "bg-green-700 text-white" : "text-gray-700 hover:bg-green-700 hover:text-white"}`}
                 to={item.link}
               >
                 <FontAwesomeIcon icon={item.icon} className="mr-3 text-xl" />
@@ -43,13 +47,12 @@ const FacultySidePanel = ({ isSidebarOpen, toggleSidebar }) => {
           ))}
         </ul>
 
-        {/* Logout Button */}
         <button
+          className="mt-6 bg-green-700 text-white w-full py-3 rounded-lg hover:bg-green-800 flex items-center justify-center"
           onClick={handleLogout}
-          className="mt-auto flex items-center px-5 py-3 text-lg font-medium text-white rounded-lg bg-green-700 hover:bg-green-800 transition-all duration-300"
         >
-          <FontAwesomeIcon icon={faSignOutAlt} className="mr-3 text-xl" />
-          Logout
+          <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
+          Log Out
         </button>
       </div>
 
@@ -59,17 +62,17 @@ const FacultySidePanel = ({ isSidebarOpen, toggleSidebar }) => {
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         } md:hidden overflow-y-auto`}
       >
-        <button className="absolute top-4 right-4 text-2xl text-gray-700" onClick={toggleSidebar}>
-          ✖
-        </button>
+        <button className="absolute top-4 right-4 text-2xl text-gray-700" onClick={toggleSidebar}>✖</button>
         <h2 className="text-2xl font-bold text-gray-800 text-center mb-6">Faculty Panel</h2>
 
-        <ul className="space-y-4">
+        <ul className="space-y-4 flex-1">
           {menuItems.map((item, index) => (
-            <li key={index} onClick={toggleSidebar}>
+            <li key={index}>
               <Link
-                className="flex items-center px-5 py-3 text-lg font-medium text-gray-700 rounded-lg transition-all duration-300 hover:bg-green-900 hover:text-white"
+                className={`flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 
+                  ${isActive(item.link) ? "bg-green-700 text-white" : "text-gray-700 hover:bg-green-700 hover:text-white"}`}
                 to={item.link}
+                onClick={toggleSidebar}
               >
                 <FontAwesomeIcon icon={item.icon} className="mr-3 text-xl" />
                 {item.label}
@@ -78,16 +81,15 @@ const FacultySidePanel = ({ isSidebarOpen, toggleSidebar }) => {
           ))}
         </ul>
 
-        {/* Logout Button for Mobile */}
         <button
+          className="mt-6 bg-green-700 text-white w-full py-3 rounded-lg hover:bg-green-800 flex items-center justify-center"
           onClick={() => {
-            handleLogout();
             toggleSidebar();
+            handleLogout();
           }}
-          className="mt-6 w-full flex items-center px-5 py-3 text-lg font-medium text-red-600 rounded-lg transition-all duration-300 hover:bg-red-600 hover:text-white"
         >
-          <FontAwesomeIcon icon={faSignOutAlt} className="mr-3 text-xl" />
-          Logout
+          <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
+          Log Out
         </button>
       </div>
     </>

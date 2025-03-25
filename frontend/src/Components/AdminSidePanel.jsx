@@ -18,12 +18,12 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
 
   const menuItems = [
     { label: "Dashboard", icon: faGauge, link: "/admin-dashboard" },
-    { label: "Manage Students", icon: faUserGraduate, link: "/manage-students" },
-    { label: "Manage Faculty", icon: faChalkboardTeacher, link: "/manage-faculty" },
-    { label: "Manage Classes", icon: faGraduationCap, link: "/manage-classes" },
-    { label: "Manage Grades", icon: faFileLines, link: "/manage-grades" },
-    { label: "Validation Requests", icon: faClipboardCheck, link: "/validation-requests" },
-    { label: "Archived Records", icon: faArchive, link: "/archived-records" },
+    { label: "Manage Students", icon: faUserGraduate, link: "/admin-manage-students" },
+    { label: "Manage Faculty", icon: faChalkboardTeacher, link: "/admin-manage-faculty" },
+    { label: "Manage Classes", icon: faGraduationCap, link: "/admin-manage-classes" },
+    { label: "Manage Grades", icon: faFileLines, link: "/admin-manage-grades" },
+    { label: "Validation Requests", icon: faClipboardCheck, link: "/admin-validation-request" },
+    { label: "Archived Records", icon: faArchive, link: "/admin-archive-records" },
   ];
 
   const handleLogout = () => {
@@ -33,35 +33,35 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <div className="hidden md:flex flex-col w-64 h-screen bg-white shadow-lg p-6 rounded-r-xl">
-        <div className="flex justify-center mb-4">
-          <img src={Logo} alt="Admin Logo" className="w-24 h-24 object-contain" />
+            {/* Desktop Sidebar */}
+        <div className="hidden md:flex flex-col w-64 h-screen bg-white shadow-sm p-6 rounded-r-xl overflow-y-auto">
+          <div className="flex justify-center mb-4">
+            <img src={Logo} alt="Admin Logo" className="w-24 h-24 object-contain" />
+          </div>
+          <h2 className="text-2xl font-bold text-blue-700 text-center mb-6">Admin Panel</h2>
+
+          <ul className="space-y-4 flex-1">
+            {menuItems.map((item, index) => (
+              <li key={index}>
+                <Link
+                  className="flex items-center px-5 py-3 text-lg font-medium text-gray-700 rounded-lg transition-all duration-300 hover:bg-blue-700 hover:text-white"
+                  to={item.link}
+                >
+                  <FontAwesomeIcon icon={item.icon} className="mr-3 text-xl" />
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          <button
+            className="mt-6 bg-blue-700 text-white w-full py-3 rounded-lg hover:bg-blue-800 flex items-center justify-center"
+            onClick={handleLogout}
+          >
+            <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
+            Log Out
+          </button>
         </div>
-        <h2 className="text-2xl font-bold text-blue-700 text-center mb-6">Admin Panel</h2>
-
-        <ul className="space-y-4 flex-1">
-          {menuItems.map((item, index) => (
-            <li key={index}>
-              <Link
-                className="flex items-center px-5 py-3 text-lg font-medium text-gray-700 rounded-lg transition-all duration-300 hover:bg-blue-700 hover:text-white"
-                to={item.link}
-              >
-                <FontAwesomeIcon icon={item.icon} className="mr-3 text-xl" />
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-
-        <button
-          className="mt-6 bg-blue-700 text-white w-full py-3 rounded-lg hover:bg-blue-800 flex items-center justify-center"
-          onClick={handleLogout}
-        >
-          <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
-          Log Out
-        </button>
-      </div>
 
       {/* Mobile Sidebar */}
       <div
@@ -72,19 +72,19 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
         <button className="absolute top-4 right-4 text-2xl text-gray-700" onClick={toggleSidebar}>✖</button>
         <h2 className="text-2xl font-bold text-gray-800 text-center mb-6">Admin Panel</h2>
 
-        <ul className="space-y-4 flex-1">
-          {menuItems.map((item, index) => (
-            <li key={index} onClick={toggleSidebar}>
-              <Link
-                className="flex items-center px-5 py-3 text-lg font-medium text-gray-700 rounded-lg transition-all duration-300 hover:bg-blue-700 hover:text-white"
-                to={item.link}
-              >
-                <FontAwesomeIcon icon={item.icon} className="mr-3 text-xl" />
-                {item.label}
-              </Link>
-            </li>
-          ))}
-        </ul>
+          <ul className="space-y-4 flex-1">
+            {menuItems.map((item, index) => (
+              <li key={index}>
+                <Link
+                  className="flex items-center px-5 py-3 text-lg font-medium text-gray-700 rounded-lg transition-all duration-300 hover:bg-blue-700 hover:text-white"
+                  to={item.link}
+                >
+                  <FontAwesomeIcon icon={item.icon} className="mr-3 text-xl" />
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
 
         <button
           className="mt-6 bg-blue-700 text-white w-full py-3 rounded-lg hover:bg-blue-800 flex items-center justify-center"

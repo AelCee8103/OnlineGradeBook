@@ -15,6 +15,7 @@ const AdminLogin = () => {
     setValues({ ...values, [e.target.name]: e.target.value });
   };
 
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -38,7 +39,7 @@ const AdminLogin = () => {
 
   return (
     <section className="bg-gray-200 min-h-screen flex items-center justify-center">
-      <div className="container mx-auto px-12">
+     <div className="container mx-auto px-4 sm:px-8 md:px-24 lg:px-32">
         <div className="flex flex-col md:flex-row items-center md:justify-between">
           {/* Content Section */}
           <div className="hidden md:flex flex-col justify-center items-start px-4 md:px-20 text-center md:text-left">

@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 
 const FacultyDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const Navigate = useNavigate();  // ✅ Consistent with your sample
+  const Navigate = useNavigate();  //  Consistent with your sample
 
   const fetchUser = async () => {
     try {
@@ -18,7 +18,7 @@ const FacultyDashboard = () => {
       console.log("User Authenticated", response.data);
     } catch (error) {
       console.error("Error fetching data:", error);
-      Navigate("/faculty-login");   // ✅ Same logic as your admin sample
+      Navigate("/faculty-login");   //  Same logic as your admin sample
     }
   };
 
