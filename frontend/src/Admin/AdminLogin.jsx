@@ -29,6 +29,7 @@ const AdminLogin = () => {
       const response = await axios.post('http://localhost:3000/auth/admin-login', values);
       if (response.status === 201) {
         localStorage.setItem('token', response.data.token);
+       
         navigate('/admin-dashboard');
       }
     } catch (err) {

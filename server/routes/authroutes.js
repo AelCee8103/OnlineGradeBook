@@ -83,7 +83,7 @@ const verifyToken = (req, res, next) => {
 
 
 // Route for fetching faculty dashboard data
-router.get(['/faculty-dashboard', '/faculty-class-advisory', '/faculty-classes', '/faculty-grades', '/faculty-attendance'],verifyToken, async (req, res) => {
+router.get(['/faculty-dashboard', '/faculty-classes', '/faculty-grades', '/faculty-attendance'],verifyToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
 
@@ -175,6 +175,7 @@ const verifyAdminToken = (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_KEY);
     req.AdminID = decoded.AdminID;
+
     next();
 
   } catch (err) {
@@ -184,7 +185,7 @@ const verifyAdminToken = (req, res, next) => {
 };
 
 // Admin Dashboard (Protected Route)
-router.get(['/admin-dashboard','/admin-manage-students', '/admin-manage-faculty', '/admin-manage-grades', '/admin-manage-classes', '/admin-validation-request', '/admin-archive-records', '/admin-enrollment'], verifyAdminToken, async (req, res) => {
+router.get(['/admin-dashboard','/admin-manage-students', '/admin-manage-faculty', '/admin-manage-grades', '/admin-adivsory-classes', '/admin-validation-request', '/admin-archive-records', '/admin-enrollment', '/admin-manage-subject'], verifyAdminToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
 
@@ -207,83 +208,81 @@ router.get(['/admin-dashboard','/admin-manage-students', '/admin-manage-faculty'
 });
 
 
-
-//Subjects
-router.post('/admin-enrollment', async (req, res) => {
-  const { SubjectCode, SubjectName, gradelevel, Slots } = req.body;
-  const GradeLevel = gradelevel; // Use GradeLevel variable in the database query
-  // Basic validation
-  if (!SubjectCode || !SubjectName || !GradeLevel || !Slots) {
-    return res.status(400).json({ message: "All fields are required" });
+router.get('/auth/admin-manage-students', async (req, res) => {
+  try {
+    const adminId = req.user.id; // if you're using JWT token, extract ID from token
+    const [admin] = await db.query('SELECT FirstName FROM admin WHERE AdminID = ?', [adminId]);
+    res.json(admin[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch admin profile' });
   }
+});
 
+
+// Updated backend route
+router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
+    const facultyID = req.FacultyID;
 
-    // Check if subject already exists
-    const [existingSubject] = await db.query(
-      'SELECT * FROM enrollmentsubject WHERE SubjectCode = ?',
-      [SubjectCode]
+    // 1. Get faculty info
+    const [faculty] = await db.query(
+      'SELECT FirstName, LastName, MiddleName FROM faculty WHERE FacultyID = ?',
+      [facultyID]
     );
-
-    if (existingSubject.length > 0) {
-      return res.status(400).json({ message: "Subject with this code already exists" });
+    
+    if (faculty.length === 0) {
+      return res.status(404).json({ message: "Faculty not found" });
     }
 
-    // Insert new subject
-    await db.query(
-      'INSERT INTO enrollmentsubject(SubjectCode, SubjectName, GradeLevel, Slots) VALUES (?, ?, ?, ?)',
-      [SubjectCode, SubjectName, GradeLevel, Slots]
+    // 2. Get advisory class info from classes table
+    const [classes] = await db.query(
+      `SELECT Grade, Section 
+       FROM classes 
+       WHERE FacultyID = ?`,
+      [facultyID]
     );
 
-    res.status(201).json({ message: "Subject added successfully" });
-  } catch (err) {
-    console.error("Database Error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+    if (classes.length === 0) {
+      return res.status(200).json({
+        grade: "",
+        section: "",
+        advisorName: `${faculty[0].LastName}, ${faculty[0].FirstName}`,
+        students: [],
+        message: "No advisory class assigned"
+      });
+    }
 
-
-//Get All Subjects
-router.get('/get-subjects', async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-    const [subjects] = await db.query('SELECT * FROM enrollmentsubject');
-    res.json(subjects);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.put('/:id', async (req, res) => {
-  const { id } = req.params;
-  const { SubjectCode, SubjectName, GradeLevel, Slots } = req.body;
-
-  try {
-    const db = await connectToDatabase();
-    await db.query(
-      'UPDATE subjects SET SubjectCode = ?, SubjectName = ?, GradeLevel = ?, Slots = ? WHERE SubjectID = ?',
-      [SubjectCode, SubjectName, GradeLevel, Slots, id]
+    const { Grade, Section } = classes[0];
+    
+    // 3. Get students through student_classes join
+    const [students] = await db.query(
+      `SELECT s.StudentID, s.FirstName, s.MiddleName, s.LastName
+       FROM students s
+       JOIN student_classes sc ON s.StudentID = sc.StudentID
+       WHERE sc.FacultyID = ? AND sc.Grade = ? AND sc.Section = ?
+       ORDER BY s.LastName, s.FirstName`,
+      [facultyID, Grade, Section]
     );
-    res.json({ message: "Subject updated successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+
+    res.status(200).json({
+      grade: Grade.toString(),
+      section: Section,
+      advisorName: `${faculty[0].LastName}, ${faculty[0].FirstName}${
+        faculty[0].MiddleName ? ` ${faculty[0].MiddleName.charAt(0)}.` : ''
+      }`,
+      students: students.map(s => ({
+        StudentID: s.StudentID.toString(),
+        FirstName: s.FirstName || '',
+        MiddleName: s.MiddleName || '',
+        LastName: s.LastName || ''
+      }))
+    });
+
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 });
-
-router.delete('/:id', async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    const db = await connectToDatabase();
-    await db.query('DELETE FROM subjects WHERE SubjectID = ?', [id]);
-    res.json({ message: "Subject deleted successfully" });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-
-
 
 export default router;

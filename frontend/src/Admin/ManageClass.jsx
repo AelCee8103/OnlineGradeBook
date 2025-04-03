@@ -5,281 +5,325 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
-
-const ManageFaculty = () => {
+const ManageClasses = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [students, setStudents] = useState([]);
-  const Navigate = useNavigate();  //  Consistent with your sample
-  
+  const [advisoryClasses, setAdvisoryClasses] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
-  // Pagination States
-  const [currentPage, setCurrentPage] = useState(1);
-  const studentsPerPage = 5; // Customize how many students per page
+  // Form states
+  const [formData, setFormData] = useState({
+    ClassID: "",
+    Grade: "",
+    Section: "",
+    FacultyID: "",
+  });
 
-  useEffect(() => {+
-    // Simulated fetch - Replace this with your actual API call
-    setStudents([
-      { id: 1, name: "John Doe", studentNumber: "2021001" },
-      { id: 2, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 3, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 4, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 5, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 6, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 7, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 8, name: "Olivia Anderson", studentNumber: "2021008" },
-      { id: 9, name: "John Doe", studentNumber: "2021001" },
-      { id: 10, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 11, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 12, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 13, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 14, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 15, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 16, name: "Olivia Anderson", studentNumber: "2021008" },
-      { id: 17, name: "John Doe", studentNumber: "2021001" },
-      { id: 18, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 19, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 20, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 21, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 22, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 23, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 24, name: "Olivia Anderson", studentNumber: "2021008" },
-    ]);
-  }, []);
+  const [createFormData, setCreateFormData] = useState({
+    ClassID: "",
+    Grade: "",
+    Section: "",
+    FacultyID: "",
+  });
 
-  // Pagination logic
-  const indexOfLastStudent = currentPage * studentsPerPage;
-  const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
-  const currentStudents = students.slice(indexOfFirstStudent, indexOfLastStudent);
-  const totalPages = Math.ceil(students.length / studentsPerPage);
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
+  // Handlers
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
+  const handleCreateChange = (e) => {
+    setCreateFormData({ ...createFormData, [e.target.name]: e.target.value });
   };
 
-  const fetchUser = async () => {
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
+  const handleEdit = (advisory) => {
+    setFormData({
+      ClassID: advisory.ClassID,
+      Grade: advisory.Grade,
+      Section: advisory.Section,
+      FacultyID: advisory.FacultyID,
+    });
+    document.getElementById("edit_modal").showModal();
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:3000/auth/admin-manage-classes", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      console.log("User Authenticated", response.data);
+      const response = await axios.put(
+        "http://localhost:3000/Pages/admin-advisory-classes", 
+        formData, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      if (response.data.success) {
+        fetchAdvisoryClasses();
+        document.getElementById("edit_modal").close();
+        toast.success(response.data.message);
+      } else {
+        toast.error(response.data.error || "Failed to update class");
+      }
     } catch (error) {
-      console.error("Error fetching data:", error);
-      Navigate("/admin-login");   //  Same logic as your admin sample
+      console.error("Error updating class:", error);
+      toast.error(error.response?.data?.error || "Failed to update class");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.post(
+        "http://localhost:3000/Pages/admin-advisory-classes", 
+        createFormData, 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+    
+      if (response.data.success) {
+        // Update state immediately instead of fetching again
+        setAdvisoryClasses(prevClasses => [...prevClasses, response.data.newClass]);
+    
+        document.getElementById("create_modal").close();
+        toast.success(response.data.message);
+        setCreateFormData({ ClassID: "", Grade: "", Section: "", FacultyID: "" });
+  
+        // Redirect to the advisory classes page
+        navigate('/admin-advisory-classes');  // <-- Add this line
+      } else {
+        toast.error(response.data.error || "Failed to create class");
+      }
+    } catch (error) {
+      console.error("Error creating class:", error);
+      toast.error(error.response?.data?.error || "Failed to create class");
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+
+  const fetchAdvisoryClasses = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        "http://localhost:3000/Pages/admin-advisory-classes", 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setAdvisoryClasses(response.data);
+    } catch (error) {
+      console.error("Error fetching advisory classes:", error);
+      toast.error("Failed to load advisory classes");
     }
   };
 
   useEffect(() => {
-    fetchUser();
+    fetchAdvisoryClasses();
   }, []);
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
-      {/* Sidebar */}
-      <AdminSidePanel
-        isSidebarOpen={isSidebarOpen}
-        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-      />
-
-      {/* Mobile Overlay */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        ></div>
-      )}
-
-      {/* Main Content */}
+      <AdminSidePanel isSidebarOpen={isSidebarOpen} toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+      {isSidebarOpen && <div className="fixed inset-0 bg-black opacity-50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
       <div className="flex-1 flex flex-col overflow-auto">
         <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-
-        {/* Manage Students Content */}
+        <ToastContainer position="top-right" autoClose={3000} />
         <div className="p-8">
           <h1 className="text-3xl font-bold mb-6">Advisory Class List</h1>
-
-          {/* Students Table */}
-           <div className="mb-4 ml-20">
-
-         {/* Open the modal using document.getElementById('ID').showModal() method */}
-                  <button className="btn bg-blue-700 text-white hover:bg-blue-800" onClick={()=>document.getElementById('my_modal_5').showModal()}>Create Advisory List</button>
-                  <dialog id="my_modal_5" className="modal modal-bottom sm:modal-middle">
-                    <div className="modal-box">
-                      <h3 className="font-bold text-lg">Hello!</h3>
-                      <p className="py-4">Press ESC key or click the button below to close</p>
-                      <div className="modal-action">
-                        <form method="dialog">
-                          {/* if there is a button in form, it will close the modal */}
-                          <button className="btn">Close</button>
-                        </form>
-                      </div>
-                    </div>
-                  </dialog>
-         
-           </div>
+          
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
-            <input type="text" placeholder="Search by ID number"  className="mb-4 border border-gray-300 rounded-md px-4 py-2"/>
-            <FontAwesomeIcon icon={faMagnifyingGlass}  className="ml-3"/>
-
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="px-4 py-2 text-gray-600">Code</th>
-                  <th className="px-4 py-2 text-gray-600">Subject Name</th>
-                  <th className="px-4 py-2 text-gray-600">Assignend Faculty</th>
-                  <th className="px-4 py-2 text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentStudents.length > 0 ? (
-                  currentStudents.map((student, index) => (
-                    <tr key={student.id} className="border-b">
-                      <td className="px-4 py-2">{indexOfFirstStudent + index + 1}</td>
-                      <td className="px-4 py-2">{student.name}</td>
-                      <td className="px-4 py-2">{student.studentNumber}</td>
-                      <td className="px-4 py-2">
-                        <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">
-                          Edit
-                        </button>
-                        <button className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm ml-2">
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="text-center py-4">No students found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-
-            {/* Pagination Controls */}
-            <div className="flex justify-between items-center mt-4">
-              <button
-                onClick={handlePrevPage}
-                disabled={currentPage === 1}
-                className={`px-4 py-2 rounded ${
-                  currentPage === 1 ? "bg-gray-300" : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
+            <div className="flex items-center mb-4">
+              <div className="relative flex-grow">
+                <input 
+                  type="text" 
+                  placeholder="Search by ID number" 
+                  onChange={handleSearchChange} 
+                  value={searchTerm} 
+                  className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10" 
+                />
+                <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-3 text-gray-400" />
+              </div>
+              <button 
+                className="btn bg-blue-700 text-white hover:bg-blue-800 ml-4"
+                onClick={() => document.getElementById('create_modal').showModal()}
+                disabled={loading}
               >
-                Previous
-              </button>
-              <span className="text-sm text-gray-700">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className={`px-4 py-2 rounded ${
-                  currentPage === totalPages
-                    ? "bg-gray-300"
-                    : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Next
+                {loading ? "Loading..." : "Create Advisory List"}
               </button>
             </div>
 
-          </div>
-        </div>
+            {/* Create Modal */}
+            <dialog id="create_modal" className="modal">
+              <div className="modal-box">
+                <h3 className="font-bold text-lg mb-5">Create Advisory Class</h3>
+                <form onSubmit={handleCreate} className="space-y-3">
+                  <input 
+                    type="text" 
+                    name="ClassID" 
+                    value={createFormData.ClassID}
+                    onChange={handleCreateChange}
+                    placeholder="Class ID" 
+                    className="input input-bordered w-full" 
+                    required 
+                  />
+                  <input 
+                    type="text" 
+                    name="Grade" 
+                    value={createFormData.Grade}
+                    onChange={handleCreateChange}
+                    placeholder="Grade Level" 
+                    className="input input-bordered w-full" 
+                    required 
+                  />
+                  <input 
+                    type="text" 
+                    name="Section" 
+                    value={createFormData.Section}
+                    onChange={handleCreateChange}
+                    placeholder="Section" 
+                    className="input input-bordered w-full" 
+                    required 
+                  />
+                  <input 
+                    type="text" 
+                    name="FacultyID" 
+                    value={createFormData.FacultyID}
+                    onChange={handleCreateChange}
+                    placeholder="Faculty ID" 
+                    className="input input-bordered w-full" 
+                    required 
+                  />
+                  <div className="modal-action">
+                    <button 
+                      type="submit" 
+                      className="btn bg-blue-700 text-white"
+                      disabled={loading}
+                    >
+                      {loading ? "Creating..." : "Create"}
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn"
+                      onClick={() => document.getElementById('create_modal').close()}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </dialog>
 
-         {/* Manage Students Content */}
-      
-         <div className="p-8">
-          <h1 className="text-3xl font-bold mb-6">Subject Class List</h1>
-            
-          <div className="mb-4 ml-20">
+            {/* Edit Modal */}
+            <dialog id="edit_modal" className="modal">
+              <div className="modal-box">
+                <h3 className="font-bold text-lg mb-5">Edit Advisory Class</h3>
+                <form onSubmit={handleUpdate} className="space-y-3">
+                  <input 
+                    type="text" 
+                    name="ClassID" 
+                    value={formData.ClassID} 
+                    onChange={handleChange} 
+                    placeholder="Class ID" 
+                    className="input input-bordered w-full" 
+                    required 
+                    disabled
+                  />
+                  <input 
+                    type="text" 
+                    name="Grade" 
+                    value={formData.Grade} 
+                    onChange={handleChange} 
+                    placeholder="Grade Level" 
+                    className="input input-bordered w-full" 
+                    required 
+                  />
+                  <input 
+                    type="text" 
+                    name="Section" 
+                    value={formData.Section} 
+                    onChange={handleChange} 
+                    placeholder="Section" 
+                    className="input input-bordered w-full" 
+                    required 
+                  />
+                  <input 
+                    type="text" 
+                    name="FacultyID" 
+                    value={formData.FacultyID} 
+                    onChange={handleChange} 
+                    placeholder="Faculty ID" 
+                    className="input input-bordered w-full" 
+                    required 
+                  />
+                  <div className="modal-action">
+                    <button 
+                      type="submit" 
+                      className="btn bg-green-700 text-white"
+                      disabled={loading}
+                    >
+                      {loading ? "Updating..." : "Update"}
+                    </button>
+                    <button 
+                      type="button" 
+                      className="btn"
+                      onClick={() => document.getElementById('edit_modal').close()}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </dialog>
 
-          {/* Open the modal using document.getElementById('ID').showModal() method */}
-          <button className="btn bg-green-700 text-white hover:bg-green-800" onClick={()=>document.getElementById('my_modal_5').showModal()}>Create Subject List</button>
-                  <dialog id="my_modal_5" className="modal modal-bottom sm:modal-middle">
-                    <div className="modal-box">
-                      <h3 className="font-bold text-lg">Hello!</h3>
-                      <p className="py-4">Press ESC key or click the button below to close</p>
-                      <div className="modal-action">
-                        <form method="dialog">
-                          {/* if there is a button in form, it will close the modal */}
-                          <button className="btn">Close</button>
-                        </form>
-                      </div>
-                    </div>
-                  </dialog>
-                
-
-          </div>
-          {/* Students Table */}
-          <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
-            <input type="text" placeholder="Search by ID number"  className="mb-4 border border-gray-300 rounded-md px-4 py-2"/>
-            <FontAwesomeIcon icon={faMagnifyingGlass}  className="ml-3"/> 
-
-         
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="px-4 py-2 text-gray-600">No.</th>
-                  <th className="px-4 py-2 text-gray-600">Student Name</th>
-                  <th className="px-4 py-2 text-gray-600">Student Number</th>
-                  <th className="px-4 py-2 text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentStudents.length > 0 ? (
-                  currentStudents.map((student, index) => (
-                    <tr key={student.id} className="border-b">
-                      <td className="px-4 py-2">{indexOfFirstStudent + index + 1}</td>
-                      <td className="px-4 py-2">{student.name}</td>
-                      <td className="px-4 py-2">{student.studentNumber}</td>
-                      <td className="px-4 py-2">
-                        <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">
-                          Edit
-                        </button>
-                        <button className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm ml-2">
-                          Delete
-                        </button>
+            {/* Advisory Classes Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm mt-4">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="px-4 py-2">Class ID</th>
+                    <th className="px-4 py-2">Grade Level</th>
+                    <th className="px-4 py-2">Section</th>
+                    <th className="px-4 py-2">Faculty ID</th>
+                    <th className="px-4 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {advisoryClasses.length > 0 ? (
+                    advisoryClasses.map((advisory) => (
+                      <tr key={advisory.ClassID} className="border-b">
+                        <td className="px-4 py-2">{advisory.ClassID}</td>
+                        <td className="px-4 py-2">{advisory.Grade}</td>
+                        <td className="px-4 py-2">{advisory.Section}</td>
+                        <td className="px-4 py-2">{advisory.FacultyID}</td>
+                        <td className="px-4 py-2">
+                          <button 
+                            onClick={() => handleEdit(advisory)} 
+                            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="text-center py-4">
+                        {loading ? "Loading..." : "No advisory classes found."}
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="text-center py-4">No students found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-
-            {/* Pagination Controls */}
-            <div className="flex justify-between items-center mt-4">
-              <button
-                onClick={handlePrevPage}
-                disabled={currentPage === 1}
-                className={`px-4 py-2 rounded ${
-                  currentPage === 1 ? "bg-gray-300" : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-700">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className={`px-4 py-2 rounded ${
-                  currentPage === totalPages
-                    ? "bg-gray-300"
-                    : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Next
-              </button>
+                  )}
+                </tbody>
+              </table>
             </div>
-
           </div>
         </div>
       </div>
@@ -287,4 +331,4 @@ const ManageFaculty = () => {
   );
 };
 
-export default ManageFaculty;
+export default ManageClasses;

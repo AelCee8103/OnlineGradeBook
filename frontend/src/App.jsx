@@ -16,6 +16,10 @@ import ManageFaculty from "./Admin/ManageFaculty";
 import ManageGrades from './Admin/ManageGrades';
 import ValidationRequest from './Admin/ValidationRequest';
 import ArchiveRecords from './Admin/ArchiveRecords';
+import ManageSubjectList from './Admin/ManageSubjectList';
+import '@fontsource/roboto'; // Defaults to weight 400
+import AssignSubject from './Admin/AssignSubject';
+
 
 
 function App() {
@@ -29,7 +33,9 @@ function App() {
       <Route path='/admin-manage-students' element={<ManageStudent  />}></Route>
       <Route path='/admin-dashboard' element={<AdminDashboard  />}></Route>
       <Route path='/admin-manage-faculty' element={<ManageFaculty />}></Route>
-      <Route path='/admin-manage-classes' element={<ManageClass />}></Route>
+      <Route path='/admin-adivsory-classes' element={<ManageClass />}></Route>
+      <Route path='/admin-manage-subject' element={<ManageSubjectList />}></Route>
+      <Route path='/admin-assign-subject' element={<AssignSubject />}></Route>
       <Route path='/admin-manage-grades' element={<ManageGrades />}></Route>
       <Route path='/admin-validation-request' element={<ValidationRequest />}></Route>
       <Route path='/admin-archive-records' element={<ArchiveRecords />}></Route>

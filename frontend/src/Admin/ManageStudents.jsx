@@ -5,53 +5,50 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
-
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const ManageStudents = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [students, setStudents] = useState([]);
-  const Navigate = useNavigate();  //  Consistent with your sample
+  const navigate = useNavigate(); 
+  const [searchTerm, setSearchTerm] = useState("");
   
+
+
 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
-  const studentsPerPage = 5; // Customize how many students per page
+  const studentsPerPage = 5;
 
-  useEffect(() => {
-    // Simulated fetch - Replace this with your actual API call
-    setStudents([
-      { id: 1, name: "John Doe", studentNumber: "2021001" },
-      { id: 2, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 3, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 4, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 5, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 6, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 7, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 8, name: "Olivia Anderson", studentNumber: "2021008" },
-      { id: 9, name: "John Doe", studentNumber: "2021001" },
-      { id: 10, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 11, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 12, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 13, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 14, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 15, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 16, name: "Olivia Anderson", studentNumber: "2021008" },
-      { id: 17, name: "John Doe", studentNumber: "2021001" },
-      { id: 18, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 19, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 20, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 21, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 22, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 23, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 24, name: "Olivia Anderson", studentNumber: "2021008" },
-    ]);
-  }, []);
+  // Student form state
+  const [student, setStudent] = useState({
+    StudentID: '',
+    LastName: '',
+    FirstName: '',
+    MiddleName: '',
+
+  });
+
+  const [selectedStudent, setSelectedStudent] = useState({
+    StudentID: '',
+    LastName: '',
+    FirstName: '',
+    MiddleName: '',
+
+  });
 
   // Pagination logic
   const indexOfLastStudent = currentPage * studentsPerPage;
   const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
-  const currentStudents = students.slice(indexOfFirstStudent, indexOfLastStudent);
-  const totalPages = Math.ceil(students.length / studentsPerPage);
+  const filteredStudents = students.filter((student) =>
+    student.StudentID.toString().includes(searchTerm) ||
+    student.LastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    student.FirstName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  const currentStudents = filteredStudents.slice(indexOfFirstStudent, indexOfLastStudent);
+  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
+
 
   const handleNextPage = () => {
     if (currentPage < totalPages) setCurrentPage(currentPage + 1);
@@ -60,6 +57,8 @@ const ManageStudents = () => {
   const handlePrevPage = () => {
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
+
+    // Function to fetch all students
 
   const fetchUser = async () => {
     try {
@@ -70,81 +69,158 @@ const ManageStudents = () => {
       console.log("User Authenticated", response.data);
     } catch (error) {
       console.error("Error fetching data:", error);
-      Navigate("/admin-login");   //  Same logic as your admin sample
+      navigate("/admin-login"); 
     }
   };
 
   useEffect(() => {
     fetchUser();
+    axios.get("http://localhost:3000/Pages/admin-manage-students")
+    .then(res => setStudents(res.data))
+    .catch(err=> console.log(err));
+  
   }, []);
-
-  const [student, setStudent] = useState({
-    fullName: '',
-    age: '',
-    gender: '',
-    email: '',
-    gradelevel: ''
-  });
 
   const handleChange = (e) => {
     setStudent({ ...student, [e.target.name]: e.target.value });
+
+
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Student Data:', student);
-    alert('Student information submitted! (Check console)');
-    
-    // Reset the form
-    setStudent({
-      fullName: '',
-      age: '',
-      gender: '',
-      email: '',
-      course: ''
-    });
+  
+    if (!student.StudentID || !student.LastName || !student.FirstName || !student.MiddleName) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+  
+    try {
+      const res = await axios.post('http://localhost:3000/Pages/admin-manage-students', student);
+      console.log(res);
 
-    // Close the modal
-    document.getElementById('my_modal_5').close();
+      
+    // ✅ Update the students state with the new student
+    setStudents(prevStudents => [...prevStudents, student]);
+
+     
+    document.getElementById('my_modal_5').close(); // Optional: Close modal after submission
+    setStudent({ StudentID: '', LastName: '', FirstName: '', MiddleName: ''}); // Reset form
+
+    toast.success('Student added successfully!');
+      navigate('/admin-manage-students');
+     
+    } catch (error) {
+      if (error.response && error.response.status === 400) {
+        toast.error(error.response.data.message || "Faculty ID already exists!");
+      } else {
+        console.error("Error adding faculty:", error);
+        toast.error("Student ID already exists.");
+      }
+    }
   };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      await axios.put(`http://localhost:3000/Pages/admin-manage-students`, selectedStudent);
+      toast.success("Student updated successfully!");
+
+      // Update the students list
+      setStudents(students.map(s => (s.StudentID === selectedStudent.StudentID ? selectedStudent : s)));
+
+      // Close modal
+      document.getElementById('edit_modal').close();
+    } catch (error) {
+      console.error("Error updating student:", error);
+      toast.error("Failed to update student.");
+    }
+  };
+
+   // Function to handle clicking the Edit button
+   const handleEditClick = (student) => {
+    setSelectedStudent(student);
+    document.getElementById('edit_modal').showModal();
+  };
+
+    // Function to update the input fields when editing
+    const handleEditChange = (e) => {
+      setSelectedStudent({ ...selectedStudent, [e.target.name]: e.target.value });
+    };
+                      
+
+  
+  
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
-      {/* Sidebar */}
-      <AdminSidePanel
-        isSidebarOpen={isSidebarOpen}
-        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-      />
+    {/* Sidebar */}
+    <AdminSidePanel
+      isSidebarOpen={isSidebarOpen}
+      toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+    />
 
-      {/* Mobile Overlay */}
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        ></div>
-      )}
+    {/* Mobile Overlay */}
+    {isSidebarOpen && (
+      <div
+        className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
+        onClick={() => setIsSidebarOpen(false)}
+      ></div>
+    )}
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-auto">
-        <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+  {/* Mobile Overlay */}
+  {isSidebarOpen && (
+    <div
+      className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
+      onClick={() => setIsSidebarOpen(false)}
+    ></div>
+  )}
 
-        {/* Manage Students Content */}
-        <div className="p-8">
-          <h1 className="text-3xl font-bold mb-6">Manage Students</h1>
+  {/* Main Content */}
+  <div className="flex-1 flex flex-col overflow-auto">
+    <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
 
-          {/* Students Table */}
-          <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
-            <input type="text" placeholder="Search by ID number"  className="mb-4 border border-gray-300 rounded-md px-4 py-2"/>
-            <FontAwesomeIcon icon={faMagnifyingGlass}  className="ml-3"/>
+    <ToastContainer 
+       position="top-right"
+       autoClose={2000}  // 3 seconds
+       hideProgressBar={false}
+       newestOnTop={false}
+       closeOnClick
+       rtl={false}
+       pauseOnFocusLoss={false}
+       draggable
+       pauseOnHover={false}
+    />
 
-           {/* Open the modal using document.getElementById('ID').showModal() method */}
+      
+
+    {/* Manage Students Content */}
+    <div className="p-8">
+      <h1 className="text-3xl font-bold mb-6">Manage Students</h1>
+
+      {/* Students Table */}
+      <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
+
+        
             {/* Button to Open Modal */}
-              <button 
-                className="btn bg-blue-500 hover:bg-blue-600 text-white ml-3" 
+            <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
+                <input
+                type="text"
+                placeholder="Search by ID number"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="border border-gray-300 rounded-md px-4 py-2 flex-grow"
+              />
+          <FontAwesomeIcon icon={faMagnifyingGlass} className="ml-3" /> 
+          
+            <button 
+                className="btn bg-blue-500 hover:bg-blue-600 text-white ml-3 "
                 onClick={() => document.getElementById('my_modal_5').showModal()}
               >
                 Add Student
               </button>
+            </div>
 
               {/* Modal */}
               <dialog id="my_modal_5" className="modal modal-bottom sm:modal-middle">
@@ -153,142 +229,169 @@ const ManageStudents = () => {
 
                   <form onSubmit={handleSubmit} className="space-y-3">
                     <input 
-                      type="text" 
-                      name="fullName" 
-                      value={student.fullName}
-                      onChange={handleChange}
-                      placeholder="Full Name" 
-                      className="input input-bordered w-full" 
-                      required 
-                    />
-                    <input 
                       type="number" 
-                      name="age" 
-                      value={student.age}
+                      name="StudentID" 
+                      value={student.StudentID}
                       onChange={handleChange}
-                      placeholder="Age" 
+                      placeholder="Student ID" 
                       className="input input-bordered w-full" 
                       required 
                     />
-                    <select 
-                      name="gender" 
-                      value={student.gender}
-                      onChange={handleChange}
-                      className="select select-bordered w-full" 
-                      required
-                    >
-                      <option value="">Select Gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                    </select>
                     <input 
-                      type="email" 
-                      name="email" 
-                      value={student.email}
+                      type="text" 
+                      name="LastName" 
+                      value={student.LastName}
                       onChange={handleChange}
-                      placeholder="Email" 
+                      placeholder="Last Name" 
+                      className="input input-bordered w-full" 
+                      required 
+                    />
+                    
+                    <input 
+                      type="text" 
+                      name="FirstName" 
+                      value={student.FirstName}
+                      onChange={handleChange}
+                      placeholder="FirstName" 
                       className="input input-bordered w-full" 
                       required 
                     />
                   <input 
                       type="text" 
-                      name="fullName" 
-                      value={student.gradelevel}
+                      name="MiddleName" 
+                      value={student.MiddleName}
                       onChange={handleChange}
-                      placeholder="Grade Level" 
+                      placeholder="Middle Name" 
                       className="input input-bordered w-full" 
                       required 
                     />
 
                     {/* Action Buttons */}
                     <div className="modal-action">
-                      <button type="submit" className="btn btn-success">Submit</button>
+                      <button type="submit" className="btn bg-green-700 text-white">Submit</button>
                       <form method="dialog">
                         <button className="btn">Close</button>
                       </form>
+                 
                     </div>
                   </form>
                 </div>
               </dialog>
-           {/* Open the modal using document.getElementById('ID').showModal() method */}
-            <button className="btn ml-4 bg-green-700 text-white hover:bg-green-800" onClick={()=>document.getElementById('my_modal_6').showModal()}>Archive Students</button>
-            <dialog id="my_modal_6" className="modal modal-bottom sm:modal-middle">
-              <div className="modal-box">
-                <h3 className="font-bold text-lg">Confirmation</h3>
-                <p className="py-4">Do you want to archive all inactive Students</p>
-                <div className="modal-action">
-                  <form method="dialog">
-                    {/* if there is a button in form, it will close the modal */}
-                    <button className="btn">Close</button>
-                  </form>
-                </div>
-              </div>
-            </dialog>
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="px-4 py-2 text-gray-600">No.</th>
-                  <th className="px-4 py-2 text-gray-600">Student Name</th>
-                  <th className="px-4 py-2 text-gray-600">Student Number</th>
-                  <th className="px-4 py-2 text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentStudents.length > 0 ? (
-                  currentStudents.map((student, index) => (
-                    <tr key={student.id} className="border-b">
-                      <td className="px-4 py-2">{indexOfFirstStudent + index + 1}</td>
-                      <td className="px-4 py-2">{student.name}</td>
-                      <td className="px-4 py-2">{student.studentNumber}</td>
-                      <td className="px-4 py-2">
-                        <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">
-                          View
-                        </button>
-                        <button className="bg-green-700 text-white px-3 py-1 rounded hover:bg-green-600 text-sm ml-2">
-                          Grades
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="text-center py-4">No students found.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="bg-gray-200">
+              <th className="px-4 py-2">Student No.</th>
+              <th className="px-4 py-2">Last Name</th>
+              <th className="px-4 py-2">First Name</th>
+              <th className="px-4 py-2">Middle Name</th>
+              <th className="px-4 py-2">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {currentStudents.map((data, i) => (
+              <tr key={i} className="hover:bg-gray-50">
+                <td className="px-4 py-2">{data.StudentID}</td>
+                <td className="px-4 py-2">{data.LastName}</td>
+                <td className="px-4 py-2">{data.FirstName}</td>
+                <td className="px-4 py-2">{data.MiddleName}</td>
+                <td className="px-4 py-2">
+                
 
-            {/* Pagination Controls */}
-            <div className="flex justify-between items-center mt-4">
-              <button
-                onClick={handlePrevPage}
-                disabled={currentPage === 1}
-                className={`px-4 py-2 rounded ${
-                  currentPage === 1 ? "bg-gray-300" : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-700">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className={`px-4 py-2 rounded ${
-                  currentPage === totalPages
-                    ? "bg-gray-300"
-                    : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Next
-              </button>
-            </div>
+                {/* Open the modal using document.getElementById('ID').showModal() method */}
+                <button 
+                        className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                        onClick={() => handleEditClick(data)}
+                      >
+                        Edit
+                      </button>
+                      <dialog id="edit_modal" className="modal modal-bottom sm:modal-middle">
+                      <div className="modal-box">
+                        <h3 className="font-bold text-lg mb-4">Edit Student Information</h3>
 
-          </div>
+                        <form onSubmit={handleEditSubmit} className="space-y-3">
+                          <input
+                            type="number"
+                            name="StudentID"
+                            value={selectedStudent.StudentID}
+                            onChange={handleEditChange}
+                            className="input input-bordered w-full"
+                            required
+                            disabled // Prevent ID changes
+                          />
+                          <input
+                            type="text"
+                            name="LastName"
+                            value={selectedStudent.LastName}
+                            onChange={handleEditChange}
+                            className="input input-bordered w-full"
+                            required
+                          />
+                          <input
+                            type="text"
+                            name="FirstName"
+                            value={selectedStudent.FirstName}
+                            onChange={handleEditChange}
+                            className="input input-bordered w-full"
+                            required
+                          />
+                          <input
+                            type="text"
+                            name="MiddleName"
+                            value={selectedStudent.MiddleName}
+                            onChange={handleEditChange}
+                            className="input input-bordered w-full"
+                            required
+                          />
+                          <div className="modal-action">
+                            <button type="submit" className="btn bg-green-700 text-white">
+                              Update
+                            </button>
+                            <button type="button" className="btn" onClick={() => document.getElementById('edit_modal').close()}>
+                              Close
+                            </button>
+                          </div>
+                        </form>
+                      </div>
+                    </dialog>
+
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        </div>
+        {/* Pagination Controls */}
+        <div className="flex justify-between items-center mt-4">
+          <button
+            onClick={handlePrevPage}
+            disabled={currentPage === 1}
+            className={`px-4 py-2 rounded ${
+              currentPage === 1 ? "bg-gray-300" : "bg-blue-500 text-white hover:bg-blue-600"
+            }`}
+          >
+            Previous
+          </button>
+          <span className="text-sm text-gray-700">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={handleNextPage}
+            disabled={currentPage === totalPages}
+            className={`px-4 py-2 rounded ${
+              currentPage === totalPages
+                ? "bg-gray-300"
+                : "bg-blue-500 text-white hover:bg-blue-600"
+            }`}
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>
+  </div>
+</div>
+
   );
 };
 
