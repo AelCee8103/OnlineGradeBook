@@ -4,10 +4,16 @@ import AdminSidePanel from "../Components/AdminSidePanel";
 import StatCard from "../Admin/StatCard";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const AdminDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const Navigate = useNavigate();
+  const [newSchoolYear, setSchoolYear] = useState({
+    schoolyearID: "",
+    year: "",
+  });  
+  const navigate = useNavigate();
 
   const fetchUser = async () => {
     try {
@@ -26,17 +32,42 @@ const AdminDashboard = () => {
     fetchUser();
   }, []);
 
-  useEffect(() => {
-    Navigate("/admin-dashboard", { replace: true });
-    window.history.pushState(null, "", window.location.href);
-    const preventGoBack = () => {
-      window.history.pushState(null, "", window.location.href);
-    };
-    window.addEventListener("popstate", preventGoBack);
+  const handleCreateSchoolYear = async (e) => {
+    e.preventDefault();
+     
+    try {
+      const response = await axios.post("http://localhost:3000/Pages/admin-dashboard", { 
+        SchoolYear: newSchoolYear.schoolyearID, 
+        year: newSchoolYear.year 
+      });
+  
+      if (response.data.exists) {
+        toast.error("School Year already exists");
+      } else {
+        toast.success("School Year added successfully!");
+      }
+  
+      setSchoolYear({ schoolyearID: "", year: "" });
+  
+      navigate("/admin-dashboard");
+  
+      // Close modal safely
+      const modal = document.getElementById('my_modal_5');
+      if (modal) modal.close();
+      
+    } catch (err) {
+      console.error("Error:", err.response?.data || err.message);
+      toast.error("Failed to add school year.");
+    }
+  };
 
-    return () => window.removeEventListener("popstate", preventGoBack);
-  }, [Navigate]);
+  const handChanges  = (e) => {
+    setSchoolYear({
+       ...newSchoolYear, [e.target.name]: e.target.value
+    });
+  };
 
+  
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
       {/* Sidebar */}
@@ -66,12 +97,43 @@ const AdminDashboard = () => {
               <select className="border rounded-lg px-3 py-1 text-lg">
                 <option>2024-2025</option>
               </select>
-              <button
-                className="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-500"
-                onClick={() => window.location.reload()}
-              >
-                Reload Page
-              </button>
+              <button className="btn bg-blue-700 text-white hover:bg-blue-800" onClick={()=>document.getElementById('my_modal_5').showModal()}>add school year</button>
+              <dialog id="my_modal_5" className="modal modal-bottom sm:modal-middle">
+                <div className="modal-box">
+                  <h3 className="font-bold text-lg mb-6">Add School Year</h3>
+                  
+                  <form onSubmit={handleCreateSchoolYear} method="dialog" className="flex flex-col gap-4">
+                    {/* Input Field */}
+                    <div className="flex flex-col gap-5">
+                      <input 
+                        type="text" 
+                        placeholder="Enter School Year ID" 
+                        className="input input-bordered w-full" 
+                        onChange={handChanges}
+                        name="schoolyearID"
+                        required
+                      />
+                       <input 
+                        type="text" 
+                        placeholder="Enter School Year" 
+                        className="input input-bordered w-full" 
+                        onChange={handChanges}
+                        name="year"
+                        required
+                      />
+                      
+                    </div>
+                    
+                    {/* Buttons - Right-aligned */}
+                    <div className="modal-action mt-2">
+                      <div className="flex gap-2 justify-end">
+                        <button type="button"  onClick={() => document.getElementById('my_modal_5').close()}className="btn">Close</button>
+                        <button type="submit" className="btn btn-primary">Submit</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </dialog>
             </div>
           </div>
 

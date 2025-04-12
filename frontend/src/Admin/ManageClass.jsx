@@ -11,11 +11,12 @@ import 'react-toastify/dist/ReactToastify.css';
 const ManageClasses = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [advisoryClasses, setAdvisoryClasses] = useState([]);
+  const [schoolYears, setSchoolYears] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
   const navigate = useNavigate();
 
-  // Form states
   const [formData, setFormData] = useState({
     ClassID: "",
     Grade: "",
@@ -28,9 +29,46 @@ const ManageClasses = () => {
     Grade: "",
     Section: "",
     FacultyID: "",
+    school_yearID: "",
+    studentLimit: 50
   });
 
-  // Handlers
+  const fetchAdvisoryClasses = async () => {
+    setFetching(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        "http://localhost:3000/Pages/admin-advisory-classes", 
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setAdvisoryClasses(response.data);
+    } catch (error) {
+      console.error("Error fetching advisory classes:", error);
+      toast.error("Failed to load advisory classes");
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  const fetchSchoolYears = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        "http://localhost:3000/Pages/schoolyear",
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setSchoolYears(response.data);
+    } catch (error) {
+      console.error("Error fetching school years:", error);
+      toast.error("Failed to load school years");
+    }
+  };
+
+  useEffect(() => {
+    fetchAdvisoryClasses();
+    fetchSchoolYears();
+  }, []);
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -64,16 +102,13 @@ const ManageClasses = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
-      if (response.data.success) {
+      if (response.data.message) {
         fetchAdvisoryClasses();
         document.getElementById("edit_modal").close();
         toast.success(response.data.message);
-      } else {
-        toast.error(response.data.error || "Failed to update class");
       }
     } catch (error) {
-      console.error("Error updating class:", error);
-      toast.error(error.response?.data?.error || "Failed to update class");
+      toast.error(error.response?.data?.message || "Failed to update class");
     } finally {
       setLoading(false);
     }
@@ -83,52 +118,84 @@ const ManageClasses = () => {
     e.preventDefault();
     setLoading(true);
     try {
+      // Validate numeric fields
+      if (isNaN(createFormData.ClassID) || 
+          isNaN(createFormData.Grade) || 
+          isNaN(createFormData.FacultyID)) {
+        throw new Error("ClassID, Grade, and FacultyID must be numbers");
+      }
+
+      // Validate Section length (VARCHAR(11) in DB)
+      if (createFormData.Section.length > 11) {
+        throw new Error("Section must be 11 characters or less");
+      }
+
+      if (!createFormData.school_yearID) {
+        throw new Error("School Year is required");
+      }
+
       const token = localStorage.getItem("token");
       const response = await axios.post(
         "http://localhost:3000/Pages/admin-advisory-classes", 
-        createFormData, 
+        {
+          ...createFormData,
+          ClassID: parseInt(createFormData.ClassID),
+          Grade: parseInt(createFormData.Grade),
+          FacultyID: parseInt(createFormData.FacultyID),
+          studentLimit: parseInt(createFormData.studentLimit) || 50
+        }, 
         { headers: { Authorization: `Bearer ${token}` } }
       );
     
       if (response.data.success) {
-        // Update state immediately instead of fetching again
-        setAdvisoryClasses(prevClasses => [...prevClasses, response.data.newClass]);
-    
-        document.getElementById("create_modal").close();
         toast.success(response.data.message);
-        setCreateFormData({ ClassID: "", Grade: "", Section: "", FacultyID: "" });
-  
-        // Redirect to the advisory classes page
-        navigate('/admin-advisory-classes');  // <-- Add this line
-      } else {
-        toast.error(response.data.error || "Failed to create class");
+        
+        // Reset form after successful creation
+        setCreateFormData({ 
+          ClassID: "", 
+          Grade: "", 
+          Section: "", 
+          FacultyID: "",
+          school_yearID: "",
+          studentLimit: 50
+        });
+
+        document.getElementById("create_modal").close();
+        fetchAdvisoryClasses();
       }
     } catch (error) {
-      console.error("Error creating class:", error);
-      toast.error(error.response?.data?.error || "Failed to create class");
+      console.error("Creation error:", error);
+      let errorMessage = "Failed to create class";
+      
+      if (error.response) {
+        errorMessage = error.response.data.error || 
+                     error.response.data.details || 
+                     error.response.data.message || 
+                     errorMessage;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage);
     } finally {
       setLoading(false);
     }
   };
-  
 
-  const fetchAdvisoryClasses = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        "http://localhost:3000/Pages/admin-advisory-classes", 
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setAdvisoryClasses(response.data);
-    } catch (error) {
-      console.error("Error fetching advisory classes:", error);
-      toast.error("Failed to load advisory classes");
-    }
+  const handleViewStudents = (classId) => {
+    navigate(`/admin-view-students?classId=${classId}`);
   };
 
-  useEffect(() => {
-    fetchAdvisoryClasses();
-  }, []);
+  const filteredClasses = advisoryClasses.filter(advisory => 
+    advisory.ClassID.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+    advisory.Grade.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (advisory.Section && advisory.Section.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (advisory.FacultyID && advisory.FacultyID.toString().toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (advisory.FacultyLastName && advisory.FacultyLastName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (advisory.FacultyFirstName && advisory.FacultyFirstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (advisory.yearID && advisory.yearID.toString().includes(searchTerm)) ||
+    (advisory.year && advisory.year.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -145,7 +212,7 @@ const ManageClasses = () => {
               <div className="relative flex-grow">
                 <input 
                   type="text" 
-                  placeholder="Search by ID number" 
+                  placeholder="Search classes..." 
                   onChange={handleSearchChange} 
                   value={searchTerm} 
                   className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10" 
@@ -157,51 +224,113 @@ const ManageClasses = () => {
                 onClick={() => document.getElementById('create_modal').showModal()}
                 disabled={loading}
               >
-                {loading ? "Loading..." : "Create Advisory List"}
+                {loading ? "Loading..." : "Create Advisory Class"}
               </button>
             </div>
 
             {/* Create Modal */}
             <dialog id="create_modal" className="modal">
-              <div className="modal-box">
+              <div className="modal-box max-w-2xl">
                 <h3 className="font-bold text-lg mb-5">Create Advisory Class</h3>
                 <form onSubmit={handleCreate} className="space-y-3">
-                  <input 
-                    type="text" 
-                    name="ClassID" 
-                    value={createFormData.ClassID}
-                    onChange={handleCreateChange}
-                    placeholder="Class ID" 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
-                  <input 
-                    type="text" 
-                    name="Grade" 
-                    value={createFormData.Grade}
-                    onChange={handleCreateChange}
-                    placeholder="Grade Level" 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
-                  <input 
-                    type="text" 
-                    name="Section" 
-                    value={createFormData.Section}
-                    onChange={handleCreateChange}
-                    placeholder="Section" 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
-                  <input 
-                    type="text" 
-                    name="FacultyID" 
-                    value={createFormData.FacultyID}
-                    onChange={handleCreateChange}
-                    placeholder="Faculty ID" 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">
+                        <span className="label-text">Class ID</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        name="ClassID" 
+                        value={createFormData.ClassID}
+                        onChange={handleCreateChange}
+                        placeholder="Class ID" 
+                        className="input input-bordered w-full" 
+                        required 
+                      />
+                    </div>
+                    <div>
+                      <label className="label">
+                        <span className="label-text">Grade Level</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        name="Grade" 
+                        value={createFormData.Grade}
+                        onChange={handleCreateChange}
+                        placeholder="Grade Level" 
+                        className="input input-bordered w-full" 
+                        required 
+                      />
+                    </div>
+                    <div>
+                      <label className="label">
+                        <span className="label-text">Section</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        name="Section" 
+                        value={createFormData.Section}
+                        onChange={handleCreateChange}
+                        placeholder="Section" 
+                        className="input input-bordered w-full" 
+                        required 
+                        maxLength="11"
+                      />
+                    </div>
+                    <div>
+                      <label className="label">
+                        <span className="label-text">Faculty ID</span>
+                      </label>
+                      <input 
+                        type="text" 
+                        name="FacultyID" 
+                        value={createFormData.FacultyID}
+                        onChange={handleCreateChange}
+                        placeholder="Faculty ID" 
+                        className="input input-bordered w-full" 
+                        required 
+                      />
+                    </div>
+                    <div>
+                    <label className="label">
+                      <span className="label-text">School Year</span>
+                    </label>
+                    <select
+                      name="school_yearID"
+                      value={createFormData.school_yearID}
+                      onChange={handleCreateChange}
+                      className="select select-bordered w-full"
+                      required
+                    >
+                      <option value="">Select School Year</option>
+                      {Array.isArray(schoolYears) && schoolYears.length > 0 ? (
+                        schoolYears.map(year => (
+                          <option key={year.school_yearID} value={year.school_yearID}>
+                            {year.school_yearID} - {year.year || year.SchoolYear}
+                          </option>
+                        ))
+                      ) : (
+                        <option disabled>No school years available</option>
+                      )}
+                    </select>
+                  </div>
+                    <div>
+                      <label className="label">
+                        <span className="label-text">Student Limit</span>
+                      </label>
+                      <input 
+                        type="number" 
+                        name="studentLimit" 
+                        value={createFormData.studentLimit}
+                        onChange={handleCreateChange}
+                        placeholder="Student Limit" 
+                        className="input input-bordered w-full" 
+                        min="1"
+                        max="100"
+                      />
+                    </div>
+                  </div>
+                  
                   <div className="modal-action">
                     <button 
                       type="submit" 
@@ -232,7 +361,6 @@ const ManageClasses = () => {
                     name="ClassID" 
                     value={formData.ClassID} 
                     onChange={handleChange} 
-                    placeholder="Class ID" 
                     className="input input-bordered w-full" 
                     required 
                     disabled
@@ -242,7 +370,6 @@ const ManageClasses = () => {
                     name="Grade" 
                     value={formData.Grade} 
                     onChange={handleChange} 
-                    placeholder="Grade Level" 
                     className="input input-bordered w-full" 
                     required 
                   />
@@ -251,7 +378,6 @@ const ManageClasses = () => {
                     name="Section" 
                     value={formData.Section} 
                     onChange={handleChange} 
-                    placeholder="Section" 
                     className="input input-bordered w-full" 
                     required 
                   />
@@ -260,7 +386,6 @@ const ManageClasses = () => {
                     name="FacultyID" 
                     value={formData.FacultyID} 
                     onChange={handleChange} 
-                    placeholder="Faculty ID" 
                     className="input input-bordered w-full" 
                     required 
                   />
@@ -285,45 +410,62 @@ const ManageClasses = () => {
             </dialog>
 
             {/* Advisory Classes Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm mt-4">
-                <thead>
-                  <tr className="bg-gray-200">
-                    <th className="px-4 py-2">Class ID</th>
-                    <th className="px-4 py-2">Grade Level</th>
-                    <th className="px-4 py-2">Section</th>
-                    <th className="px-4 py-2">Faculty ID</th>
-                    <th className="px-4 py-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {advisoryClasses.length > 0 ? (
-                    advisoryClasses.map((advisory) => (
-                      <tr key={advisory.ClassID} className="border-b">
-                        <td className="px-4 py-2">{advisory.ClassID}</td>
-                        <td className="px-4 py-2">{advisory.Grade}</td>
-                        <td className="px-4 py-2">{advisory.Section}</td>
-                        <td className="px-4 py-2">{advisory.FacultyID}</td>
-                        <td className="px-4 py-2">
-                          <button 
-                            onClick={() => handleEdit(advisory)} 
-                            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-                          >
-                            Edit
-                          </button>
-                        </td>
+               {/* Advisory Classes Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm mt-4">
+                    <thead>
+                      <tr className="bg-gray-200">
+                        <th className="px-4 py-2">Class ID</th>
+                        <th className="px-4 py-2">Grade</th>
+                        <th className="px-4 py-2">Section</th>
+                        <th className="px-4 py-2">Faculty ID</th>
+                        <th className="px-4 py-2">School Year ID</th>
+                        <th className="px-4 py-2">School Year</th>
+                        <th className="px-4 py-2">Actions</th>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="5" className="text-center py-4">
-                        {loading ? "Loading..." : "No advisory classes found."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {fetching ? (
+                        <tr>
+                          <td colSpan="7" className="text-center py-4">
+                            Loading advisory classes...
+                          </td>
+                        </tr>
+                      ) : filteredClasses.length > 0 ? (
+                        filteredClasses.map((advisory) => (
+                          <tr key={advisory.ClassID} className="border-b">
+                            <td className="px-4 py-2">{advisory.ClassID}</td>
+                            <td className="px-4 py-2">{advisory.Grade}</td>
+                            <td className="px-4 py-2">{advisory.Section}</td>
+                            <td className="px-4 py-2">{advisory.FacultyID}</td>
+                            <td className="px-4 py-2">{advisory.yearID}</td>
+                            <td className="px-4 py-2">{advisory.year}</td>
+                            <td className="px-4 py-2">
+                              <button 
+                                onClick={() => handleViewStudents(advisory.ClassID)} 
+                                className="bg-green-600 text-white px-3 py-1 mr-2 rounded hover:bg-green-700 text-sm"
+                              >
+                                View
+                              </button>
+                              <button 
+                                onClick={() => handleEdit(advisory)} 
+                                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                              >
+                                Edit
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="7" className="text-center py-4">
+                            No advisory classes found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
           </div>
         </div>
       </div>

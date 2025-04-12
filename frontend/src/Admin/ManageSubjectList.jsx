@@ -12,9 +12,8 @@ const ManageSubjectList = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [subjects, setSubjects] = useState([]);
   const [newSubject, setNewSubject] = useState({
-    SubjectCode: "",
+    SubjectID: "",
     SubjectName: "",
-    FacultyID: "",
   });
   const Navigate = useNavigate();
 
@@ -54,7 +53,7 @@ const ManageSubjectList = () => {
       toast.success("Subject added successfully! ✅");  // ✅ Show success toast
       document.getElementById("subject_modal").close(); // Close modal
       fetchSubjects(); // Refresh list
-      setNewSubject({ SubjectCode: "", SubjectName: "", FacultyID: "" }); // Reset form
+      setNewSubject({ SubjectCode: "", SubjectName: ""}); // Reset form
     } catch (error) {
       console.error("Error adding subject:", error);
       toast.error("Failed to add subject ❌");  // ✅ Show error toast
@@ -97,19 +96,17 @@ const ManageSubjectList = () => {
             <table className="w-full text-left text-sm mt-4">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="px-4 py-2 text-gray-600">Subject Code</th>
+                  <th className="px-4 py-2 text-gray-600">Subject ID</th>
                   <th className="px-4 py-2 text-gray-600">Subject Name</th>
-                  <th className="px-4 py-2 text-gray-600">Faculty ID</th>
                   <th className="px-4 py-2 text-gray-600">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {subjects.length > 0 ? (
                   subjects.map((subject) => (
-                    <tr key={subject.SubjectCode} className="border-b">
-                      <td className="px-4 py-2">{subject.SubjectCode}</td>
+                    <tr key={subject.SubjectID} className="border-b">
+                      <td className="px-4 py-2">{subject.SubjectID}</td>
                       <td className="px-4 py-2">{subject.SubjectName}</td>
-                      <td className="px-4 py-2">{subject.FacultyID}</td>
                       <td className="px-4 py-2">
                         <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">
                           Edit
@@ -154,15 +151,7 @@ const ManageSubjectList = () => {
               className="input input-bordered w-full"
               required
             />
-            <input
-              type="number"
-              name="FacultyID"
-              value={newSubject.faculty_id}
-              onChange={handleSubjectChange}
-              placeholder="Faculty ID"
-              className="input input-bordered w-full"
-              required
-            />
+        
             <div className="modal-action">
               <button type="submit" className="btn bg-green-700 text-white">Submit</button>
               <button type="button" className="btn" onClick={() => document.getElementById("subject_modal").close()}>Close</button>

@@ -335,6 +335,7 @@ const ManageFaculty = () => {
                         <td className="px-4 py-2">{faculty.MiddleName || '-'}</td>
                         <td className="px-4 py-2">{faculty.Email || '-'}</td>
                         <td className="px-4 py-2">
+                          <button className=" bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm mr-4">Archive</button>
                           <button 
                             className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
                             onClick={() => handleEditClick(faculty)}

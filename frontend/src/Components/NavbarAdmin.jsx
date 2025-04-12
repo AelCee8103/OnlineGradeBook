@@ -19,18 +19,23 @@ const NavbarAdmin = ({ toggleSidebar }) => {
         <button className="md:hidden text-2xl mr-3" onClick={toggleSidebar}>
           <FontAwesomeIcon icon={faBars} />
         </button>
-        <a className="ml-4 text-xl text-blue-700 font-bold">BDCNHS Gradebook</a>
+        <a className="ml-4 text-xl text-blue-700 font-bold">BDCNHS GRADEBOOK</a>
       </div>
 
       {/* Right Section */}
       <div className="flex-none">
-        <div className="hidden md:flex items-center text-gray-600">
-          <FontAwesomeIcon icon={faUser} className="text-gray-900 text-2xl mr-3" />
-          <div className="flex flex-col px-2">
-            <h1 className="text-lg font-semibold">Admin</h1>
+      <div className="flex grow justify-end px-2">
+        <div className="flex items-stretch">
+          <div className="dropdown dropdown-end">
+            <div tabIndex={0} role="button" className="btn btn-ghost rounded-field">Admin</div>
+            <ul
+              tabIndex={0}
+              className="menu dropdown-content bg-white rounded-box z-1 mt-4 w-52 p-2 shadow-sm">
+              <li><a className="bg-">LOGOUT</a></li>
+            </ul>
           </div>
         </div>
-
+      </div>
         {/* Mobile View */}
         <div className="md:hidden">
           <div className="relative">

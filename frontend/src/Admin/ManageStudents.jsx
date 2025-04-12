@@ -280,7 +280,7 @@ const ManageStudents = () => {
               <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="bg-gray-200">
+            <tr className=" border-b bg-gray-200">
               <th className="px-4 py-2">Student No.</th>
               <th className="px-4 py-2">Last Name</th>
               <th className="px-4 py-2">First Name</th>
@@ -290,7 +290,7 @@ const ManageStudents = () => {
           </thead>
           <tbody>
             {currentStudents.map((data, i) => (
-              <tr key={i} className="hover:bg-gray-50">
+              <tr key={i} className="border-b hover:bg-gray-50">
                 <td className="px-4 py-2">{data.StudentID}</td>
                 <td className="px-4 py-2">{data.LastName}</td>
                 <td className="px-4 py-2">{data.FirstName}</td>

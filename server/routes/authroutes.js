@@ -285,4 +285,31 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
   }
 });
 
+// Get all assigned subjects for faculty
+router.get("/admin-assign-subject", verifyToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const facultyId = req.FacultyID; // Get from decoded token
+
+    if (!facultyId) {
+      return res.status(400).json({ error: "Faculty ID not found in token" });
+    }
+
+    const sql = `
+      SELECT a.ClassID, a.SubjectCode, s.SubjectName , c.Section
+      FROM assignsubject a
+      JOIN subjects s ON a.SubjectCode = s.SubjectCode
+      JOIN classes c ON a.ClassID = c.ClassID
+      WHERE a.FacultyID = ?
+    `;
+
+    const [results] = await db.query(sql, [facultyId]);
+    res.json(results);
+
+  } catch (error) {
+    console.error("Error fetching assigned subjects:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

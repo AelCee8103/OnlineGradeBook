@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation, Outlet } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faGauge,
@@ -56,25 +56,25 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
 
         <ul className="space-y-4 flex-1">
           <li>
-            <Link className="flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-dashboard">
+            <Link className="flex items-center px-5 py-3 text-md font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-dashboard">
               <FontAwesomeIcon icon={faGauge} className="mr-3 text-xl" />
               Dashboard
             </Link>
           </li>
           <li>
-            <Link className="flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-manage-students">
+            <Link className="flex items-center px-5 py-3 text-sm font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-manage-students">
               <FontAwesomeIcon icon={faUserGraduate} className="mr-3 text-xl" />
               Manage Students
             </Link>
           </li>
           <li>
-            <Link className="flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-manage-faculty">
+            <Link className="flex items-center px-5 py-3 text-sm font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-manage-faculty">
               <FontAwesomeIcon icon={faChalkboardTeacher} className="mr-3 text-xl" />
               Manage Faculty
             </Link>
           </li>
           <li>
-            <div className="cursor-pointer flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+            <div className="cursor-pointer flex items-center px-5 py-3 text-md font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
               <FontAwesomeIcon icon={faGraduationCap} className="mr-3 text-xl" />
               Manage Classes
               <FontAwesomeIcon icon={faChevronDown} className={`ml-auto transform transition-transform ${isDropdownOpen ? "rotate-180" : "rotate-0"}`} />
@@ -93,19 +93,19 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
             </ul>
           </li>
           <li>
-            <Link className="flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-manage-grades">
+            <Link className="flex items-center px-5 py-3 text-md font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-manage-grades">
               <FontAwesomeIcon icon={faFileLines} className="mr-3 text-xl" />
               Manage Grades
             </Link>
           </li>
           <li>
-            <Link className="flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-validation-request">
+            <Link className="flex items-center px-5 py-3 text-md font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-validation-request">
               <FontAwesomeIcon icon={faClipboardCheck} className="mr-3 text-xl" />
               Validation Requests
             </Link>
           </li>
           <li>
-            <Link className="flex items-center px-5 py-3 text-lg font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-archive-records">
+            <Link className="flex items-center px-5 py-3 text-md font-medium rounded-lg transition-all duration-300 text-gray-700 hover:bg-blue-700 hover:text-white" to="/admin-archive-records">
               <FontAwesomeIcon icon={faArchive} className="mr-3 text-xl" />
               Archived Records
             </Link>
@@ -119,7 +119,7 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
       </div>
 
       {/* Mobile Sidebar */}
-      <div className={`fixed inset-0 z-50 bg-white shadow-lg transform transition-transform ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:hidden w-64 h-screen p-6`}>
+      <div className={`fixed inset-0 z-50 bg-white shadow-lg overflow-y-auto transform transition-transform ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"} md:hidden w-64 h-screen p-6`}>
         <button className="absolute top-4 right-4 text-gray-700" onClick={toggleSidebar}>✖</button>
         <ul className="space-y-4 flex-1">
         <div className="flex justify-center mb-4">
@@ -189,6 +189,9 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
           Log Out
         </button>
         </ul>
+      <div className="flex-1 p-6">
+        <Outlet />
+      </div>
       </div>
     </>
   );

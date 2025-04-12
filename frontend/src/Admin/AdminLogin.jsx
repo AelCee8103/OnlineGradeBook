@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Logo from '../assets/logo.png';
+import { Link } from 'react-router-dom';
 
 const AdminLogin = () => {
   const [values, setValues] = useState({
@@ -102,12 +103,7 @@ const AdminLogin = () => {
                 Sign in
               </button>
             </form>
-            <p className="text-gray-800 text-sm mt-4 text-center">
-              Don't have an account?{' '}
-              <a href="#" className="text-blue-600 hover:underline font-semibold">
-                Register here
-              </a>
-            </p>
+               <Link to="/faculty-login" className='text-blue-700 flex justify-center text-md mt-4 hover:underline'>Login as Faculty</Link>
           </div>
         </div>
       </div>

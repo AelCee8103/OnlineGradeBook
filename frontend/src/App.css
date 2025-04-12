@@ -44,3 +44,23 @@ body{
 .read-the-docs {
   color: #888;
 }
+
+.modal {
+  position: fixed;
+  z-index: 999;
+}
+
+.modal-box {
+  position: relative;
+  z-index: 1000;
+}
+
+/* For react-select dropdown */
+.react-select__menu {
+  z-index: 9999 !important;
+}
+
+/* Ensure the dropdown portal has proper z-index */
+.react-select__menu-portal {
+  z-index: 9999 !important;
+}

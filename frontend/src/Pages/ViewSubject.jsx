@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import NavbarFaculty from "../components/NavbarFaculty";
-import FacultySidePanel from "../components/FacultySidePanel.jsx";
+import FacultySidePanel from "../Components/FacultySidePanel.jsx";
 import axios from "axios";
+import { FiEye, FiBook } from "react-icons/fi"; // Added missing import
 import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 
-const ClassAdvisory = () => {
+const ViewSubject = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [advisoryData, setAdvisoryData] = useState({
     Section: "",
@@ -139,7 +140,6 @@ const ClassAdvisory = () => {
 
         <input type="text" placeholder="Search by ID number"  className="mb-4 border border-gray-300 rounded-md ml-4 mt-4 px-4 py-2"/>
            <FontAwesomeIcon icon={faMagnifyingGlass}  className="ml-3"/>
-           <button  className=" bg-green-700 px-3 py-1 rounded text-white ml-4 hover:bg-green-800">Validate</button>
           <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -176,7 +176,7 @@ const ClassAdvisory = () => {
                           <button className="text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-md flex items-center justify-center transition-colors">
                             View  
                           </button>
-                          <button className="text-white bg-green-700 hover:bg-green-800 px-3 py-1 rounded-md flex items-center justify-center transition-colors">
+                          <button className="text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded-md flex items-center justify-center transition-colors">
                              Grades
                           </button>
                         </div>
@@ -231,4 +231,4 @@ const ClassAdvisory = () => {
   );
 };
 
-export default ClassAdvisory;
+export default ViewSubject;
