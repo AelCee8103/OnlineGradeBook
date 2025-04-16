@@ -17,6 +17,31 @@ router.get('/admin-manage-students', async (req, res) => {
 });
 
 
+// Get all assigned subjects (subject classes) with advisory info
+router.get("/admin-assign-subject", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const [assignments] = await db.query(`
+      SELECT 
+        a.SubjectCode, a.subjectID, a.FacultyID, a.advisoryID, a.yearID,
+        s.SubjectName,
+        CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
+        c.Grade, c.Section,
+        sy.year AS schoolYear
+      FROM assignsubject a
+      JOIN subjects s ON a.subjectID = s.SubjectID
+      JOIN faculty f ON a.FacultyID = f.FacultyID
+      JOIN advisory adv ON a.advisoryID = adv.advisoryID
+      JOIN classes c ON adv.classID = c.ClassID
+      JOIN schoolyear sy ON a.yearID = sy.school_yearID
+    `);
+    res.status(200).json(assignments);
+  } catch (error) {
+    console.error("Error fetching assignments:", error);
+    res.status(500).json({ error: "Failed to fetch assignments" });
+  }
+});
+
 // GET all Faculty
 router.get('/admin-manage-faculty', async (req, res) => {
   try {
@@ -304,21 +329,26 @@ router.put("/admin-advisory-classes", async (req, res) => {
 });
 
 // GET all advisory classes
+// GET all advisory classes with details
 router.get("/admin-advisory-classes", async (req, res) => {
   try {
     const db = await connectToDatabase();
     
     const query = `
       SELECT 
-        c.ClassID,
-        c.Grade,
-        c.Section,
-        c.FacultyID,
+        a.advisoryID as advisoryID,
+        c.ClassID AS classID,
+        c.Grade AS grade,
+        c.Section AS section,
+        a.facultyID AS facultyID,
+        CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
         cy.yearID,
-        sy.year
+        sy.year AS SchoolYear
       FROM classes c
-      JOIN class_year cy ON c.classyearID = cy.ClassYearID
+      JOIN advisory a ON c.ClassID = a.classID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
       JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      JOIN faculty f ON a.facultyID = f.FacultyID
       ORDER BY c.ClassID
     `;
     
@@ -333,6 +363,71 @@ router.get("/admin-advisory-classes", async (req, res) => {
     });
   }
 });
+
+// Get grades for a specific student
+router.get("/student/:studentID/grades", async (req, res) => {
+  const { studentID } = req.params;
+
+  try {
+    const db = await connectToDatabase();
+
+    // Get subject grades (per quarter)
+    const [grades] = await db.query(`
+      SELECT 
+        sg.subject_code,
+        s.SubjectName,
+        sg.Quarter,
+        sg.GradeScore
+      FROM subjectgrades sg
+      JOIN assignsubject a ON sg.subject_code = a.SubjectCode
+      JOIN subjects s ON a.subjectID = s.SubjectID
+      WHERE sg.StudentID = ?
+      ORDER BY sg.subject_code, sg.Quarter
+    `, [studentID]);
+
+    // Organize into a map: subject_code => { name, grades by quarter }
+    const groupedGrades = {};
+    grades.forEach(({ subject_code, SubjectName, Quarter, GradeScore }) => {
+      if (!groupedGrades[subject_code]) {
+        groupedGrades[subject_code] = {
+          subjectName: SubjectName,
+          quarters: {},
+        };
+      }
+      groupedGrades[subject_code].quarters[Quarter] = GradeScore;
+    });
+
+    res.status(200).json(groupedGrades);
+
+  } catch (error) {
+    console.error("Error fetching student grades:", error);
+    res.status(500).json({ message: "Failed to fetch grades" });
+  }
+});
+
+
+// Get students by advisory class
+// Get students by advisoryID instead of ClassID
+router.get("/students-in-advisory/:advisoryID", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { advisoryID } = req.params;
+
+    const [students] = await db.query(
+      `SELECT s.StudentID, s.FirstName, s.MiddleName, s.LastName
+       FROM students s
+       JOIN student_classes sc ON s.StudentID = sc.StudentID
+       WHERE sc.advisoryID = ?`,
+      [advisoryID]
+    );
+
+    res.status(200).json(students);
+  } catch (error) {
+    console.error("Error fetching students:", error);
+    res.status(500).json({ message: "Failed to fetch students" });
+  }
+});
+
 
 
 // Route to Add a Subject
@@ -380,43 +475,44 @@ router.get("/admin-manage-subject", async (req, res) => {
 
 // Assign Subject to Advisory Class
 router.post("/admin-assign-subject", async (req, res) => {
-  const { SubjectCode, subjectID, FacultyID, ClassID, school_yearID } = req.body;
+  const { SubjectCode, subjectID, FacultyID, advisoryID, yearID } = req.body;
 
-  if (!SubjectCode || !subjectID || !FacultyID || !ClassID || !school_yearID) {
+  if (!SubjectCode || !subjectID || !FacultyID || !advisoryID || !yearID) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
   try {
     const db = await connectToDatabase();
 
-    // Verify the school_yearID exists
-    const [schoolYearRows] = await db.query(
-      `SELECT school_yearID FROM schoolyear WHERE school_yearID = ? OR year = ?`,
-      [school_yearID, school_yearID]
+    // Check if referenced advisory exists
+    const [advisoryCheck] = await db.query(
+      "SELECT advisoryID FROM advisory WHERE advisoryID = ?",
+      [advisoryID]
     );
-
-    if (schoolYearRows.length === 0) {
-      return res.status(400).json({ error: `School year with ID '${school_yearID}' not found.` });
+    if (advisoryCheck.length === 0) {
+      return res.status(400).json({ error: "Advisory ID not found." });
     }
 
-    // Insert assignment with only school_yearID
+    // Check if school year exists
+    const [yearCheck] = await db.query(
+      "SELECT school_yearID FROM schoolyear WHERE school_yearID = ?",
+      [yearID]
+    );
+    if (yearCheck.length === 0) {
+      return res.status(400).json({ error: "School Year ID not found." });
+    }
+
+    // Insert assignment
     await db.query(
-      `INSERT INTO assignsubject (SubjectCode, subjectID, FacultyID, ClassID, yearID)
+      `INSERT INTO assignsubject (SubjectCode, subjectID, FacultyID, advisoryID, yearID)
        VALUES (?, ?, ?, ?, ?)`,
-      [SubjectCode, subjectID, FacultyID, ClassID, school_yearID]
+      [SubjectCode, subjectID, FacultyID, advisoryID, yearID]
     );
 
-    res.status(201).json({ message: "Subject assigned successfully" });
+    res.status(201).json({ message: "Subject assigned successfully." });
   } catch (error) {
     console.error("Error assigning subject:", error);
-
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(400).json({
-        error: "Invalid reference. Please check if Faculty, Class, Subject, or Year exist."
-      });
-    }
-
-    res.status(500).json({ error: "Failed to assign subject" });
+    res.status(500).json({ error: "Failed to assign subject." });
   }
 });
 
@@ -476,6 +572,7 @@ router.post("/admin-dashboard", async (req, res) => {
       console.error("Error adding School Year:", err);
       res.status(500).json({ error: "Internal server error." });
   }
+
 });
 
 
