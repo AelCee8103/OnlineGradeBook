@@ -195,8 +195,10 @@ const ManageFaculty = () => {
             <dialog id="faculty_modal" className="modal">
               <div className="modal-box">
                 <h3 className="font-bold text-lg mb-4">Add Faculty Information</h3>
-                <form onSubmit={handleSubmit} className="space-y-3">
-                  <input 
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="col-span-2">
+                   <input 
                     type="number" 
                     name="FacultyID" 
                     value={newFaculty.FacultyID}
@@ -248,6 +250,8 @@ const ManageFaculty = () => {
                     >
                       Close
                     </button>
+                  </div>
+                   </div>
                   </div>
                 </form>
               </div>

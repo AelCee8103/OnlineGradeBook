@@ -57,6 +57,7 @@ const ManageClasses = () => {
         "http://localhost:3000/Pages/schoolyear",
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      console.log("School Years Data:", response.data); // Add this line
       setSchoolYears(response.data);
     } catch (error) {
       console.error("Error fetching school years:", error);
@@ -117,6 +118,7 @@ const ManageClasses = () => {
   const handleCreate = async (e) => {
     e.preventDefault();
     setLoading(true);
+    
     try {
       // Validate numeric fields
       if (isNaN(createFormData.ClassID) || 
@@ -124,16 +126,16 @@ const ManageClasses = () => {
           isNaN(createFormData.FacultyID)) {
         throw new Error("ClassID, Grade, and FacultyID must be numbers");
       }
-
-      // Validate Section length (VARCHAR(11) in DB)
+  
+      // Validate Section length
       if (createFormData.Section.length > 11) {
         throw new Error("Section must be 11 characters or less");
       }
-
+  
       if (!createFormData.school_yearID) {
         throw new Error("School Year is required");
       }
-
+  
       const token = localStorage.getItem("token");
       const response = await axios.post(
         "http://localhost:3000/Pages/admin-advisory-classes", 
@@ -142,15 +144,17 @@ const ManageClasses = () => {
           ClassID: parseInt(createFormData.ClassID),
           Grade: parseInt(createFormData.Grade),
           FacultyID: parseInt(createFormData.FacultyID),
+          school_yearID: parseInt(createFormData.school_yearID),
           studentLimit: parseInt(createFormData.studentLimit) || 50
         }, 
-        { headers: { Authorization: `Bearer ${token}` } }
+        { 
+          headers: { Authorization: `Bearer ${token}` },
+          validateStatus: (status) => status < 500 // Consider all <500 status codes as non-error
+        }
       );
-    
-      if (response.data.success) {
+  
+      if (response.status === 201) {
         toast.success(response.data.message);
-        
-        // Reset form after successful creation
         setCreateFormData({ 
           ClassID: "", 
           Grade: "", 
@@ -159,19 +163,27 @@ const ManageClasses = () => {
           school_yearID: "",
           studentLimit: 50
         });
-
         document.getElementById("create_modal").close();
         fetchAdvisoryClasses();
+      } else {
+        // Handle 4xx errors
+        throw new Error(response.data.error || "Failed to create class");
       }
     } catch (error) {
       console.error("Creation error:", error);
       let errorMessage = "Failed to create class";
       
       if (error.response) {
+        // Handle structured error responses
         errorMessage = error.response.data.error || 
                      error.response.data.details || 
                      error.response.data.message || 
                      errorMessage;
+        
+        // Log additional details in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log("Error details:", error.response.data.details);
+        }
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -182,6 +194,7 @@ const ManageClasses = () => {
     }
   };
 
+  
   const handleViewStudents = (classId) => {
     navigate(`/admin-view-students?classId=${classId}`);
   };
@@ -292,28 +305,30 @@ const ManageClasses = () => {
                       />
                     </div>
                     <div>
-                    <label className="label">
-                      <span className="label-text">School Year</span>
-                    </label>
-                    <select
-                      name="school_yearID"
-                      value={createFormData.school_yearID}
-                      onChange={handleCreateChange}
-                      className="select select-bordered w-full"
-                      required
-                    >
-                      <option value="">Select School Year</option>
-                      {Array.isArray(schoolYears) && schoolYears.length > 0 ? (
-                        schoolYears.map(year => (
-                          <option key={year.school_yearID} value={year.school_yearID}>
-                            {year.school_yearID} - {year.year || year.SchoolYear}
-                          </option>
-                        ))
-                      ) : (
-                        <option disabled>No school years available</option>
-                      )}
-                    </select>
-                  </div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">School Year</label>
+                <select
+                  name="school_yearID"
+                  value={createFormData.school_yearID}
+                  onChange={(e) => {
+                    handleCreateChange({
+                      target: {
+                        name: "school_yearID",
+                        value: e.target.value
+                      }
+                    });
+                  }}
+                  className="select select-bordered w-full"
+                  required
+                >
+                  <option value="">Select School Year</option>
+                  {schoolYears.map(year => (
+                    <option key={year.school_yearID} value={year.school_yearID}>
+                      {year.school_yearID} - {year.SchoolYear}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
                     <div>
                       <label className="label">
                         <span className="label-text">Student Limit</span>

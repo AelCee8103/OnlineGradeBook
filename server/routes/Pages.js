@@ -124,21 +124,57 @@ router.put('/admin-manage-faculty', async (req, res) => {
 
 
 router.post("/admin-advisory-classes", async (req, res) => {
+  let db;
   try {
-    const db = await connectToDatabase();
-    const { ClassID, Grade, Section, FacultyID, school_yearID } = req.body;
+    db = await connectToDatabase();
+    const { ClassID, Grade, Section, FacultyID, school_yearID, studentLimit = 50 } = req.body;
 
     // Validate required fields
     if (!ClassID || !Grade || !Section || !FacultyID || !school_yearID) {
-      return res.status(400).json({ error: "All fields are required including school year" });
+      return res.status(400).json({ 
+        error: "All fields are required",
+        requiredFields: ["ClassID", "Grade", "Section", "FacultyID", "school_yearID"]
+      });
     }
 
-    console.log("Received request:", req.body);
+    // Validate numeric fields
+    if (isNaN(ClassID) || isNaN(Grade) || isNaN(FacultyID) || isNaN(school_yearID)) {
+      return res.status(400).json({ 
+        error: "ClassID, Grade, FacultyID, and school_yearID must be numbers"
+      });
+    }
+
+    console.log("Starting transaction for advisory class creation:", req.body);
+
+    // Start transaction
+    await db.query("START TRANSACTION");
+
+    // Check if class already exists
+    const [existingClass] = await db.query(
+      "SELECT ClassID FROM classes WHERE ClassID = ?",
+      [ClassID]
+    );
+    
+    if (existingClass.length > 0) {
+      await db.query("ROLLBACK");
+      return res.status(400).json({ 
+        error: "Class already exists",
+        existingClass: existingClass[0]
+      });
+    }
 
     // Check if the faculty member exists
-    const [faculty] = await db.query("SELECT * FROM faculty WHERE FacultyID = ?", [FacultyID]);
-    if (!faculty[0] || faculty[0].length === 0) {
-      return res.status(400).json({ error: "Invalid FacultyID. Faculty member not found." });
+    const [faculty] = await db.query(
+      "SELECT FacultyID FROM faculty WHERE FacultyID = ?", 
+      [FacultyID]
+    );
+    
+    if (faculty.length === 0) {
+      await db.query("ROLLBACK");
+      return res.status(400).json({ 
+        error: "Faculty member not found",
+        FacultyID
+      });
     }
 
     // Check if the school year exists
@@ -146,106 +182,115 @@ router.post("/admin-advisory-classes", async (req, res) => {
       "SELECT school_yearID FROM schoolyear WHERE school_yearID = ?", 
       [school_yearID]
     );
-    
-    if (!yearResult || yearResult.length === 0) {
-      return res.status(400).json({ error: "Invalid school year selected" });
-    }
 
-    const currentSchoolYearID = yearResult[0].school_yearID;
-    console.log("Valid faculty and school year found.");
-
-    // Start transaction
-    await db.query("START TRANSACTION");
-
-    try {
-      // Insert into classes table
-      console.log("Inserting into classes...");
-      await db.query(
-        `INSERT INTO classes (ClassID, Grade, Section, FacultyID) 
-         VALUES (?, ?, ?, ?)`,
-        [ClassID, Grade, Section, FacultyID]
-      );
-
-      // Insert into class_year table
-      console.log("Inserting into class_year...");
-      const [classYearResult] = await db.query(
-        `INSERT INTO class_year (classID, facultyID, Grade, Section, yearID) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [ClassID, FacultyID, Grade, Section, currentSchoolYearID]
-      );
-
-      // Get the inserted ClassYearID
-      const classYearID = classYearResult.insertId;
-
-      // 🔧 Update classes table with the new classyearID
-      await db.query(
-        "UPDATE classes SET classyearID = ? WHERE ClassID = ?",
-        [classYearID, ClassID]
-      );
-
-      // Fetch ACTIVE students (Status = '1')
-      console.log("Fetching active students...");
-      const [students] = await db.query(
-        `SELECT StudentID FROM students WHERE Status = '1'`
-      );
-
-      if (!students.length) {
-        console.log("No active students found. Rolling back...");
-        await db.query("ROLLBACK");
-        return res.status(400).json({ error: "No active students available for assignment" });
-      }
-
-      console.log(`Found ${students.length} active students. Assigning to class...`);
-
-      // Assign students to class_year
-      const studentValues = students.map(student => [
-        ClassID,
-        student.StudentID,
-        FacultyID,
-        classYearID
-      ]);
-
-      await db.query(
-        `INSERT INTO student_classes (ClassID, StudentID, FacultyID, ClassYearID) 
-         VALUES ${students.map(() => "(?, ?, ?, ?)").join(", ")}`, 
-        studentValues.flat()
-      );
-
-      // Commit transaction
-      await db.query("COMMIT");
-
-      console.log(`Advisory class created successfully with ${students.length} assigned students.`);
-
-      res.status(201).json({ 
-        success: true,
-        message: `Advisory class created with ${students.length} active students assigned`,
-        newClass: {
-          ClassID,
-          Grade,
-          Section,
-          FacultyID,
-          school_yearID: currentSchoolYearID
-        },
-        assignedStudentsCount: students.length
-      });
-
-    } catch (error) {
+    if (yearResult.length === 0) {
       await db.query("ROLLBACK");
-      console.error("Transaction error:", error);
-      res.status(500).json({ 
-        error: "Database operation failed",
-        details: error.message,
-        sqlError: error.sqlMessage || "No additional SQL error info"
+      return res.status(400).json({ 
+        error: "Invalid school year",
+        school_yearID
       });
     }
+
+    console.log("Validation checks passed. Creating advisory class...");
+
+    // Step 1: Insert into classes first with NULL for classyearID
+    await db.query(
+      `INSERT INTO classes (ClassID, Grade, Section, FacultyID) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [ClassID, Grade, Section, FacultyID]
+    );
+
+    // Step 2: Insert into class_year
+    const [classYearResult] = await db.query(
+      `INSERT INTO class_year (classID, facultyID, Grade, Section, yearID) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [ClassID, FacultyID, Grade, Section, school_yearID]
+    );
+
+    const classYearID = classYearResult.insertId;
+
+    // Step 3: Update classes with the actual classyearID
+    await db.query(
+      `UPDATE classes SET classyearID = ? WHERE ClassID = ?`,
+      [classYearID, ClassID]
+    );
+
+    // Step 4: Fetch ACTIVE students with LIMIT
+    const [students] = await db.query(
+      `SELECT StudentID FROM students 
+       WHERE Status = '1' 
+       LIMIT ?`,
+      [studentLimit]
+    );
+
+    // Step 5: Assign students to student_classes (if any)
+    if (students.length > 0) {
+      const batchSize = 100;
+      const batches = Math.ceil(students.length / batchSize);
+      
+      for (let i = 0; i < batches; i++) {
+        const batch = students.slice(i * batchSize, (i + 1) * batchSize);
+        const values = batch.map(student => [
+          ClassID,
+          student.StudentID,
+          FacultyID,
+          classYearID
+        ]);
+        
+        await db.query(
+          `INSERT INTO student_classes (ClassID, StudentID, FacultyID, ClassYearID) 
+           VALUES ?`,
+          [values]
+        );
+      }
+    }
+
+    // Commit transaction
+    await db.query("COMMIT");
+
+    console.log(`Successfully created advisory class ${ClassID} with ${students.length} students assigned`);
+
+    return res.status(201).json({ 
+      success: true,
+      message: `Advisory class created successfully`,
+      details: {
+        ClassID,
+        Grade,
+        Section,
+        FacultyID,
+        school_yearID,
+        assignedStudents: students.length,
+        studentLimit
+      }
+    });
 
   } catch (error) {
-    console.error("Server error:", error);
-    res.status(500).json({ 
-      error: "Server error",
+    console.error("Error in advisory class creation:", error);
+    
+    if (db) {
+      try {
+        await db.query("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("Error during rollback:", rollbackError);
+      }
+    }
+
+    return res.status(500).json({ 
+      error: "Failed to create advisory class",
       details: error.message,
-      sqlError: error.sqlMessage || "No additional SQL error info"
+      sqlError: error.sqlMessage || "No SQL error details",
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
+  } finally {
+    if (db && db.connection && db.connection._closing !== true) {
+      try {
+        await db.end();
+      } catch (endError) {
+        console.error("Error closing database connection:", endError);
+      }
+    } else {
+      console.warn("Database connection was already closed or unavailable.");
+    }
   }
 });
 
