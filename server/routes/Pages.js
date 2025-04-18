@@ -23,10 +23,10 @@ router.get("/admin-assign-subject", async (req, res) => {
     const db = await connectToDatabase();
     const [assignments] = await db.query(`
       SELECT 
-        a.SubjectCode, a.subjectID, a.FacultyID, a.advisoryID, a.yearID,
-        s.SubjectName,
+        a.SubjectCode AS subjectCode, a.subjectID, a.FacultyID, a.advisoryID, a.yearID,
+        s.SubjectName AS subjectName,
         CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
-        c.Grade, c.Section,
+        c.Grade AS grade, c.Section AS section,
         sy.year AS schoolYear
       FROM assignsubject a
       JOIN subjects s ON a.subjectID = s.SubjectID
@@ -574,6 +574,71 @@ router.post("/admin-dashboard", async (req, res) => {
   }
 
 });
+
+router.get("/admin-subject-classes/:subjectCode/students", async (req, res) => {
+  const { subjectCode } = req.params;
+
+  try {
+    const db = await connectToDatabase();
+
+    // Get subject class info
+    const [subjectInfoRows] = await db.query(`
+      SELECT 
+        a.SubjectCode,
+        a.advisoryID,
+        sub.SubjectName,
+        c.Grade,
+        c.Section,
+        CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
+        sy.year AS schoolYear,
+        adv.classID AS classID
+      FROM assignsubject a
+      JOIN subjects sub ON a.subjectID = sub.SubjectID
+      JOIN advisory adv ON a.advisoryID = adv.advisoryID
+      JOIN classes c ON adv.classID = c.ClassID
+      JOIN faculty f ON a.FacultyID = f.FacultyID
+      JOIN schoolyear sy ON a.yearID = sy.school_yearID
+      WHERE a.SubjectCode = ?
+      LIMIT 1
+    `, [subjectCode]);
+
+    if (subjectInfoRows.length === 0) {
+      return res.status(404).json({ message: "Subject class not found." });
+    }
+
+    const subjectInfo = subjectInfoRows[0];
+
+    // Get students via advisoryID
+    const [studentRows] = await db.query(`
+      SELECT 
+        s.StudentID,
+        CONCAT(s.FirstName, ' ', s.MiddleName, ' ', s.LastName) AS fullName
+      FROM student_classes sc
+      JOIN students s ON s.StudentID = sc.StudentID
+      WHERE sc.advisoryID = ?
+    `, [subjectInfo.advisoryID]);
+
+    res.status(200).json({
+      subjectInfo: {
+        subjectName: subjectInfo.SubjectName,
+        subjectCode: subjectInfo.SubjectCode,
+        grade: subjectInfo.Grade,
+        section: subjectInfo.Section,
+        facultyName: subjectInfo.facultyName,
+        schoolYear: subjectInfo.schoolYear
+      },
+      students: studentRows
+    });
+    
+
+  } catch (error) {
+    console.error("Error fetching subject class details:", error);
+    res.status(500).json({ error: "Failed to fetch subject class details." });
+  }
+});
+
+
+
 
 
 
