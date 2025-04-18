@@ -22,7 +22,8 @@ import AssignSubject from "./Admin/AssignSubject";
 import ViewSubject from "./Pages/ViewSubject";
 import ViewStudents from "./Admin/ViewStudents";
 import AdvisoryStudents from "./Admin/AdvisoryStudents"; // adjust path if needed
-import StudentGrades from "./Admin/StudentGrades"; // adjust path as needed
+import StudentGrades from "./Admin/StudentGrades";
+import SubjectClassStudents from "./Admin/SubjectClassStudents";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -43,13 +44,17 @@ function App() {
             element={<ManageFaculty />}
           ></Route>
           <Route
-            path="/admin-adivsory-classes"
+            path="/admin-advisory-classes"
             element={<ManageClass />}
           ></Route>
           <Route
             path="/admin-manage-subject"
             element={<ManageSubjectList />}
           ></Route>
+          <Route
+            path="/admin/subject-classes/:subjectCode/students"
+            element={<SubjectClassStudents />}
+          />
 
           <Route
             path="/admin/advisory/:advisoryID/students/:studentID/grades"
