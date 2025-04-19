@@ -81,7 +81,7 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
             </div>
             <ul className={`pl-10 transition-all duration-300 overflow-hidden ${isDropdownOpen ? "max-h-40 opacity-100" : "max-h-0 opacity-0"}`}>
               <li>
-                <Link className="block py-2 text-gray-700 hover:text-blue-700 font-bold" to="/admin-adivsory-classes">Advisory Class List</Link>
+                <Link className="block py-2 text-gray-700 hover:text-blue-700 font-bold" to="/admin-advisory-classes">Advisory Class List</Link>
               </li>
               <li>
                 <Link className="block py-2 text-gray-700 hover:text-blue-700 font-bold" to="/admin-manage-subject">Subject Class List</Link>

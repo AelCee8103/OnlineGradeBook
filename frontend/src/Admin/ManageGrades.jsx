@@ -172,8 +172,6 @@ const ManageGrades = () => {
             </div>
           </div>
         </div>
-<<<<<<< HEAD
-=======
 
         {/* Subject Class List */}
         <div className="p-8">
@@ -239,7 +237,6 @@ const ManageGrades = () => {
             </div>
           </div>
         </div>
->>>>>>> 2aae57ba5ccd74d5322c54106e1f21d9033cdfbd
       </div>
     </div>
   );

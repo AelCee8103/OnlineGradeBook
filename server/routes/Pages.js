@@ -148,176 +148,77 @@ router.put('/admin-manage-faculty', async (req, res) => {
 
 
 
-router.post("/admin-advisory-classes", async (req, res) => {
-  let db;
+router.post('/admin-advisory-classes', async (req, res) => {
+  const { ClassID, Grade, Section, FacultyID, school_yearID } = req.body;
+
+  let db; // Declare db outside the try block
+
   try {
     db = await connectToDatabase();
-    const { ClassID, Grade, Section, FacultyID, school_yearID, studentLimit = 50 } = req.body;
 
-    // Validate required fields
-    if (!ClassID || !Grade || !Section || !FacultyID || !school_yearID) {
-      return res.status(400).json({ 
-        error: "All fields are required",
-        requiredFields: ["ClassID", "Grade", "Section", "FacultyID", "school_yearID"]
-      });
-    }
+    // Start transaction manually
+    await db.query('START TRANSACTION');
 
-    // Validate numeric fields
-    if (isNaN(ClassID) || isNaN(Grade) || isNaN(FacultyID) || isNaN(school_yearID)) {
-      return res.status(400).json({ 
-        error: "ClassID, Grade, FacultyID, and school_yearID must be numbers"
-      });
-    }
-
-    console.log("Starting transaction for advisory class creation:", req.body);
-
-    // Start transaction
-    await db.query("START TRANSACTION");
-
-    // Check if class already exists
-    const [existingClass] = await db.query(
-      "SELECT ClassID FROM classes WHERE ClassID = ?",
-      [ClassID]
-    );
-    
-    if (existingClass.length > 0) {
-      await db.query("ROLLBACK");
-      return res.status(400).json({ 
-        error: "Class already exists",
-        existingClass: existingClass[0]
-      });
-    }
-
-    // Check if the faculty member exists
-    const [faculty] = await db.query(
-      "SELECT FacultyID FROM faculty WHERE FacultyID = ?", 
-      [FacultyID]
-    );
-    
-    if (faculty.length === 0) {
-      await db.query("ROLLBACK");
-      return res.status(400).json({ 
-        error: "Faculty member not found",
-        FacultyID
-      });
-    }
-
-    // Check if the school year exists
-    const [yearResult] = await db.query(
-      "SELECT school_yearID FROM schoolyear WHERE school_yearID = ?", 
-      [school_yearID]
-    );
-
-    if (yearResult.length === 0) {
-      await db.query("ROLLBACK");
-      return res.status(400).json({ 
-        error: "Invalid school year",
-        school_yearID
-      });
-    }
-
-    console.log("Validation checks passed. Creating advisory class...");
-
-    // Step 1: Insert into classes first with NULL for classyearID
+    // Insert class details
     await db.query(
-      `INSERT INTO classes (ClassID, Grade, Section, FacultyID) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [ClassID, Grade, Section, FacultyID]
+      'INSERT INTO classes (ClassID, Grade, Section, FacultyID) VALUES (?, ?, ?, ?)',
+      [ClassID, Grade, Section, FacultyID] // <== FacultyID is needed if it's stored in `classes`
     );
 
-    // Step 2: Insert into class_year
-    const [classYearResult] = await db.query(
-      `INSERT INTO class_year (classID, facultyID, Grade, Section, yearID) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [ClassID, FacultyID, Grade, Section, school_yearID]
-    );
-
-    const classYearID = classYearResult.insertId;
-
-    // Step 3: Update classes with the actual classyearID
+    // Insert class-year relationship
     await db.query(
-      `UPDATE classes SET classyearID = ? WHERE ClassID = ?`,
-      [classYearID, ClassID]
+      'INSERT INTO class_year (advisoryID, yearID) VALUES (?, ?)',
+      [ClassID, school_yearID]
     );
 
-    // Step 4: Fetch ACTIVE students with LIMIT
-    const [students] = await db.query(
-      `SELECT StudentID FROM students 
-       WHERE Status = '1' 
-       LIMIT ?`,
-      [studentLimit]
-    );
+    // Get 50 students with status 1 (active) who aren't assigned
+    const [students] = await db.query(`
+      SELECT StudentID FROM students 
+      WHERE status = 1 
+      AND StudentID NOT IN (
+        SELECT StudentID FROM student_classes WHERE school_yearID = ?
+      )
+      LIMIT 50
+    `, [school_yearID]);
 
-    // Step 5: Assign students to student_classes (if any)
-    if (students.length > 0) {
-      const batchSize = 100;
-      const batches = Math.ceil(students.length / batchSize);
-      
-      for (let i = 0; i < batches; i++) {
-        const batch = students.slice(i * batchSize, (i + 1) * batchSize);
-        const values = batch.map(student => [
-          ClassID,
-          student.StudentID,
-          FacultyID,
-          classYearID
-        ]);
-        
-        await db.query(
-          `INSERT INTO student_classes (ClassID, StudentID, FacultyID, ClassYearID) 
-           VALUES ?`,
-          [values]
-        );
-      }
+    // Insert students into student_classes table individually
+    for (const student of students) {
+      await db.query(
+        'INSERT INTO student_classes (StudentID, school_yearID, advisoryID) VALUES (?, ?, ?)',
+        [student.StudentID, school_yearID, ClassID]
+      );
     }
 
-    // Commit transaction
-    await db.query("COMMIT");
+    await db.query('COMMIT'); // Commit manually
 
-    console.log(`Successfully created advisory class ${ClassID} with ${students.length} students assigned`);
+    // Fetch the created class with only ClassID, Grade, Section
+    const [createdClass] = await db.query(`
+      SELECT ClassID, Grade, Section 
+      FROM classes 
+      WHERE ClassID = ?
+    `, [ClassID]);
 
-    return res.status(201).json({ 
-      success: true,
-      message: `Advisory class created successfully`,
-      details: {
-        ClassID,
-        Grade,
-        Section,
-        FacultyID,
-        school_yearID,
-        assignedStudents: students.length,
-        studentLimit
-      }
+    res.status(201).json({
+      message: 'Advisory class created successfully',
+      createdClass: createdClass[0],
+      assignedStudents: students.length
     });
 
   } catch (error) {
-    console.error("Error in advisory class creation:", error);
-    
-    if (db) {
-      try {
-        await db.query("ROLLBACK");
-      } catch (rollbackError) {
-        console.error("Error during rollback:", rollbackError);
-      }
+    if (db) await db.query('ROLLBACK'); // Use manual rollback only if db is initialized
+    console.error('Error creating advisory class:', error);
+
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ error: 'Class ID already exists' });
     }
 
-    return res.status(500).json({ 
-      error: "Failed to create advisory class",
-      details: error.message,
-      sqlError: error.sqlMessage || "No SQL error details",
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  } finally {
-    if (db && db.connection && db.connection._closing !== true) {
-      try {
-        await db.end();
-      } catch (endError) {
-        console.error("Error closing database connection:", endError);
-      }
-    } else {
-      console.warn("Database connection was already closed or unavailable.");
-    }
+    res.status(500).json({ error: 'Failed to create advisory class' });
+
   }
 });
+
+
+
 
 
 
@@ -374,40 +275,26 @@ router.put("/admin-advisory-classes", async (req, res) => {
 });
 
 // GET all advisory classes
-// GET all advisory classes with details
-router.get("/admin-advisory-classes", async (req, res) => {
+// GET endpoint - Get all advisory classes
+// GET endpoint for fetching advisory classes
+router.get('/admin-advisory-classes', async (req, res) => {
   try {
     const db = await connectToDatabase();
-    
-    const query = `
+    const [classes] = await db.query(`
       SELECT 
-        a.advisoryID as advisoryID,
-        c.ClassID AS classID,
-        c.Grade AS grade,
-        c.Section AS section,
-        a.facultyID AS facultyID,
-        CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
-        cy.yearID,
-        sy.year AS SchoolYear
+        c.ClassID, 
+        c.Grade, 
+        c.Section
       FROM classes c
-      JOIN advisory a ON c.ClassID = a.classID
-      JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      JOIN faculty f ON a.facultyID = f.FacultyID
-      ORDER BY c.ClassID
-    `;
-    
-    const [classes] = await db.query(query);
-    
-    res.status(200).json(classes);
+    `);
+
+    res.json(classes);
   } catch (error) {
-    console.error("Error fetching advisory classes:", error);
-    res.status(500).json({ 
-      error: "Failed to fetch advisory classes",
-      details: error.message 
-    });
+    console.error('Error fetching advisory classes:', error);
+    res.status(500).json({ error: 'Failed to fetch advisory classes' });
   }
 });
+
 
 // Get grades for a specific student
 router.get("/student/:studentID/grades", async (req, res) => {

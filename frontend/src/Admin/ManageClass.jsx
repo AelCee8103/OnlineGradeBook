@@ -10,11 +10,13 @@ import 'react-toastify/dist/ReactToastify.css';
 
 const ManageClasses = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [advisoryClasses, setAdvisoryClasses] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [schoolYears, setSchoolYears] = useState([]);
+  const [faculties, setFaculties] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -30,45 +32,48 @@ const ManageClasses = () => {
     Section: "",
     FacultyID: "",
     school_yearID: "",
-    studentLimit: 50
   });
 
-  const fetchAdvisoryClasses = async () => {
-    setFetching(true);
-    try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        "http://localhost:3000/Pages/admin-advisory-classes", 
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setAdvisoryClasses(response.data);
-    } catch (error) {
-      console.error("Error fetching advisory classes:", error);
-      toast.error("Failed to load advisory classes");
-    } finally {
-      setFetching(false);
-    }
-  };
-
-  const fetchSchoolYears = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(
-        "http://localhost:3000/Pages/schoolyear",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      console.log("School Years Data:", response.data); // Add this line
-      setSchoolYears(response.data);
-    } catch (error) {
-      console.error("Error fetching school years:", error);
-      toast.error("Failed to load school years");
-    }
-  };
-
   useEffect(() => {
-    fetchAdvisoryClasses();
-    fetchSchoolYears();
+    const fetchAll = async () => {
+      const token = localStorage.getItem("token");
+      setFetching(true);
+      setError(null);
+      try {
+        const [classesRes, schoolYearRes, facultiesRes] = await Promise.all([
+          axios.get("http://localhost:3000/Pages/admin-advisory-classes", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get("http://localhost:3000/Pages/schoolyear", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get("http://localhost:3000/Pages/admin-manage-faculty", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+  
+        // Ensure data is properly formatted
+        const formattedClasses = classesRes.data.map(cls => ({
+          ...cls,
+          yearID: cls.school_yearID, // Make sure yearID is available
+          SchoolYear: cls.SchoolYear || 'N/A'
+        }));
+  
+        setClasses(formattedClasses);
+        setSchoolYears(schoolYearRes.data || []);
+        setFaculties(facultiesRes.data || []);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+        toast.error("Failed to load data");
+        setError("Failed to load data");
+      } finally {
+        setFetching(false);
+      }
+    };
+  
+    fetchAll();
   }, []);
+
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -78,16 +83,12 @@ const ManageClasses = () => {
     setCreateFormData({ ...createFormData, [e.target.name]: e.target.value });
   };
 
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
-  };
-
-  const handleEdit = (advisory) => {
+  const handleEdit = (classItem) => {
     setFormData({
-      ClassID: advisory.ClassID,
-      Grade: advisory.Grade,
-      Section: advisory.Section,
-      FacultyID: advisory.FacultyID,
+      ClassID: classItem.ClassID,
+      Grade: classItem.Grade,
+      Section: classItem.Section,
+      FacultyID: classItem.FacultyID,
     });
     document.getElementById("edit_modal").showModal();
   };
@@ -98,18 +99,20 @@ const ManageClasses = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.put(
-        "http://localhost:3000/Pages/admin-advisory-classes", 
-        formData, 
+        "http://localhost:3000/Pages/admin-advisory-classes",
+        formData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       if (response.data.message) {
-        fetchAdvisoryClasses();
-        document.getElementById("edit_modal").close();
         toast.success(response.data.message);
+        setClasses(prev =>
+          prev.map(c => (c.ClassID === formData.ClassID ? formData : c))
+        );
+        document.getElementById("edit_modal").close();
       }
     } catch (error) {
-      toast.error(error.response?.data?.message || "Failed to update class");
+      toast.error(error.response?.data?.error || "Failed to update class");
     } finally {
       setLoading(false);
     }
@@ -118,97 +121,77 @@ const ManageClasses = () => {
   const handleCreate = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+  
     try {
-      // Validate numeric fields
-      if (isNaN(createFormData.ClassID) || 
-          isNaN(createFormData.Grade) || 
-          isNaN(createFormData.FacultyID)) {
-        throw new Error("ClassID, Grade, and FacultyID must be numbers");
-      }
-  
-      // Validate Section length
-      if (createFormData.Section.length > 11) {
-        throw new Error("Section must be 11 characters or less");
-      }
-  
-      if (!createFormData.school_yearID) {
-        throw new Error("School Year is required");
+      if (
+        !createFormData.ClassID ||
+        !createFormData.Grade ||
+        !createFormData.Section ||
+        !createFormData.FacultyID ||
+        !createFormData.school_yearID
+      ) {
+        throw new Error("All fields are required");
       }
   
       const token = localStorage.getItem("token");
       const response = await axios.post(
-        "http://localhost:3000/Pages/admin-advisory-classes", 
+        "http://localhost:3000/Pages/admin-advisory-classes",
         {
           ...createFormData,
           ClassID: parseInt(createFormData.ClassID),
           Grade: parseInt(createFormData.Grade),
           FacultyID: parseInt(createFormData.FacultyID),
           school_yearID: parseInt(createFormData.school_yearID),
-          studentLimit: parseInt(createFormData.studentLimit) || 50
-        }, 
-        { 
+        },
+        {
           headers: { Authorization: `Bearer ${token}` },
-          validateStatus: (status) => status < 500 // Consider all <500 status codes as non-error
+          validateStatus: (status) => status < 500,
         }
       );
   
       if (response.status === 201) {
-        toast.success(response.data.message);
-        setCreateFormData({ 
-          ClassID: "", 
-          Grade: "", 
-          Section: "", 
+        toast.success(`${response.data.message} (Assigned ${response.data.assignedStudents} students)`);
+        setCreateFormData({
+          ClassID: "",
+          Grade: "",
+          Section: "",
           FacultyID: "",
           school_yearID: "",
-          studentLimit: 50
         });
         document.getElementById("create_modal").close();
-        fetchAdvisoryClasses();
+        // Add the new class to the state
+        setClasses(prev => [...prev, response.data.createdClass]);
       } else {
-        // Handle 4xx errors
         throw new Error(response.data.error || "Failed to create class");
       }
     } catch (error) {
       console.error("Creation error:", error);
-      let errorMessage = "Failed to create class";
-      
-      if (error.response) {
-        // Handle structured error responses
-        errorMessage = error.response.data.error || 
-                     error.response.data.details || 
-                     error.response.data.message || 
-                     errorMessage;
-        
-        // Log additional details in development
-        if (process.env.NODE_ENV === 'development') {
-          console.log("Error details:", error.response.data.details);
-        }
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      toast.error(errorMessage);
+      toast.error(error.message || "Failed to create class");
     } finally {
       setLoading(false);
     }
   };
 
-  
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
   const handleViewStudents = (classId) => {
     navigate(`/admin-view-students?classId=${classId}`);
   };
 
-  const filteredClasses = advisoryClasses.filter(advisory => 
-    advisory.ClassID.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-    advisory.Grade.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (advisory.Section && advisory.Section.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (advisory.FacultyID && advisory.FacultyID.toString().toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (advisory.FacultyLastName && advisory.FacultyLastName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (advisory.FacultyFirstName && advisory.FacultyFirstName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (advisory.yearID && advisory.yearID.toString().includes(searchTerm)) ||
-    (advisory.year && advisory.year.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredClasses = classes.filter((classItem) => {
+    if (!classItem) return false;
+    return (
+      (classItem.ClassID?.toString() || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (classItem.Grade?.toString() || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (classItem.Section || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (classItem.FacultyID?.toString() || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (classItem.FacultyName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (classItem.yearID?.toString() || "").includes(searchTerm) ||
+      (classItem.SchoolYear || "").toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  });
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -252,7 +235,7 @@ const ManageClasses = () => {
                         <span className="label-text">Class ID</span>
                       </label>
                       <input 
-                        type="text" 
+                        type="number" 
                         name="ClassID" 
                         value={createFormData.ClassID}
                         onChange={handleCreateChange}
@@ -266,7 +249,7 @@ const ManageClasses = () => {
                         <span className="label-text">Grade Level</span>
                       </label>
                       <input 
-                        type="text" 
+                        type="number" 
                         name="Grade" 
                         value={createFormData.Grade}
                         onChange={handleCreateChange}
@@ -292,58 +275,46 @@ const ManageClasses = () => {
                     </div>
                     <div>
                       <label className="label">
-                        <span className="label-text">Faculty ID</span>
+                        <span className="label-text">Faculty</span>
                       </label>
-                      <input 
-                        type="text" 
-                        name="FacultyID" 
+                      <select
+                        name="FacultyID"
                         value={createFormData.FacultyID}
                         onChange={handleCreateChange}
-                        placeholder="Faculty ID" 
-                        className="input input-bordered w-full" 
-                        required 
-                      />
+                        className="select select-bordered w-full"
+                        required
+                      >
+                        <option value="">Select Faculty</option>
+                        {faculties.map(faculty => (
+                          <option key={faculty.FacultyID} value={faculty.FacultyID}>
+                          {faculty.FacultyID} - {faculty.FirstName} {faculty.LastName}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">School Year</label>
-                <select
-                  name="school_yearID"
-                  value={createFormData.school_yearID}
-                  onChange={(e) => {
-                    handleCreateChange({
-                      target: {
-                        name: "school_yearID",
-                        value: e.target.value
-                      }
-                    });
-                  }}
-                  className="select select-bordered w-full"
-                  required
-                >
-                  <option value="">Select School Year</option>
-                  {schoolYears.map(year => (
-                    <option key={year.school_yearID} value={year.school_yearID}>
-                      {year.school_yearID} - {year.SchoolYear}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-                    <div>
-                      <label className="label">
-                        <span className="label-text">Student Limit</span>
-                      </label>
-                      <input 
-                        type="number" 
-                        name="studentLimit" 
-                        value={createFormData.studentLimit}
-                        onChange={handleCreateChange}
-                        placeholder="Student Limit" 
-                        className="input input-bordered w-full" 
-                        min="1"
-                        max="100"
-                      />
-                    </div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">School Year</label>
+                        <select
+                          name="school_yearID"
+                          value={createFormData.school_yearID}
+                          onChange={handleCreateChange}
+                          className="select select-bordered w-full"
+                          required
+                        >
+                          <option value="">Select School Year</option>
+                          {schoolYears.length === 0 ? (
+                            <option disabled>Loading school years...</option>
+                          ) : (
+                            schoolYears.map(year => (
+                              <option key={year.school_yearID} value={year.school_yearID}>
+                                {/* Try different property names */}
+                                {year.year || year.SchoolYear || year.schoolYear || 
+                                `${year.startYear}-${year.endYear}` || `Year ${year.school_yearID}`}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
                   </div>
                   
                   <div className="modal-action">
@@ -364,6 +335,9 @@ const ManageClasses = () => {
                   </div>
                 </form>
               </div>
+              <form method="dialog" className="modal-backdrop">
+                <button>close</button>
+              </form>
             </dialog>
 
             {/* Edit Modal */}
@@ -381,7 +355,7 @@ const ManageClasses = () => {
                     disabled
                   />
                   <input 
-                    type="text" 
+                    type="number" 
                     name="Grade" 
                     value={formData.Grade} 
                     onChange={handleChange} 
@@ -396,14 +370,20 @@ const ManageClasses = () => {
                     className="input input-bordered w-full" 
                     required 
                   />
-                  <input 
-                    type="text" 
-                    name="FacultyID" 
-                    value={formData.FacultyID} 
-                    onChange={handleChange} 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
+                  <select
+                    name="FacultyID"
+                    value={formData.FacultyID}
+                    onChange={handleChange}
+                    className="select select-bordered w-full"
+                    required
+                  >
+                    <option value="">Select Faculty</option>
+                    {faculties.map(faculty => (
+                      <option key={faculty.FacultyID} value={faculty.FacultyID}>
+                        {faculty.FirstName} {faculty.LastName}
+                      </option>
+                    ))}
+                  </select>
                   <div className="modal-action">
                     <button 
                       type="submit" 
@@ -422,65 +402,67 @@ const ManageClasses = () => {
                   </div>
                 </form>
               </div>
+              <form method="dialog" className="modal-backdrop">
+                <button>close</button>
+              </form>
             </dialog>
 
-            {/* Advisory Classes Table */}
-               {/* Advisory Classes Table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm mt-4">
-                    <thead>
-                      <tr className="bg-gray-200">
-                        <th className="px-4 py-2">Class ID</th>
-                        <th className="px-4 py-2">Grade</th>
-                        <th className="px-4 py-2">Section</th>
-                        <th className="px-4 py-2">Faculty ID</th>
-                        <th className="px-4 py-2">School Year ID</th>
-                        <th className="px-4 py-2">School Year</th>
-                        <th className="px-4 py-2">Actions</th>
+            {/* Classes Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm mt-4">
+                <thead>
+                  <tr className="bg-gray-200">
+                    <th className="px-4 py-2">Class ID</th>
+                    <th className="px-4 py-2">Grade</th>
+                    <th className="px-4 py-2">Section</th>
+                    <th className="px-4 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fetching ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4">
+                        Loading classes...
+                      </td>
+                    </tr>
+                  ) : error ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4 text-red-500">
+                        {error}
+                      </td>
+                    </tr>
+                  ) : filteredClasses.length > 0 ? (
+                    filteredClasses.map((classItem) => (
+                      <tr key={`${classItem.ClassID}-${classItem.yearID || classItem.school_yearID}`} className="border-b">
+                        <td className="px-4 py-2">{classItem.ClassID}</td>
+                        <td className="px-4 py-2">{classItem.Grade}</td>
+                        <td className="px-4 py-2">{classItem.Section || '-'}</td>
+                        <td className="px-4 py-2">
+                          <button 
+                            onClick={() => handleViewStudents(classItem.ClassID)} 
+                            className="bg-green-600 text-white px-3 py-1 mr-2 rounded hover:bg-green-700 text-sm"
+                          >
+                            View
+                          </button>
+                          <button 
+                            onClick={() => handleEdit(classItem)} 
+                            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                          >
+                            Edit
+                          </button>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {fetching ? (
-                        <tr>
-                          <td colSpan="7" className="text-center py-4">
-                            Loading advisory classes...
-                          </td>
-                        </tr>
-                      ) : filteredClasses.length > 0 ? (
-                        filteredClasses.map((advisory) => (
-                          <tr key={advisory.ClassID} className="border-b">
-                            <td className="px-4 py-2">{advisory.ClassID}</td>
-                            <td className="px-4 py-2">{advisory.Grade}</td>
-                            <td className="px-4 py-2">{advisory.Section}</td>
-                            <td className="px-4 py-2">{advisory.FacultyID}</td>
-                            <td className="px-4 py-2">{advisory.yearID}</td>
-                            <td className="px-4 py-2">{advisory.year}</td>
-                            <td className="px-4 py-2">
-                              <button 
-                                onClick={() => handleViewStudents(advisory.ClassID)} 
-                                className="bg-green-600 text-white px-3 py-1 mr-2 rounded hover:bg-green-700 text-sm"
-                              >
-                                View
-                              </button>
-                              <button 
-                                onClick={() => handleEdit(advisory)} 
-                                className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-                              >
-                                Edit
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="7" className="text-center py-4">
-                            No advisory classes found.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4">
+                        No classes found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
