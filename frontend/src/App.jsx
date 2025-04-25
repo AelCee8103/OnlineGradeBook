@@ -24,6 +24,7 @@ import ViewStudents from "./Admin/ViewStudents";
 import AdvisoryStudents from "./Admin/AdvisoryStudents"; // adjust path if needed
 import StudentGrades from "./Admin/StudentGrades";
 import SubjectClassStudents from "./Admin/SubjectClassStudents";
+import CreateAdvisory from "./Admin/CreateAdvisory";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -46,11 +47,15 @@ function App() {
           <Route
             path="/admin-advisory-classes"
             element={<ManageClass />}
-          ></Route>
+          ></Route> 
+
+          <Route path="admin-create-advisory" element={<CreateAdvisory />}></Route>
+         
           <Route
             path="/admin-manage-subject"
             element={<ManageSubjectList />}
           ></Route>
+          
           <Route
             path="/admin/subject-classes/:subjectCode/students"
             element={<SubjectClassStudents />}

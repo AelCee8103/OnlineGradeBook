@@ -7,6 +7,8 @@ import AdminSidePanel from "../Components/AdminSidePanel";
 const AdvisoryStudents = () => {
   const { advisoryID } = useParams();
   const [students, setStudents] = useState([]);
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [advisoryInfo, setAdvisoryInfo] = useState({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
@@ -22,6 +24,7 @@ const AdvisoryStudents = () => {
           }
         );
         setStudents(studentRes.data);
+        setFilteredStudents(studentRes.data);
       } catch (error) {
         console.error("Error fetching students:", error);
       }
@@ -50,6 +53,18 @@ const AdvisoryStudents = () => {
     fetchStudents();
     fetchAdvisoryInfo();
   }, [advisoryID]);
+
+  useEffect(() => {
+    const query = searchQuery.toLowerCase();
+    const filtered = students.filter((student) => {
+      const fullName =
+        `${student.FirstName} ${student.MiddleName} ${student.LastName}`.toLowerCase();
+      return (
+        student.StudentID.toString().includes(query) || fullName.includes(query)
+      );
+    });
+    setFilteredStudents(filtered);
+  }, [searchQuery, students]);
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -101,6 +116,14 @@ const AdvisoryStudents = () => {
           )}
 
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
+            <input
+              type="text"
+              placeholder="Search by ID or Name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="mb-4 border border-gray-300 rounded-md px-4 py-2 w-full"
+            />
+
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="bg-gray-100">
@@ -111,8 +134,8 @@ const AdvisoryStudents = () => {
                 </tr>
               </thead>
               <tbody>
-                {students.length > 0 ? (
-                  students.map((student, index) => (
+                {filteredStudents.length > 0 ? (
+                  filteredStudents.map((student, index) => (
                     <tr key={student.StudentID} className="border-b">
                       <td className="px-4 py-2">{index + 1}</td>
                       <td className="px-4 py-2">{student.StudentID}</td>
@@ -137,7 +160,7 @@ const AdvisoryStudents = () => {
                 ) : (
                   <tr>
                     <td colSpan="4" className="text-center py-4">
-                      No students found for this advisory class.
+                      No matching students found.
                     </td>
                   </tr>
                 )}

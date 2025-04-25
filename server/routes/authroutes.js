@@ -219,13 +219,22 @@ router.get('/auth/admin-manage-students', async (req, res) => {
 });
 
 
-// Updated backend route
 router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
     const facultyID = req.FacultyID;
 
-    // 1. Get faculty info
+    // Get current active school year
+    const [currentYear] = await db.query(
+      'SELECT school_yearID FROM schoolyear WHERE status = "1" LIMIT 1'
+    );
+    
+    if (currentYear.length === 0) {
+      return res.status(400).json({ message: "No active school year found" });
+    }
+    const currentSchoolYearID = currentYear[0].school_yearID;
+
+    // Rest of your existing code...
     const [faculty] = await db.query(
       'SELECT FirstName, LastName, MiddleName FROM faculty WHERE FacultyID = ?',
       [facultyID]
@@ -235,15 +244,16 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
       return res.status(404).json({ message: "Faculty not found" });
     }
 
-    // 2. Get advisory class info from classes table
-    const [classes] = await db.query(
-      `SELECT Grade, Section 
-       FROM classes 
-       WHERE FacultyID = ?`,
-      [facultyID]
+    const [advisoryClasses] = await db.query(
+      `SELECT a.advisoryID, c.Grade, c.Section 
+       FROM advisory a
+       JOIN classes c ON a.classID = c.ClassID
+       JOIN class_year cy ON a.advisoryID = cy.advisoryID
+       WHERE a.facultyID = ? AND cy.yearID = ?`,
+      [facultyID, currentSchoolYearID]
     );
 
-    if (classes.length === 0) {
+    if (advisoryClasses.length === 0) {
       return res.status(200).json({
         grade: "",
         section: "",
@@ -253,16 +263,15 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
       });
     }
 
-    const { Grade, Section } = classes[0];
+    const { Grade, Section } = advisoryClasses[0];
     
-    // 3. Get students through student_classes join
     const [students] = await db.query(
       `SELECT s.StudentID, s.FirstName, s.MiddleName, s.LastName
        FROM students s
        JOIN student_classes sc ON s.StudentID = sc.StudentID
-       WHERE sc.FacultyID = ? AND sc.Grade = ? AND sc.Section = ?
+       WHERE sc.advisoryID = ? AND sc.school_yearID = ?
        ORDER BY s.LastName, s.FirstName`,
-      [facultyID, Grade, Section]
+      [advisoryClasses[0].advisoryID, currentSchoolYearID]
     );
 
     res.status(200).json({
@@ -281,7 +290,10 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
 
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({ 
+      error: "Internal Server Error",
+      message: error.message 
+    });
   }
 });
 
@@ -311,5 +323,44 @@ router.get("/admin-assign-subject", verifyToken, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Make sure this route is properly mounted in your Express app
+router.get("/faculty-assigned-subjects", verifyToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const facultyID = req.query.facultyId; 
+    
+    if (!facultyId) {
+      return res.status(400).json({ error: "FacultyID is required as a query parameter." });
+    }
+
+    const query = `
+    SELECT 
+      s.SubjectCode AS subjectCode,
+      s.SubjectName AS subjectName,
+      CONCAT(f.FirstName, ' ', f.LastName) AS facultyName,
+      c.GradeLevel AS grade,
+      c.Section AS section,
+      sy.SchoolYear AS schoolYear
+    FROM assignsubject a
+    LEFT JOIN subjects s ON a.subjectID = s.SubjectID
+    LEFT JOIN faculty f ON a.FacultyID = f.FacultyID
+    LEFT JOIN advisory ad ON a.advisoryID = ad.advisoryID
+    LEFT JOIN classes c ON ad.classID = c.ClassID
+    LEFT JOIN schoolyear sy ON a.yearID = sy.school_yearID
+    WHERE a.FacultyID = ?;
+  `;
+
+    const [rows] = await db.query(query, [facultyID]);
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error("Error fetching faculty assigned subjects:", error);
+    res.status(500).json({ error: "Failed to fetch assigned subjects" });
+  }
+});
+
+
+
+
 
 export default router;

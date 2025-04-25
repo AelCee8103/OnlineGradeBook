@@ -16,38 +16,60 @@ const Classes = () => {
 
   // Fetch assigned subjects for faculty
   const fetchAssignedSubjects = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        navigate("/faculty-login");
-        return;
-      }
-
-      const response = await axios.get("http://localhost:3000/auth/admin-assign-subject", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      // Validate response data structure
-      if (!response.data || !Array.isArray(response.data)) {
-        throw new Error("Invalid data format received from server");
-      }
-
-      // Safely set the subjects data
-      setAssignedSubjects(response.data || []);
-    } catch (error) {
-      console.error("Error fetching assigned subjects:", error);
-      setError(error.response?.data?.message || error.message || "Failed to load subjects");
-      
-      if (error.response && error.response.status === 401) {
-        localStorage.removeItem("token");
-        navigate("/faculty-login");
-      }
-    } finally {
-      setIsLoading(false);
+  setIsLoading(true);
+  setError(null);
+  try {
+    const token = localStorage.getItem("token");
+    const facultyId = localStorage.getItem("facultyId");
+    
+    // Debugging logs
+    console.log("Token exists:", !!token);
+    console.log("FacultyID:", facultyId);
+    
+    if (!token) {
+      navigate("/faculty-login");
+      return;
     }
-  };
+
+    if (!facultyId) {
+      throw new Error("Faculty ID not found in local storage");
+    }
+
+    const response = await axios.get(`http://localhost:3000/faculty-assigned-subjects`, {
+      headers: { 
+        Authorization: `Bearer ${token}` 
+      },
+      params: { 
+        facultyId: facultyId 
+      }
+    });
+
+    console.log("API Response:", response.data); // Debugging
+
+    if (!Array.isArray(response.data)) {
+      throw new Error("Expected array but got: " + typeof response.data);
+    }
+
+    setAssignedSubjects(response.data);
+  } catch (error) {
+    console.error("API Error:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    
+    setError(error.response?.data?.error || 
+            error.message || 
+            "Failed to load subjects");
+    
+    if (error.response?.status === 401) {
+      localStorage.removeItem("token");
+      navigate("/faculty-login");
+    }
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   useEffect(() => {
     fetchAssignedSubjects();
@@ -103,46 +125,33 @@ const Classes = () => {
                 <thead>
                   <tr className="bg-gray-100">
                     
-                    <th className="px-4 py-2 text-gray-600">Subject Code</th>
-                    <th className="px-4 py-2 text-gray-600">Subject ID</th>
-                    <th className="px-4 py-2 text-gray-600">Faculty ID</th>
-                    <th className="px-4 py-2 text-gray-600">Class ID</th>
-                    <th className="px-4 py-2 text-gray-600">Year ID</th>
-                    <th className="px-4 py-2 text-gray-600">Action</th>
+                  <th className="px-4 py-2 text-gray-600">Subject Code</th>
+                  <th className="px-4 py-2 text-gray-600">Subject Name</th>
+                  <th className="px-4 py-2 text-gray-600">Faculty</th>
+                  <th className="px-4 py-2 text-gray-600">Grade & Section</th>
+                  <th className="px-4 py-2 text-gray-600">School Year</th>
+                  <th className="px-4 py-2 text-gray-600">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {assignedSubjects.length > 0 ? (
-                    assignedSubjects.map((subject, index) => {
-                      // Safely access subject properties with fallbacks
-                      const SubjectCode = subject?.SubjectCode || "N/A";
-                      const subjectID = subject?.subjectID || "N/A";
-                      const FacultyID = subject?.FacultyID || "N/A";
-                      const ClassID= subject?.ClassID || "N/A";
-                      const yearID= subject?.yearID || "N/A";
-
-                      return (
-                        <tr key={index} className="border-b">
-                         
-                          <td className="px-4 py-2">{SubjectCode}</td>
-                          <td className="px-4 py-2">{subjectID}</td>
-                          <td className="px-4 py-2">{FacultyID}</td>
-                          <td className="px-4 py-2">{ClassID}</td>
-                          <td className="px-4 py-2">{yearID}</td>
-                          <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 m-2 ml-3 text-sm">
-                                   View
-                          </button>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="text-center py-4">
-                        {error ? "Error loading subjects" : "No assigned subjects found."}
-                      </td>
+                {assignedSubjects.length > 0 ? (
+                  assignedSubjects.map((subject, index) => (
+                    <tr key={index} className="border-b">
+                      <td className="px-4 py-2">{subject.subjectCode}</td>
+                      <td className="px-4 py-2">{subject.subjectName}</td>
+                      <td className="px-4 py-2">{subject.facultyName}</td>
+                      <td className="px-4 py-2">{subject.grade} - {subject.section}</td>
+                      <td className="px-4 py-2">{subject.schoolYear}</td>
                     </tr>
-                  )}
-                </tbody>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" className="text-center py-4">
+                      No assigned subjects found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
               </table>
             )}
           </div>

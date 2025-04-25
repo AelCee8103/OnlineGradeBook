@@ -37,18 +37,27 @@ const ManageGrades = () => {
       try {
         const token = localStorage.getItem("token");
         const response = await axios.get(
-          "http://localhost:3000/Pages/admin-advisory-classes",
+          "http://localhost:3000/Pages/admin/manage-grades/:advisoryID",
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        const formatted = response.data.map((item) => ({
+        
+        console.log("Advisory API response:", response.data);
+
+        const rawData = Array.isArray(response.data)
+          ? response.data
+          : response.data.advisories || [];
+
+        const formatted = rawData.map((item) => ({
           advisoryID: item.advisoryID,
           classID: item.classID,
           facultyName: item.facultyName,
           grade: item.grade,
           section: item.section,
-          school_Year: item.SchoolYear,
+          school_Year: item.SchoolYear, // Adjust casing if needed
         }));
+
         setAdvisories(formatted);
+        console.log("Formatted advisories:", formatted);
       } catch (error) {
         console.error("Error fetching advisory data:", error);
       }
@@ -72,7 +81,7 @@ const ManageGrades = () => {
           grade: item.grade,
           section: item.section,
           schoolYear: item.schoolYear,
-          advisoryID: item.advisoryID, // include advisory link
+          advisoryID: item.advisoryID,
         }));
         setSubjectClasses(formatted);
       } catch (error) {
@@ -84,13 +93,13 @@ const ManageGrades = () => {
 
   const filteredAdvisories = advisories.filter((adv) =>
     Object.values(adv).some((value) =>
-      value.toString().toLowerCase().includes(advisorySearch.toLowerCase())
+      value?.toString().toLowerCase().includes(advisorySearch.toLowerCase())
     )
   );
 
   const filteredSubjects = subjectClasses.filter((subject) =>
     Object.values(subject).some((value) =>
-      value.toString().toLowerCase().includes(subjectSearch.toLowerCase())
+      value?.toString().toLowerCase().includes(subjectSearch.toLowerCase())
     )
   );
 
@@ -122,7 +131,6 @@ const ManageGrades = () => {
               placeholder="Search advisory class..."
               className="mb-4 border border-gray-300 rounded-md px-4 py-2"
             />
-
             <FontAwesomeIcon icon={faMagnifyingGlass} className="ml-3" />
 
             <div className="overflow-y-auto max-h-[400px]">
@@ -184,7 +192,6 @@ const ManageGrades = () => {
               placeholder="Search subject class..."
               className="mb-4 border border-gray-300 rounded-md px-4 py-2"
             />
-
             <FontAwesomeIcon icon={faMagnifyingGlass} className="ml-3" />
             <div className="overflow-y-auto max-h-[400px]">
               <table className="w-full text-left text-sm">

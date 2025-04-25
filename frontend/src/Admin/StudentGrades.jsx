@@ -145,6 +145,7 @@ const StudentGrades = () => {
                     <th className="px-4 py-2">Q3</th>
                     <th className="px-4 py-2">Q4</th>
                     <th className="px-4 py-2">Average</th>
+                    <th className="px-4 py-2">Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -164,6 +165,13 @@ const StudentGrades = () => {
                           )
                         : "-";
 
+                    const remarks =
+                      finalGrade !== "-" && parseFloat(finalGrade) >= 75
+                        ? "Passed"
+                        : finalGrade !== "-"
+                        ? "Failed"
+                        : "-";
+
                     return (
                       <tr key={subjectCode} className="border-b">
                         <td className="px-4 py-2">{subjectName}</td>
@@ -172,6 +180,7 @@ const StudentGrades = () => {
                         <td className="px-4 py-2">{q3}</td>
                         <td className="px-4 py-2">{q4}</td>
                         <td className="px-4 py-2">{finalGrade}</td>
+                        <td className="px-4 py-2">{remarks}</td>
                       </tr>
                     );
                   })}
@@ -204,9 +213,13 @@ const StudentGrades = () => {
                     0
                   ) / finalGrades.length;
 
+                const generalRemarks =
+                  generalAverage >= 75 ? "Passed" : "Failed";
+
                 return (
                   <div className="mt-4 text-sm font-semibold text-left ml-4">
-                    General Average: {generalAverage.toFixed(2)}
+                    <p>General Average: {generalAverage.toFixed(2)}</p>
+                    <p>Overall Remarks: {generalRemarks}</p>
                   </div>
                 );
               })()}

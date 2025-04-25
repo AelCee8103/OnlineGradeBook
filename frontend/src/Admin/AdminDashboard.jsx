@@ -34,32 +34,40 @@ const AdminDashboard = () => {
 
   const handleCreateSchoolYear = async (e) => {
     e.preventDefault();
-     
+  
     try {
-      const response = await axios.post("http://localhost:3000/Pages/admin-dashboard", { 
-        SchoolYear: newSchoolYear.schoolyearID, 
-        year: newSchoolYear.year 
+      const response = await axios.post("http://localhost:3000/Pages/admin-dashboard", {
+        SchoolYear: newSchoolYear.schoolyearID,
+        year: newSchoolYear.year
       });
   
       if (response.data.exists) {
-        toast.error("School Year already exists");
-      } else {
-        toast.success("School Year added successfully!");
+        toast.error("School Year already exists.");
+      } else if (response.data.success) {
+        // Reset fields
+        setSchoolYear({ schoolyearID: "", year: "" });
+  
+        // Close modal safely
+        const modal = document.getElementById("my_modal_5");
+        if (modal) modal.close();
+  
+       
+  
+        // Optionally wait a moment before navigating (for UX)
+      
+          navigate("/admin-dashboard");
+           // Toast after successful creation
+        toast.success("School Year created and status set to Active!");
+     
       }
   
-      setSchoolYear({ schoolyearID: "", year: "" });
-  
-      navigate("/admin-dashboard");
-  
-      // Close modal safely
-      const modal = document.getElementById('my_modal_5');
-      if (modal) modal.close();
-      
     } catch (err) {
       console.error("Error:", err.response?.data || err.message);
       toast.error("Failed to add school year.");
     }
   };
+  
+  
 
   const handChanges  = (e) => {
     setSchoolYear({

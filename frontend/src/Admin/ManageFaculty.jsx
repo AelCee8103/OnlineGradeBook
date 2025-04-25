@@ -193,69 +193,111 @@ const ManageFaculty = () => {
 
             {/* Add Faculty Modal */}
             <dialog id="faculty_modal" className="modal">
-              <div className="modal-box">
-                <h3 className="font-bold text-lg mb-4">Add Faculty Information</h3>
-                <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="modal-box rounded-2xl p-6">
+                <h3 className="text-xl font-semibold text-gray-800 mb-6">
+                  Add Faculty Information
+                </h3>
+
+                <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                   <div className="col-span-2">
-                   <input 
-                    type="number" 
-                    name="FacultyID" 
-                    value={newFaculty.FacultyID}
-                    onChange={handleChanges}
-                    placeholder="Faculty ID" 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
-                  <input 
-                    type="text" 
-                    name="LastName" 
-                    value={newFaculty.LastName}
-                    onChange={handleChanges}
-                    placeholder="Last Name" 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
-                  <input 
-                    type="text" 
-                    name="FirstName" 
-                    value={newFaculty.FirstName}
-                    onChange={handleChanges}
-                    placeholder="First Name" 
-                    className="input input-bordered w-full" 
-                    required 
-                  />
-                  <input 
-                    type="text" 
-                    name="MiddleName" 
-                    value={newFaculty.MiddleName}
-                    onChange={handleChanges}
-                    placeholder="Middle Name" 
-                    className="input input-bordered w-full" 
-                  />
-                  <input 
-                    type="email" 
-                    name="Email" 
-                    value={newFaculty.Email}
-                    onChange={handleChanges}
-                    placeholder="Email" 
-                    className="input input-bordered w-full" 
-                  />
-                  <div className="modal-action">
-                    <button type="submit" className="btn bg-green-700 text-white">Submit</button>
-                    <button 
-                      type="button" 
-                      className="btn"
+                    <div className="flex flex-col">
+                      <label className="text-sm text-gray-600 mb-1" htmlFor="FacultyID">
+                        Faculty ID
+                      </label>
+                      <input
+                        type="number"
+                        name="FacultyID"
+                        id="FacultyID"
+                        value={newFaculty.FacultyID}
+                        onChange={handleChanges}
+                        placeholder="Enter Faculty ID"
+                        className="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex flex-col">
+                      <label className="text-sm text-gray-600 mb-1" htmlFor="LastName">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        name="LastName"
+                        id="LastName"
+                        value={newFaculty.LastName}
+                        onChange={handleChanges}
+                        placeholder="Enter Last Name"
+                        className="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex flex-col">
+                      <label className="text-sm text-gray-600 mb-1" htmlFor="FirstName">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        name="FirstName"
+                        id="FirstName"
+                        value={newFaculty.FirstName}
+                        onChange={handleChanges}
+                        placeholder="Enter First Name"
+                        className="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex flex-col">
+                      <label className="text-sm text-gray-600 mb-1" htmlFor="MiddleName">
+                        Middle Name
+                      </label>
+                      <input
+                        type="text"
+                        name="MiddleName"
+                        id="MiddleName"
+                        value={newFaculty.MiddleName}
+                        onChange={handleChanges}
+                        placeholder="Enter Middle Name (optional)"
+                        className="input input-bordered w-full"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 flex flex-col">
+                      <label className="text-sm text-gray-600 mb-1" htmlFor="Email">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        name="Email"
+                        id="Email"
+                        value={newFaculty.Email}
+                        onChange={handleChanges}
+                        placeholder="Enter Email"
+                        className="input input-bordered w-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="modal-action mt-6 flex justify-end space-x-2">
+                    <button
+                      type="button"
+                      className="btn bg-gray-200 hover:bg-gray-300 text-gray-800"
                       onClick={() => document.getElementById('faculty_modal').close()}
                     >
-                      Close
+                      Cancel
                     </button>
-                  </div>
-                   </div>
+                    <button
+                      type="submit"
+                      className="btn bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      Submit
+                    </button>
                   </div>
                 </form>
               </div>
             </dialog>
+
 
             {/* Edit Faculty Modal */}
             <dialog id="facultyedit_modal" className="modal">
