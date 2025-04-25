@@ -582,7 +582,7 @@ router.get("/admin-subject-classes/:subjectCode/students", async (req, res) => {
       LIMIT 1
     `, [subjectCode]);
 
-    if (subjectInfoRows.length === 0) {
+    if (subjectInfoRows.length === 0) { 
       return res.status(404).json({ message: "Subject class not found." });
     }
 
@@ -795,8 +795,8 @@ router.get('/admin/manage-grades', async (req, res) => {
         adv.advisoryID,
         adv.classID,
         CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
-        c.Grade,
-        c.Section,
+        c.Grade AS grade,
+        c.Section AS section,
         sy.year AS SchoolYear
       FROM advisory adv
       JOIN faculty f ON adv.facultyID = f.FacultyID
