@@ -785,6 +785,36 @@ router.get('/admin-create-advisory', async (req, res) => {
   }
 });
 
+// Get advisory classes with faculty and class info for active school year
+router.get('/admin/manage-grades', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+
+    const [rows] = await db.query(`
+      SELECT 
+        adv.advisoryID,
+        adv.classID,
+        CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
+        c.Grade,
+        c.Section,
+        sy.year AS SchoolYear
+      FROM advisory adv
+      JOIN faculty f ON adv.facultyID = f.FacultyID
+      JOIN classes c ON adv.classID = c.ClassID
+      JOIN class_year cy ON adv.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE sy.status = 1
+      ORDER BY c.Grade, c.Section
+    `);
+
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error("Error fetching advisory class data for grades:", error);
+    res.status(500).json({ error: "Failed to retrieve advisory class data." });
+  }
+});
+
+
 
 
 

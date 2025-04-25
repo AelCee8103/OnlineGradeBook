@@ -37,10 +37,10 @@ const ManageGrades = () => {
       try {
         const token = localStorage.getItem("token");
         const response = await axios.get(
-          "http://localhost:3000/Pages/admin/manage-grades/:advisoryID",
+          "http://localhost:3000/Pages/admin/manage-grades",
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        
+
         console.log("Advisory API response:", response.data);
 
         const rawData = Array.isArray(response.data)

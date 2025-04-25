@@ -47,15 +47,18 @@ function App() {
           <Route
             path="/admin-advisory-classes"
             element={<ManageClass />}
-          ></Route> 
+          ></Route>
 
-          <Route path="admin-create-advisory" element={<CreateAdvisory />}></Route>
-         
+          <Route
+            path="admin-create-advisory"
+            element={<CreateAdvisory />}
+          ></Route>
+
           <Route
             path="/admin-manage-subject"
             element={<ManageSubjectList />}
           ></Route>
-          
+
           <Route
             path="/admin/subject-classes/:subjectCode/students"
             element={<SubjectClassStudents />}
