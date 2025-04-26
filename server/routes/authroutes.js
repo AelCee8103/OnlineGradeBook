@@ -72,7 +72,7 @@ const verifyToken = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_KEY);
-    req.FacultyID = decoded.FacultyID; // Ensure this matches your JWT payload
+    req.FacultyID = decoded.FacultyID;
     next();
 
   } catch (err) {
@@ -325,39 +325,43 @@ router.get("/admin-assign-subject", verifyToken, async (req, res) => {
 });
 
 // Make sure this route is properly mounted in your Express app
-router.get("/faculty-assigned-subjects", verifyToken, async (req, res) => {
+// Corrected route: /faculty-assigned-subjects
+router.get("/faculty-assign-subjects", verifyToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const facultyID = req.query.facultyId; 
-    
-    if (!facultyId) {
-      return res.status(400).json({ error: "FacultyID is required as a query parameter." });
+    const facultyID = req.FacultyID; // Extracted from JWT in verifyToken middleware
+
+    if (!facultyID) {
+      return res.status(400).json({ error: "FacultyID not found in token." });
     }
 
     const query = `
-    SELECT 
-      s.SubjectCode AS subjectCode,
-      s.SubjectName AS subjectName,
-      CONCAT(f.FirstName, ' ', f.LastName) AS facultyName,
-      c.GradeLevel AS grade,
-      c.Section AS section,
-      sy.SchoolYear AS schoolYear
-    FROM assignsubject a
-    LEFT JOIN subjects s ON a.subjectID = s.SubjectID
-    LEFT JOIN faculty f ON a.FacultyID = f.FacultyID
-    LEFT JOIN advisory ad ON a.advisoryID = ad.advisoryID
-    LEFT JOIN classes c ON ad.classID = c.ClassID
-    LEFT JOIN schoolyear sy ON a.yearID = sy.school_yearID
-    WHERE a.FacultyID = ?;
-  `;
+      SELECT 
+        a.SubjectCode AS subjectCode,
+        s.SubjectName AS subjectName,
+        CONCAT(f.FirstName, ' ', f.LastName) AS facultyName,
+        c.Grade AS grade,
+        c.Section AS section,
+        sy.year AS schoolYear
+      FROM assignsubject a
+      JOIN subjects s ON a.subjectID = s.SubjectID
+      JOIN faculty f ON a.FacultyID = f.FacultyID
+      LEFT JOIN advisory ad ON a.advisoryID = ad.advisoryID
+      LEFT JOIN classes c ON ad.classID = c.ClassID
+      LEFT JOIN schoolyear sy ON a.yearID = sy.school_yearID
+      WHERE a.FacultyID = ?;
+    `;
 
     const [rows] = await db.query(query, [facultyID]);
-    res.status(200).json(rows);
+
+    res.status(200).json({ success: true, data: rows });
+
   } catch (error) {
     console.error("Error fetching faculty assigned subjects:", error);
     res.status(500).json({ error: "Failed to fetch assigned subjects" });
   }
 });
+
 
 
 
