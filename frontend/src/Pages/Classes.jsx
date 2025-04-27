@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import NavbarFaculty from "../components/NavbarFaculty";
-import FacultySidePanel from "../components/FacultySidePanel";
+import FacultySidePanel from "../Components/FacultySidePanel";
 import axios from "axios";
 
 const Classes = () => {
@@ -162,7 +162,7 @@ const Classes = () => {
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             <button 
                               className="text-blue-600 hover:text-blue-900"
-                              onClick={() => navigate(`/subject-details/${subject.subjectCode}`)}
+                              onClick={() => navigate(`/faculty-view-students/${subject.subjectCode}`)}
                             >
                               View
                             </button>

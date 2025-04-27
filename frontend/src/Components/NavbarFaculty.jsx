@@ -14,7 +14,7 @@ const NavbarFaculty = ({ toggleSidebar }) => {
         <button className="md:hidden text-2xl mr-3" onClick={toggleSidebar}>
           <FontAwesomeIcon icon={faBars} />
         </button>
-        <a className="ml-4 text-xl text-green-900 font-bold">BDCNHS Gradebook</a>
+        <a className="ml-4 text-xl text-green-800 font-bold">BDCNHS Gradebook</a>
       </div>
 
       {/* Right Section */}

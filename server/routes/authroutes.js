@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
-router.post('/register', async (req, res) => {
+router.post('/admin-manage-faculty', async (req, res) => {
   const { FacultyID, FirstName, MiddleName, LastName, Email, Password } = req.body;
   try {
     const db = await connectToDatabase();
@@ -83,7 +83,7 @@ const verifyToken = (req, res, next) => {
 
 
 // Route for fetching faculty dashboard data
-router.get(['/faculty-dashboard', '/faculty-classes', '/faculty-grades', '/faculty-attendance'],verifyToken, async (req, res) => {
+router.get(['/faculty-dashboard', '/faculty-classes', '/faculty-grades', '/faculty-attendance', '/faculty-view-students'],verifyToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
 
@@ -324,8 +324,7 @@ router.get("/admin-assign-subject", verifyToken, async (req, res) => {
   }
 });
 
-// Make sure this route is properly mounted in your Express app
-// Corrected route: /faculty-assigned-subjects
+// Get the the assign subject of the faculty
 router.get("/faculty-assign-subjects", verifyToken, async (req, res) => {
   try {
     const db = await connectToDatabase();

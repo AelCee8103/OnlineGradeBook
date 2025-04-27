@@ -23,7 +23,8 @@ const ManageFaculty = () => {
     FirstName: "", 
     MiddleName: "", 
     Email: "", 
-    Department: ""
+    Department: "",
+    Password: "",
   });
 
   // Pagination States
@@ -90,7 +91,7 @@ const ManageFaculty = () => {
     }
 
     try {
-      const response = await axios.post("http://localhost:3000/Pages/admin-manage-faculty", newFaculty);
+      const response = await axios.post("http://localhost:3000/auth/admin-manage-faculty", newFaculty);
       
       if (response.data.exists) {
         toast.error("Faculty ID already exists!");
@@ -274,6 +275,20 @@ const ManageFaculty = () => {
                         value={newFaculty.Email}
                         onChange={handleChanges}
                         placeholder="Enter Email"
+                        className="input input-bordered w-full"
+                      />
+                    </div>
+                    <div className="md:col-span-2 flex flex-col">
+                      <label className="text-sm text-gray-600 mb-1" htmlFor="Email">
+                        Password
+                      </label>
+                      <input
+                        type="password"
+                        name="Password"
+                        id="Password"
+                        value={newFaculty.Password}
+                        onChange={handleChanges}
+                        placeholder="Enter Password "
                         className="input input-bordered w-full"
                       />
                     </div>

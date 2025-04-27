@@ -32,41 +32,6 @@ const ViewStudents = () => {
     fetchUser();
   }, []);
 
-  const handleCreateSchoolYear = async (e) => {
-    e.preventDefault();
-     
-    try {
-      const response = await axios.post("http://localhost:3000/Pages/admin-dashboard", { 
-        SchoolYear: newSchoolYear.schoolyearID, 
-        year: newSchoolYear.year 
-      });
-  
-      if (response.data.exists) {
-        toast.error("School Year already exists");
-      } else {
-        toast.success("School Year added successfully!");
-      }
-  
-      setSchoolYear({ schoolyearID: "", year: "" });
-  
-      navigate("/admin-dashboard");
-  
-      // Close modal safely
-      const modal = document.getElementById('my_modal_5');
-      if (modal) modal.close();
-      
-    } catch (err) {
-      console.error("Error:", err.response?.data || err.message);
-      toast.error("Failed to add school year.");
-    }
-  };
-
-  const handChanges  = (e) => {
-    setSchoolYear({
-       ...newSchoolYear, [e.target.name]: e.target.value
-    });
-  };
-
   
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">

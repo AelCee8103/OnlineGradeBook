@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import NavbarFaculty from "../components/NavbarFaculty";
-import FacultySidePanel from "../components/FacultySidePanel";
+import FacultySidePanel from "../Components/FacultySidePanel";
 import StatCard from "../components/StatCard.jsx"
 import { useNavigate } from "react-router-dom";
 import axios from "axios";

@@ -100,27 +100,6 @@ router.put('/admin-manage-students', async (req, res) => {
   }
 });
 
-// POST add faculty
-router.post('/admin-manage-faculty', async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-
-    const { FacultyID, LastName, FirstName, MiddleName, Email } = req.body;
-
-    // Validate that none of the fields are undefined
-    if (!FacultyID || !LastName || !FirstName || !MiddleName || !Email) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
-
-    const sql = "INSERT INTO faculty (FacultyID, LastName, FirstName, MiddleName, Email) VALUES (?, ?, ?, ?, ?)";
-    const [result] = await db.query(sql, [FacultyID, LastName, FirstName, MiddleName, Email]);
-
-    res.status(200).json({ message: 'Student added successfully', result });
-  } catch (err) {
-    console.error('Error adding student:', err);
-    res.status(500).json({ message: 'Server Error' });
-  }
-});
 
 
 router.put('/admin-manage-faculty', async (req, res) => {
