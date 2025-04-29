@@ -1,68 +1,45 @@
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
-import FacultySidePanel from "../Components/FacultySidePanel.jsx";
-import NavbarFaculty from "../components/NavbarFaculty.jsx";
-import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import NavbarFaculty from "../components/NavbarFaculty"; // ✅ restore Navbar
+import FacultySidePanel from "../Components/FacultySidePanel"; // ✅ restore Sidebar
 
 const ViewStudents = () => {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [students, setStudents] = useState([]); // Initialize students state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const studentsPerPage = 5; // Customize how many students per page
+  const { subjectCode } = useParams();
   const navigate = useNavigate();
+  const [students, setStudents] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // Fetch students data from the backend
   const fetchStudents = async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
       const token = localStorage.getItem("token");
       if (!token) {
         navigate("/faculty-login");
         return;
       }
-
       const response = await axios.get(
-        "http://localhost:3000/auth/faculty-view-students",
+        `http://localhost:3000/faculty-subject-classes/${subjectCode}/students`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
 
-      setStudents(response.data.students || []); // Ensure students array is set
+      setStudents(response.data.students || []);
     } catch (error) {
       console.error("Error fetching students:", error);
-      setError("Failed to load students. Please try again.");
-      if (error.response?.status === 401) {
-        navigate("/faculty-login");
-      }
-    } finally {
-      setIsLoading(false);
     }
   };
 
   useEffect(() => {
     fetchStudents();
-  }, []);
+  }, [subjectCode]);
 
-  // Pagination logic
-  const indexOfLastStudent = currentPage * studentsPerPage;
-  const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
-  const currentStudents = students.slice(indexOfFirstStudent, indexOfLastStudent);
-  const totalPages = Math.ceil(students.length / studentsPerPage);
-
-  const handleNextPage = () => {
-    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
-  };
-
-  const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
-  };
+  const filteredStudents = students.filter(
+    (student) =>
+      student.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.StudentID.toString().includes(searchTerm)
+  );
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -82,101 +59,71 @@ const ViewStudents = () => {
       <div className="flex-1 flex flex-col overflow-auto">
         <NavbarFaculty toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
 
-        {/* Manage Students Content */}
-        <div className="p-8">
-          <h1 className="text-3xl font-bold mb-6">Section</h1>
+        <div className="p-6">
+          {/* Back Button */}
+          <button
+            onClick={() => navigate(-1)}
+            className="mb-6 bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+          >
+            Back
+          </button>
 
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded">
-              {error}
-            </div>
-          )}
+          <h1 className="text-2xl font-bold mb-4">Students List</h1>
 
-          {/* Students Table */}
-          <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
-            <div className="flex items-center mb-4">
-              <input
-                type="text"
-                placeholder="Search by ID number"
-                className="border border-gray-300 rounded-md px-4 py-2 flex-grow"
-              />
-              <FontAwesomeIcon icon={faMagnifyingGlass} className="ml-3" />
-            </div>
+          {/* Search */}
+          <input
+            type="text"
+            placeholder="Search by name or student ID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="border border-gray-300 p-2 mb-4 w-full rounded"
+          />
 
-            {isLoading ? (
-              <div className="text-center py-12">
-                <div className="inline-block animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
-                <p className="mt-3 text-gray-600">Loading students...</p>
-              </div>
-            ) : (
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-4 py-2 text-gray-600">No.</th>
-                    <th className="px-4 py-2 text-gray-600">Student Name</th>
-                    <th className="px-4 py-2 text-gray-600">Student Number</th>
-                    <th className="px-4 py-2 text-gray-600">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentStudents.length > 0 ? (
-                    currentStudents.map((student, index) => (
-                      <tr key={student.id} className="border-b">
-                        <td className="px-4 py-2">
-                          {indexOfFirstStudent + index + 1}
-                        </td>
-                        <td className="px-4 py-2">{student.name}</td>
-                        <td className="px-4 py-2">{student.studentNumber}</td>
-                        <td className="px-4 py-2">
-                          <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td
-                        colSpan="4"
-                        className="text-center py-4 text-gray-500"
-                      >
-                        No students found.
+          {/* Table */}
+          <div className="overflow-x-auto bg-white shadow rounded-lg">
+            <table className="min-w-full table-auto">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-6 py-3 text-left text-gray-700">
+                    Student Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-gray-700">
+                    Student ID
+                  </th>
+                  <th className="px-6 py-3 text-left text-gray-700">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.length > 0 ? (
+                  filteredStudents.map((student) => (
+                    <tr
+                      key={student.StudentID}
+                      className="border-b hover:bg-gray-50"
+                    >
+                      <td className="px-6 py-4">{student.fullName}</td>
+                      <td className="px-6 py-4">{student.StudentID}</td>
+                      <td className="px-6 py-4 flex space-x-2">
+                        <button className="bg-green-500 text-white px-3 py-1 rounded">
+                          View
+                        </button>
+                        <button className="bg-purple-500 text-white px-3 py-1 rounded">
+                          Grades
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            )}
-
-            {/* Pagination Controls */}
-            <div className="flex justify-between items-center mt-4">
-              <button
-                onClick={handlePrevPage}
-                disabled={currentPage === 1}
-                className={`px-4 py-2 rounded ${
-                  currentPage === 1
-                    ? "bg-gray-300"
-                    : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Previous
-              </button>
-              <span className="text-sm text-gray-700">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className={`px-4 py-2 rounded ${
-                  currentPage === totalPages
-                    ? "bg-gray-300"
-                    : "bg-blue-500 text-white hover:bg-blue-600"
-                }`}
-              >
-                Next
-              </button>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan="3"
+                      className="px-6 py-4 text-center text-gray-500"
+                    >
+                      No students found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
