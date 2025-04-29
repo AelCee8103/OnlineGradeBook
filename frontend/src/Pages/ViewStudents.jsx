@@ -20,19 +20,32 @@ const ViewStudents = () => {
       }
 
       const response = await axios.get(
-        `http://localhost:3000/faculty-subject-classes/${subjectCode}/students`,
+        `http://localhost:3000/Pages/faculty-subject-classes/${subjectCode}/students`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
         }
       );
 
       if (response.data.success) {
         setStudents(response.data.students || []);
       } else {
-        console.error("Error loading students:", response.data.message);
+        throw new Error(response.data.message || "Failed to load students");
       }
     } catch (error) {
       console.error("Error fetching students:", error);
+
+      if (error.response?.status === 403) {
+        alert(`Access denied: ${error.response.data.message}`);
+        navigate("/faculty-classes");
+      } else if (error.response?.status === 401) {
+        localStorage.removeItem("token");
+        navigate("/faculty-login");
+      } else {
+        alert("Failed to load students. Please try again.");
+      }
     }
   };
 

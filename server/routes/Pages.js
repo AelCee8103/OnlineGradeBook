@@ -28,36 +28,48 @@ router.get('/admin-manage-students', async (req, res) => {
 router.get('/faculty-subject-classes/:subjectCode/students', authenticateToken, async (req, res) => {
   try {
     const { subjectCode } = req.params;
-    const facultyID = req.user.facultyID; // getting facultyID from the logged-in user token
+    const facultyID = req.user.facultyID; // Now using standardized user object
+    const db = await connectToDatabase();
 
-    // Step 1: Check if subjectCode belongs to the logged-in faculty
-    const [subjectRows] = await db.promise().query(
-      `SELECT advisoryID FROM assignsubject WHERE SubjectCode = ? AND FacultyID = ?`,
+    // Verify faculty is assigned to this subject
+    const [assignment] = await db.query(
+      `SELECT a.advisoryID 
+       FROM assignsubject a
+       WHERE a.SubjectCode = ? AND a.FacultyID = ?`,
       [subjectCode, facultyID]
     );
 
-    if (subjectRows.length === 0) {
-      return res.status(403).json({ success: false, message: "Unauthorized or subject not found." });
+    if (assignment.length === 0) {
+      return res.status(403).json({ 
+        success: false, 
+        message: "You are not assigned to this subject" 
+      });
     }
 
-    const advisoryID = subjectRows[0].advisoryID;
+    const advisoryID = assignment[0].advisoryID;
 
-    // Step 2: Fetch students under that advisory
-    const [students] = await db.promise().query(
+    // Get students in this advisory
+    const [students] = await db.query(
       `SELECT 
-         students.StudentID,
-         CONCAT(students.FirstName, ' ', students.LastName) AS fullName
-       FROM student_classes
-       JOIN students ON student_classes.StudentID = students.StudentID
-       WHERE student_classes.advisoryID = ?`,
+         s.StudentID,
+         CONCAT(s.FirstName, ' ', s.LastName) AS fullName
+       FROM student_classes sc
+       JOIN students s ON sc.StudentID = s.StudentID
+       WHERE sc.advisoryID = ?`,
       [advisoryID]
     );
 
-    res.json({ success: true, students });
+    res.json({ 
+      success: true, 
+      students 
+    });
 
   } catch (error) {
-    console.error("Error in /faculty-subject-classes:", error);
-    res.status(500).json({ success: false, message: "Server error." });
+    console.error("Error fetching subject students:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Server error" 
+    });
   }
 });
 

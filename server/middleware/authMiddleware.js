@@ -1,16 +1,39 @@
 import jwt from "jsonwebtoken";
 
-// Middleware to check the token in Authorization header
 export const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1]; // format: Bearer <token>
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) return res.status(401).json({ message: "No token provided." });
+  if (!token) {
+    return res.status(401).json({ 
+      success: false,
+      message: "No token provided." 
+    });
+  }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: "Invalid or expired token." });
+  // Verify token structure
+  if (token.split('.').length !== 3) {
+    return res.status(403).json({ 
+      success: false,
+      message: "Invalid token format." 
+    });
+  }
 
-    req.user = user; // This will contain facultyID, role, etc.
+  jwt.verify(token, process.env.JWT_SECRET || process.env.JWT_KEY, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ 
+        success: false,
+        message: err.message.includes("expired") 
+          ? "Token expired. Please login again." 
+          : "Invalid token." 
+      });
+    }
+
+    // Standardize the user object
+    req.user = {
+      facultyID: decoded.FacultyID || decoded.facultyID,
+      role: decoded.role || 'faculty'
+    };
     next();
   });
 };
