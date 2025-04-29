@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
-import NavbarFaculty from "../components/NavbarFaculty"; // ✅ restore Navbar
-import FacultySidePanel from "../Components/FacultySidePanel"; // ✅ restore Sidebar
+import NavbarFaculty from "../components/NavbarFaculty";
+import FacultySidePanel from "../Components/FacultySidePanel";
 
 const ViewStudents = () => {
   const { subjectCode } = useParams();
@@ -18,6 +18,7 @@ const ViewStudents = () => {
         navigate("/faculty-login");
         return;
       }
+
       const response = await axios.get(
         `http://localhost:3000/faculty-subject-classes/${subjectCode}/students`,
         {
@@ -25,7 +26,11 @@ const ViewStudents = () => {
         }
       );
 
-      setStudents(response.data.students || []);
+      if (response.data.success) {
+        setStudents(response.data.students || []);
+      } else {
+        console.error("Error loading students:", response.data.message);
+      }
     } catch (error) {
       console.error("Error fetching students:", error);
     }

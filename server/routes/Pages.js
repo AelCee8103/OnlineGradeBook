@@ -1,6 +1,9 @@
 import express from 'express';
 import { connectToDatabase } from '../lib/db.js';
 
+import { authenticateToken } from "../middleware/authMiddleware.js";
+
+
 const router = express.Router();
 
 
@@ -18,6 +21,48 @@ router.get('/admin-manage-students', async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 });
+
+// =======================
+// Faculty: Get students assigned to a subject
+// =======================
+router.get('/faculty-subject-classes/:subjectCode/students', authenticateToken, async (req, res) => {
+  try {
+    const { subjectCode } = req.params;
+    const facultyID = req.user.facultyID; // getting facultyID from the logged-in user token
+
+    // Step 1: Check if subjectCode belongs to the logged-in faculty
+    const [subjectRows] = await db.promise().query(
+      `SELECT advisoryID FROM assignsubject WHERE SubjectCode = ? AND FacultyID = ?`,
+      [subjectCode, facultyID]
+    );
+
+    if (subjectRows.length === 0) {
+      return res.status(403).json({ success: false, message: "Unauthorized or subject not found." });
+    }
+
+    const advisoryID = subjectRows[0].advisoryID;
+
+    // Step 2: Fetch students under that advisory
+    const [students] = await db.promise().query(
+      `SELECT 
+         students.StudentID,
+         CONCAT(students.FirstName, ' ', students.LastName) AS fullName
+       FROM student_classes
+       JOIN students ON student_classes.StudentID = students.StudentID
+       WHERE student_classes.advisoryID = ?`,
+      [advisoryID]
+    );
+
+    res.json({ success: true, students });
+
+  } catch (error) {
+    console.error("Error in /faculty-subject-classes:", error);
+    res.status(500).json({ success: false, message: "Server error." });
+  }
+});
+
+
+
 
 
 // Get all assigned subjects (subject classes) with advisory info
