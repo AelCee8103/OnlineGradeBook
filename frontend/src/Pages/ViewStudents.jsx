@@ -10,6 +10,8 @@ const ViewStudents = () => {
   const [students, setStudents] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 5;
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -57,6 +59,18 @@ const ViewStudents = () => {
       student.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.StudentID.toString().includes(searchTerm)
   );
+
+  // Get current records
+  const indexOfLastRecord = currentPage * recordsPerPage;
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+  const currentRecords = filteredStudents.slice(
+    indexOfFirstRecord,
+    indexOfLastRecord
+  );
+  const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
+
+  // Change page
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -118,8 +132,8 @@ const ViewStudents = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.length > 0 ? (
-                  filteredStudents.map((student) => (
+                {currentRecords.length > 0 ? (
+                  currentRecords.map((student) => (
                     <tr
                       key={student.StudentID}
                       className="border-t hover:bg-gray-50 transition"
@@ -147,6 +161,35 @@ const ViewStudents = () => {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination */}
+            {filteredStudents.length > recordsPerPage && (
+              <div className="flex justify-between items-center px-6 py-3 border-t">
+                <div className="text-sm text-gray-700">
+                  Showing {indexOfFirstRecord + 1} to{" "}
+                  {Math.min(indexOfLastRecord, filteredStudents.length)} of{" "}
+                  {filteredStudents.length} entries
+                </div>
+                <div className="flex space-x-2">
+                  {currentPage > 1 && (
+                    <button
+                      onClick={() => paginate(currentPage - 1)}
+                      className="px-4 py-2 border rounded-md bg-white text-gray-700 hover:bg-gray-50"
+                    >
+                      Previous
+                    </button>
+                  )}
+                  {currentPage < totalPages && (
+                    <button
+                      onClick={() => paginate(currentPage + 1)}
+                      className="px-4 py-2 border rounded-md bg-white text-gray-700 hover:bg-gray-50"
+                    >
+                      Next
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
