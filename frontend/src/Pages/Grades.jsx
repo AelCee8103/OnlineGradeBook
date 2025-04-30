@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import NavbarFaculty from "../components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
-import StatCard from "../components/StatCard.jsx"
+import StatCard from "../Components/StatCard.jsx"
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';

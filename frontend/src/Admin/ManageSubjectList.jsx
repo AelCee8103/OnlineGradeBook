@@ -79,7 +79,7 @@ const ManageSubjectList = () => {
         <ToastContainer position="top-right" autoClose={3000} />  {/* ✅ Toast Container */}
 
         <div className="p-8">
-          <h1 className="text-3xl font-bold mb-6">Subject Class List</h1>
+          <h1 className="text-3xl font-bold mb-6">Subject List</h1>
 
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
             <input type="text" placeholder="Search by ID number" className="mb-4 border border-gray-300 rounded-md px-4 py-2" />
@@ -135,8 +135,8 @@ const ManageSubjectList = () => {
           <form onSubmit={handleAddSubject} className="space-y-3">
             <input
               type="text"
-              name="SubjectCode"
-              value={newSubject.subject_code}
+              name="SubjectID"
+              value={newSubject.SubjectID}
               onChange={handleSubjectChange}
               placeholder="Subject Code"
               className="input input-bordered w-full"
