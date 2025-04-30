@@ -11,6 +11,7 @@ const ViewStudents = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [subjectInfo, setSubjectInfo] = useState(null);
   const recordsPerPage = 5;
 
   useEffect(() => {
@@ -34,6 +35,7 @@ const ViewStudents = () => {
 
         if (response.data.success) {
           setStudents(response.data.students || []);
+          setSubjectInfo(response.data.subjectInfo || null);
         } else {
           throw new Error(response.data.message || "Failed to load students");
         }
@@ -54,13 +56,19 @@ const ViewStudents = () => {
     fetchStudents();
   }, [subjectCode]);
 
+  // Filter students based on search term
   const filteredStudents = students.filter(
     (student) =>
       student.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.StudentID.toString().includes(searchTerm)
   );
 
-  // Get current records
+  // Reset to page 1 when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Apply pagination to filtered list
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
   const currentRecords = filteredStudents.slice(
@@ -94,7 +102,7 @@ const ViewStudents = () => {
           {/* Back Button */}
           <button
             onClick={() => navigate(-1)}
-            className="mb-4 bg-blue-600 hover:bg-blue-700 text-white py-2 px-5 rounded-md"
+            className="mb-4 bg-gray-400 hover:bg-gray-500 text-white py-2 px-5 rounded-md"
           >
             ← Back
           </button>
@@ -104,6 +112,29 @@ const ViewStudents = () => {
             <h1 className="text-2xl font-bold text-gray-800 mb-4">
               Student List
             </h1>
+            {subjectInfo && (
+              <div className="bg-gray-100 p-4 rounded-lg shadow mb-6">
+                <h2 className="text-xl font-bold text-gray-800 mb-2">
+                  {subjectInfo.SubjectName}
+                </h2>
+                <p className="text-gray-700">
+                  Subject Code:{" "}
+                  <span className="font-semibold">
+                    {subjectInfo.SubjectCode}
+                  </span>
+                </p>
+                <p className="text-gray-700">
+                  Grade & Section:{" "}
+                  <span className="font-semibold">
+                    {subjectInfo.Grade} - {subjectInfo.Section}
+                  </span>
+                </p>
+                <p className="text-gray-700">
+                  Number of Students:{" "}
+                  <span className="font-semibold">{students.length}</span>
+                </p>
+              </div>
+            )}
 
             {/* Search Input */}
             <input
@@ -143,9 +174,6 @@ const ViewStudents = () => {
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-2">
                           <button className="bg-green-500 hover:bg-green-600 text-white px-4 py-1 rounded">
-                            View
-                          </button>
-                          <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded">
                             Grades
                           </button>
                         </div>
@@ -164,13 +192,9 @@ const ViewStudents = () => {
 
             {/* Pagination */}
             {filteredStudents.length > recordsPerPage && (
-              <div className="flex justify-between items-center px-6 py-3 border-t">
-                <div className="text-sm text-gray-700">
-                  Showing {indexOfFirstRecord + 1} to{" "}
-                  {Math.min(indexOfLastRecord, filteredStudents.length)} of{" "}
-                  {filteredStudents.length} entries
-                </div>
-                <div className="flex space-x-2">
+              <div className="flex justify-between items-center px-6 py-3 border-t text-sm text-gray-700">
+                {/* Previous Button - Left */}
+                <div>
                   {currentPage > 1 && (
                     <button
                       onClick={() => paginate(currentPage - 1)}
@@ -179,6 +203,17 @@ const ViewStudents = () => {
                       Previous
                     </button>
                   )}
+                </div>
+
+                {/* Entry Info - Center */}
+                <div>
+                  Showing {indexOfFirstRecord + 1} to{" "}
+                  {Math.min(indexOfLastRecord, filteredStudents.length)} of{" "}
+                  {filteredStudents.length} entries
+                </div>
+
+                {/* Next Button - Right */}
+                <div>
                   {currentPage < totalPages && (
                     <button
                       onClick={() => paginate(currentPage + 1)}

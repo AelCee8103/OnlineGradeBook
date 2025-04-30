@@ -25,51 +25,49 @@ router.get('/admin-manage-students', async (req, res) => {
 // =======================
 // Faculty: Get students assigned to a subject
 // =======================
-router.get('/faculty-subject-classes/:subjectCode/students', authenticateToken, async (req, res) => {
+router.get("/faculty-subject-classes/:subjectCode/students", authenticateToken, async (req, res) => {
   try {
-    const { subjectCode } = req.params;
-    const facultyID = req.user.facultyID; // Now using standardized user object
     const db = await connectToDatabase();
+    const { subjectCode } = req.params;
 
-    // Verify faculty is assigned to this subject
-    const [assignment] = await db.query(
-      `SELECT a.advisoryID 
-       FROM assignsubject a
-       WHERE a.SubjectCode = ? AND a.FacultyID = ?`,
-      [subjectCode, facultyID]
+    const [subjectDetails] = await db.query(
+      `SELECT 
+        a.SubjectCode,
+        s.SubjectName,
+        c.Grade,
+        c.Section
+      FROM assignsubject a
+      JOIN subjects s ON a.subjectID = s.SubjectID
+      JOIN advisory adv ON a.advisoryID = adv.advisoryID
+      JOIN classes c ON adv.classID = c.ClassID
+      WHERE a.SubjectCode = ?`,
+      [subjectCode]
     );
 
-    if (assignment.length === 0) {
-      return res.status(403).json({ 
-        success: false, 
-        message: "You are not assigned to this subject" 
-      });
+    if (subjectDetails.length === 0) {
+      return res.status(404).json({ success: false, message: "Subject not found." });
     }
 
-    const advisoryID = assignment[0].advisoryID;
-
-    // Get students in this advisory
     const [students] = await db.query(
       `SELECT 
-         s.StudentID,
-         CONCAT(s.FirstName, ' ', s.LastName) AS fullName
-       FROM student_classes sc
-       JOIN students s ON sc.StudentID = s.StudentID
-       WHERE sc.advisoryID = ?`,
-      [advisoryID]
+        s.StudentID,
+        CONCAT(s.FirstName, ' ', s.MiddleName, ' ', s.LastName) AS fullName
+      FROM student_classes sc
+      JOIN students s ON sc.StudentID = s.StudentID
+      WHERE sc.advisoryID = (
+        SELECT advisoryID FROM assignsubject WHERE SubjectCode = ?
+      )`,
+      [subjectCode]
     );
 
-    res.json({ 
-      success: true, 
-      students 
+    res.status(200).json({
+      success: true,
+      subjectInfo: subjectDetails[0],
+      students,
     });
-
   } catch (error) {
     console.error("Error fetching subject students:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error" 
-    });
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
 
