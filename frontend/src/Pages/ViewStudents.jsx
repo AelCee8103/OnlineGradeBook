@@ -1,8 +1,11 @@
+// ViewStudents.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import NavbarFaculty from "../components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
+import { Dialog } from "@headlessui/react";
+import { Fragment } from "react";
 
 const ViewStudents = () => {
   const { subjectCode } = useParams();
@@ -12,6 +15,11 @@ const ViewStudents = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [subjectInfo, setSubjectInfo] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [gradesModalOpen, setGradesModalOpen] = useState(false);
+  const [studentGrades, setStudentGrades] = useState([]);
+  const [activeQuarter, setActiveQuarter] = useState(null);
+  const [averageGrade, setAverageGrade] = useState(null);
   const recordsPerPage = 5;
 
   useEffect(() => {
@@ -56,19 +64,84 @@ const ViewStudents = () => {
     fetchStudents();
   }, [subjectCode]);
 
-  // Filter students based on search term
+  const fetchStudentGrades = async (studentId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        `http://localhost:3000/Pages/faculty/student/${studentId}/grades/${subjectCode}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        // Ensure we have all 4 quarters
+        const allQuarters = [1, 2, 3, 4].map((quarter) => {
+          const existing = response.data.grades.find(
+            (g) => g.Quarter === quarter
+          );
+          return existing || { Quarter: quarter, GradeScore: null };
+        });
+
+        setStudentGrades(allQuarters);
+        setActiveQuarter(response.data.activeQuarter);
+        setAverageGrade(response.data.averageGrade);
+        setGradesModalOpen(true);
+      } else {
+        alert("Failed to fetch grades.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error fetching grades.");
+    }
+  };
+
+  const handleGradeChange = (quarter, value) => {
+    setStudentGrades((prev) =>
+      prev.map((g) => (g.Quarter === quarter ? { ...g, GradeScore: value } : g))
+    );
+  };
+
+  const saveGrade = async () => {
+    const token = localStorage.getItem("token");
+    const editable = studentGrades.find((g) => g.Quarter === activeQuarter);
+    if (!editable) return;
+
+    try {
+      const res = await axios.post(
+        "http://localhost:3000/Pages/faculty/update-grade",
+        {
+          StudentID: selectedStudent.StudentID,
+          subject_code: subjectCode,
+          Quarter: activeQuarter,
+          GradeScore: editable.GradeScore,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.data.success) {
+        alert(res.data.message || "Grade updated successfully");
+        setGradesModalOpen(false); // Close the modal on success
+      } else {
+        alert("Update failed: " + (res.data.message || "Unknown error"));
+      }
+    } catch (error) {
+      console.error(error);
+      alert(
+        "Error updating grade: " +
+          (error.response?.data?.error || error.message)
+      );
+    }
+  };
+
   const filteredStudents = students.filter(
     (student) =>
       student.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.StudentID.toString().includes(searchTerm)
   );
 
-  // Reset to page 1 when search term changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  // Apply pagination to filtered list
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
   const currentRecords = filteredStudents.slice(
@@ -77,12 +150,10 @@ const ViewStudents = () => {
   );
   const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
 
-  // Change page
   const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
-      {/* Sidebar */}
       <div
         className={`fixed inset-y-0 left-0 w-64 transition-transform duration-300 transform ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full"
@@ -94,12 +165,10 @@ const ViewStudents = () => {
         />
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-auto">
         <NavbarFaculty toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
 
         <main className="p-6 w-full mx-auto">
-          {/* Back Button */}
           <button
             onClick={() => navigate(-1)}
             className="mb-4 bg-gray-400 hover:bg-gray-500 text-white py-2 px-5 rounded-md"
@@ -107,7 +176,6 @@ const ViewStudents = () => {
             ← Back
           </button>
 
-          {/* Header */}
           <div className="bg-white rounded-xl shadow p-6 mb-6 border border-gray-200">
             <h1 className="text-2xl font-bold text-gray-800 mb-4">
               Student List
@@ -136,7 +204,6 @@ const ViewStudents = () => {
               </div>
             )}
 
-            {/* Search Input */}
             <input
               type="text"
               placeholder="Search by name or student ID"
@@ -146,7 +213,6 @@ const ViewStudents = () => {
             />
           </div>
 
-          {/* Table */}
           <div className="bg-white rounded-xl shadow border border-gray-200 overflow-x-auto">
             <table className="w-full text-sm table-auto">
               <thead className="bg-gray-100">
@@ -173,7 +239,13 @@ const ViewStudents = () => {
                       <td className="px-6 py-4">{student.StudentID}</td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-2">
-                          <button className="bg-green-500 hover:bg-green-600 text-white px-4 py-1 rounded">
+                          <button
+                            onClick={() => {
+                              setSelectedStudent(student);
+                              fetchStudentGrades(student.StudentID);
+                            }}
+                            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1 rounded"
+                          >
                             Grades
                           </button>
                         </div>
@@ -190,10 +262,8 @@ const ViewStudents = () => {
               </tbody>
             </table>
 
-            {/* Pagination */}
             {filteredStudents.length > recordsPerPage && (
               <div className="flex justify-between items-center px-6 py-3 border-t text-sm text-gray-700">
-                {/* Previous Button - Left */}
                 <div>
                   {currentPage > 1 && (
                     <button
@@ -205,14 +275,12 @@ const ViewStudents = () => {
                   )}
                 </div>
 
-                {/* Entry Info - Center */}
                 <div>
                   Showing {indexOfFirstRecord + 1} to{" "}
                   {Math.min(indexOfLastRecord, filteredStudents.length)} of{" "}
                   {filteredStudents.length} entries
                 </div>
 
-                {/* Next Button - Right */}
                 <div>
                   {currentPage < totalPages && (
                     <button
@@ -226,6 +294,85 @@ const ViewStudents = () => {
               </div>
             )}
           </div>
+
+          <Dialog
+            open={gradesModalOpen}
+            onClose={() => setGradesModalOpen(false)}
+          >
+            <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+              <Dialog.Panel className="bg-white rounded-xl w-full max-w-2xl p-6">
+                <Dialog.Title className="text-lg font-semibold mb-4">
+                  Grades for {selectedStudent?.fullName}
+                </Dialog.Title>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="px-4 py-2 border">Quarter 1</th>
+                        <th className="px-4 py-2 border">Quarter 2</th>
+                        <th className="px-4 py-2 border">Quarter 3</th>
+                        <th className="px-4 py-2 border">Quarter 4</th>
+                        <th className="px-4 py-2 border">Average</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {[1, 2, 3, 4].map((quarter) => {
+                          const grade = studentGrades.find(
+                            (g) => g.Quarter === quarter
+                          ) || {
+                            Quarter: quarter,
+                            GradeScore: null,
+                          };
+                          return (
+                            <td key={quarter} className="px-4 py-2 border">
+                              <input
+                                type="number"
+                                value={grade.GradeScore || ""}
+                                disabled={quarter !== activeQuarter}
+                                onChange={(e) =>
+                                  handleGradeChange(quarter, e.target.value)
+                                }
+                                className="w-full px-3 py-2 border rounded-md"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                              />
+                            </td>
+                          );
+                        })}
+                        <td className="px-4 py-2 border text-center font-medium">
+                          {averageGrade || "-"}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 text-sm text-gray-500">
+                  {activeQuarter
+                    ? `Note: Only Quarter ${activeQuarter} is editable`
+                    : "No active quarter is set"}
+                </div>
+
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    onClick={() => setGradesModalOpen(false)}
+                    className="px-4 py-2 bg-gray-300 rounded"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveGrade}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Save
+                  </button>
+                </div>
+              </Dialog.Panel>
+            </div>
+          </Dialog>
         </main>
       </div>
     </div>

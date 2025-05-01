@@ -851,8 +851,147 @@ router.get('/admin/manage-grades', async (req, res) => {
   }
 });
 
+// Create or update a student's grade for a specific subject, quarter, and year
+router.post("/faculty/update-grade", authenticateToken, async (req, res) => {
+  const { StudentID, subject_code, Quarter, GradeScore } = req.body;
+
+  if (!StudentID || !subject_code || !Quarter || GradeScore === undefined) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  try {
+    const db = await connectToDatabase();
+
+    // Get current active quarter and school year
+    const [[activeQuarter]] = await db.query(
+      "SELECT quarter FROM quarter WHERE status = 1 LIMIT 1"
+    );
+    const [[activeYear]] = await db.query(
+      "SELECT school_yearID FROM schoolyear WHERE status = 1 LIMIT 1"
+    );
+
+    if (!activeQuarter || activeQuarter.quarter !== Quarter) {
+      return res.status(403).json({ error: "This quarter is not editable" });
+    }
+
+    if (!activeYear) {
+      return res.status(400).json({ error: "No active school year found" });
+    }
+
+    // Check if grade exists
+    const [[existingGrade]] = await db.query(
+      "SELECT SubjectGradeID FROM subjectgrades WHERE StudentID = ? AND subject_code = ? AND Quarter = ? AND yearID = ?",
+      [StudentID, subject_code, Quarter, activeYear.school_yearID]
+    );
+
+    // Insert or update grade
+    if (existingGrade) {
+      await db.query(
+        "UPDATE subjectgrades SET GradeScore = ? WHERE SubjectGradeID = ?",
+        [GradeScore, existingGrade.SubjectGradeID]
+      );
+    } else {
+      await db.query(
+        "INSERT INTO subjectgrades (StudentID, subject_code, Quarter, GradeScore, yearID) VALUES (?, ?, ?, ?, ?)",
+        [StudentID, subject_code, Quarter, GradeScore, activeYear.school_yearID]
+      );
+    }
+
+    // Check if all 4 quarters exist now
+    const [allGrades] = await db.query(
+      "SELECT Quarter, GradeScore FROM subjectgrades WHERE StudentID = ? AND subject_code = ? AND yearID = ?",
+      [StudentID, subject_code, activeYear.school_yearID]
+    );
+
+    if (allGrades.length === 4) {
+      // Calculate average
+      const average = allGrades.reduce((sum, grade) => sum + grade.GradeScore, 0) / 4;
+      
+      // Check if average exists
+      const [[existingAverage]] = await db.query(
+        "SELECT AverageID FROM averagegrades WHERE StudentID = ? AND subject_code = ? AND yearID = ?",
+        [StudentID, subject_code, activeYear.school_yearID]
+      );
+
+      if (existingAverage) {
+        await db.query(
+          "UPDATE averagegrades SET AverageGrade = ? WHERE AverageID = ?",
+          [average, existingAverage.AverageID]
+        );
+      } else {
+        await db.query(
+          "INSERT INTO averagegrades (StudentID, subject_code, AverageGrade, yearID) VALUES (?, ?, ?, ?)",
+          [StudentID, subject_code, average, activeYear.school_yearID]
+        );
+      }
+
+      return res.json({ 
+        success: true, 
+        message: "Grade saved and average calculated",
+        averageGrade: average
+      });
+    }
+
+    res.json({ success: true, message: "Grade saved successfully" });
+  } catch (error) {
+    console.error("Error updating grade:", error);
+    res.status(500).json({ error: "Failed to update grade", details: error.message });
+  }
+});
 
 
+router.get('/faculty/student/:studentID/grades/:subjectCode', authenticateToken, async (req, res) => {
+  const { studentID, subjectCode } = req.params;
+
+  try {
+    const db = await connectToDatabase();
+
+    // Get current active quarter and school year
+    const [[activeQuarter]] = await db.query(
+      "SELECT quarter FROM quarter WHERE status = 1 LIMIT 1"
+    );
+    const [[activeYear]] = await db.query(
+      "SELECT school_yearID FROM schoolyear WHERE status = 1 LIMIT 1"
+    );
+
+    if (!activeYear) {
+      return res.status(400).json({ success: false, message: "No active school year found" });
+    }
+
+    // Get existing grades for this year
+    const [grades] = await db.query(
+      `SELECT Quarter, GradeScore 
+       FROM subjectgrades 
+       WHERE StudentID = ? AND subject_code = ? AND yearID = ?
+       ORDER BY Quarter ASC`,
+      [studentID, subjectCode, activeYear.school_yearID]
+    );
+
+    // Get average grade for this year
+    const [[averageRow]] = await db.query(
+      `SELECT AverageGrade 
+       FROM averagegrades 
+       WHERE StudentID = ? AND subject_code = ? AND yearID = ?`,
+      [studentID, subjectCode, activeYear.school_yearID]
+    );
+
+    // Create a default structure for all 4 quarters
+    const allQuarters = [1, 2, 3, 4].map(quarter => {
+      const existing = grades.find(g => g.Quarter === quarter);
+      return existing || { Quarter: quarter, GradeScore: null };
+    });
+
+    res.json({
+      success: true,
+      grades: allQuarters,
+      averageGrade: averageRow?.AverageGrade || null,
+      activeQuarter: activeQuarter?.quarter || null
+    });
+  } catch (err) {
+    console.error('Error fetching student grades:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
 
 
 export default router;
