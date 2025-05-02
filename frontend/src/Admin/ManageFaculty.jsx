@@ -18,7 +18,6 @@ const ManageFaculty = () => {
   const [editingFaculty, setEditingFaculty] = useState(null);
   const [faculty, setFaculty] = useState([]);
   const [newFaculty, setNewFaculty] = useState({
-    FacultyID: "", 
     LastName: "", 
     FirstName: "", 
     MiddleName: "", 
@@ -85,7 +84,7 @@ const ManageFaculty = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!newFaculty.FacultyID || !newFaculty.LastName || !newFaculty.FirstName) {
+    if ( !newFaculty.LastName || !newFaculty.FirstName) {
       alert("Please fill in all required fields.");
       return;
     }
@@ -102,7 +101,7 @@ const ManageFaculty = () => {
 
       // Reset input fields
       setNewFaculty({
-        FacultyID: "",
+   
         LastName: "",
         FirstName: "",
       });
@@ -201,22 +200,6 @@ const ManageFaculty = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex flex-col">
-                      <label className="text-sm text-gray-600 mb-1" htmlFor="FacultyID">
-                        Faculty ID
-                      </label>
-                      <input
-                        type="number"
-                        name="FacultyID"
-                        id="FacultyID"
-                        value={newFaculty.FacultyID}
-                        onChange={handleChanges}
-                        placeholder="Enter Faculty ID"
-                        className="input input-bordered w-full"
-                        required
-                      />
-                    </div>
-
                     <div className="flex flex-col">
                       <label className="text-sm text-gray-600 mb-1" htmlFor="LastName">
                         Last Name

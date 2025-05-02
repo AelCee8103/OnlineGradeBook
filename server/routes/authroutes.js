@@ -18,8 +18,8 @@ router.post('/admin-manage-faculty', async (req, res) => {
     const hashPassword = await bcrypt.hash(Password, 10);
 
     await db.query(
-      'INSERT INTO faculty (FacultyID, `LastName`, `FirstName`, `MiddleName`, `Email`, Password) VALUES (?,?,?,?,?,?)',
-      [FacultyID, LastName, FirstName, MiddleName, Email, hashPassword]
+      'INSERT INTO faculty (`LastName`, `FirstName`, `MiddleName`, `Email`, Password) VALUES (?,?,?,?,?)',
+      [LastName, FirstName, MiddleName, Email, hashPassword]
     );
 
     res.status(201).json({ message: "User registered successfully" });
