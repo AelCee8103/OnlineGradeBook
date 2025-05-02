@@ -993,5 +993,39 @@ router.get('/faculty/student/:studentID/grades/:subjectCode', authenticateToken,
   }
 });
 
+// Add this to your Pages.js
+router.get('/admin-advisory-classes/:advisoryID', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { advisoryID } = req.params;
+    
+    const [advisory] = await db.query(`
+      SELECT 
+        a.advisoryID,
+        a.classID,
+        a.facultyID,
+        c.Grade,
+        c.Section,
+        CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
+        sy.year AS SchoolYear
+      FROM advisory a
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN faculty f ON a.facultyID = f.FacultyID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE a.advisoryID = ?
+    `, [advisoryID]);
+
+    if (advisory.length === 0) {
+      return res.status(404).json({ message: "Advisory not found" });
+    }
+
+    res.status(200).json(advisory[0]);
+  } catch (error) {
+    console.error("Error fetching advisory:", error);
+    res.status(500).json({ message: "Server Error" });
+  }
+});
+
 
 export default router;

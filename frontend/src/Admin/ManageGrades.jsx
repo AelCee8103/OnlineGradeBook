@@ -54,7 +54,7 @@ const ManageGrades = () => {
           grade: item.grade,
           section: item.section,
           school_Year: item.SchoolYear, // Adjust casing if needed
-        }));
+        }));  
 
         setAdvisories(formatted);
         console.log("Formatted advisories:", formatted);

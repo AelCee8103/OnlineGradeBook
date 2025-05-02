@@ -33,20 +33,21 @@ const AdvisoryStudents = () => {
     const fetchAdvisoryInfo = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get(
-          "http://localhost:3000/Pages/admin-advisory-classes",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
+        // Use the specific endpoint for a single advisory
+        const advisoryRes = await axios.get(
+          `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
+          { headers: { Authorization: `Bearer ${token}` } }
         );
-        const found = res.data.find(
-          (item) => item.advisoryID.toString() === advisoryID
-        );
-        if (found) {
-          setAdvisoryInfo(found);
+
+        if (advisoryRes.data) {
+          setAdvisoryInfo(advisoryRes.data);
+        } else {
+          console.warn("Advisory not found");
+          setAdvisoryInfo(null);
         }
       } catch (error) {
         console.error("Error fetching advisory info:", error);
+        setAdvisoryInfo(null);
       }
     };
 
@@ -95,13 +96,13 @@ const AdvisoryStudents = () => {
             Students in Advisory Class
           </h1>
 
-          {advisoryInfo && (
+          {advisoryInfo ? (
             <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
               <p>
-                <strong>Grade:</strong> {advisoryInfo.grade}
+                <strong>Grade:</strong> {advisoryInfo.Grade}
               </p>
               <p>
-                <strong>Section:</strong> {advisoryInfo.section}
+                <strong>Section:</strong> {advisoryInfo.Section}
               </p>
               <p>
                 <strong>Class Advisor:</strong> {advisoryInfo.facultyName}
@@ -111,6 +112,12 @@ const AdvisoryStudents = () => {
               </p>
               <p>
                 <strong>Number of Students:</strong> {students.length}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
+              <p className="text-red-500">
+                Advisory class information not found
               </p>
             </div>
           )}
