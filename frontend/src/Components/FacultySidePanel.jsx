@@ -21,7 +21,6 @@ const FacultySidePanel = ({ isSidebarOpen, toggleSidebar }) => {
     { label: "Dashboard", icon: faHome, link: "/faculty-dashboard" },
     { label: "Class Advisory", icon: faChalkboardTeacher, link: "/faculty-class-advisory" },
     { label: "Classes", icon: faUsers, link: "/faculty-classes" },
-    { label: "Grades", icon: faClipboardList, link: "/faculty-grades" },
     { label: "Attendance", icon: faUserCheck, link: "/faculty-attendance" },
   ];
 
