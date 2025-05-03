@@ -855,9 +855,21 @@ router.get('/admin/manage-grades', async (req, res) => {
 router.post("/faculty/update-grade", authenticateToken, async (req, res) => {
   const { StudentID, subject_code, Quarter, GradeScore } = req.body;
 
+  // Enhanced validation
   if (!StudentID || !subject_code || !Quarter || GradeScore === undefined) {
     return res.status(400).json({ error: "Missing required fields" });
   }
+
+  // Validate grade score
+  const numericGrade = Number(GradeScore);
+  if (isNaN(numericGrade) || numericGrade < 0 || numericGrade > 100) {
+    return res.status(400).json({ 
+      error: "Invalid grade. Grade must be a number between 0 and 100" 
+    });
+  }
+
+  // Format grade to 2 decimal places
+  const formattedGrade = parseFloat(numericGrade.toFixed(2));
 
   try {
     const db = await connectToDatabase();
@@ -888,12 +900,12 @@ router.post("/faculty/update-grade", authenticateToken, async (req, res) => {
     if (existingGrade) {
       await db.query(
         "UPDATE subjectgrades SET GradeScore = ? WHERE SubjectGradeID = ?",
-        [GradeScore, existingGrade.SubjectGradeID]
+        [formattedGrade, existingGrade.SubjectGradeID]
       );
     } else {
       await db.query(
         "INSERT INTO subjectgrades (StudentID, subject_code, Quarter, GradeScore, yearID) VALUES (?, ?, ?, ?, ?)",
-        [StudentID, subject_code, Quarter, GradeScore, activeYear.school_yearID]
+        [StudentID, subject_code, Quarter, formattedGrade, activeYear.school_yearID]
       );
     }
 
@@ -935,7 +947,7 @@ router.post("/faculty/update-grade", authenticateToken, async (req, res) => {
     res.json({ success: true, message: "Grade saved successfully" });
   } catch (error) {
     console.error("Error updating grade:", error);
-    res.status(500).json({ error: "Failed to update grade", details: error.message });
+    res.status(500).json({ error: "Failed to update grade" });
   }
 });
 

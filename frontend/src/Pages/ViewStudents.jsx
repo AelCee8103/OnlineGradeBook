@@ -20,6 +20,7 @@ const ViewStudents = () => {
   const [studentGrades, setStudentGrades] = useState([]);
   const [activeQuarter, setActiveQuarter] = useState(null);
   const [averageGrade, setAverageGrade] = useState(null);
+  const [gradeError, setGradeError] = useState("");
   const recordsPerPage = 5;
 
   useEffect(() => {
@@ -95,6 +96,25 @@ const ViewStudents = () => {
   };
 
   const handleGradeChange = (quarter, value) => {
+    // Allow empty string for clearing input
+    if (value === "") {
+      setStudentGrades((prev) =>
+        prev.map((g) => (g.Quarter === quarter ? { ...g, GradeScore: "" } : g))
+      );
+      return;
+    }
+
+    // Only allow numbers and decimal point
+    if (!/^\d*\.?\d*$/.test(value)) {
+      return;
+    }
+
+    // Convert to number and validate range
+    const numValue = parseFloat(value);
+    if (numValue < 0 || numValue > 100) {
+      return;
+    }
+
     setStudentGrades((prev) =>
       prev.map((g) => (g.Quarter === quarter ? { ...g, GradeScore: value } : g))
     );
@@ -103,7 +123,28 @@ const ViewStudents = () => {
   const saveGrade = async () => {
     const token = localStorage.getItem("token");
     const editable = studentGrades.find((g) => g.Quarter === activeQuarter);
+
+    // Validation checks
     if (!editable) return;
+
+    // Check if grade is empty
+    if (!editable.GradeScore && editable.GradeScore !== 0) {
+      setGradeError("Grade cannot be empty");
+      return;
+    }
+
+    // Validate numeric value
+    const numericGrade = Number(editable.GradeScore);
+    if (isNaN(numericGrade)) {
+      setGradeError("Grade must be a valid number");
+      return;
+    }
+
+    // Validate range
+    if (numericGrade < 0 || numericGrade > 100) {
+      setGradeError("Grade must be between 0 and 100");
+      return;
+    }
 
     try {
       const res = await axios.post(
@@ -112,23 +153,21 @@ const ViewStudents = () => {
           StudentID: selectedStudent.StudentID,
           subject_code: subjectCode,
           Quarter: activeQuarter,
-          GradeScore: editable.GradeScore,
+          GradeScore: numericGrade,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (res.data.success) {
+        setGradeError("");
         alert(res.data.message || "Grade updated successfully");
-        setGradesModalOpen(false); // Close the modal on success
+        setGradesModalOpen(false);
       } else {
-        alert("Update failed: " + (res.data.message || "Unknown error"));
+        setGradeError(res.data.message || "Update failed");
       }
     } catch (error) {
       console.error(error);
-      alert(
-        "Error updating grade: " +
-          (error.response?.data?.error || error.message)
-      );
+      setGradeError(error.response?.data?.error || "Error updating grade");
     }
   };
 
@@ -328,16 +367,18 @@ const ViewStudents = () => {
                           return (
                             <td key={quarter} className="px-4 py-2 border">
                               <input
-                                type="number"
+                                type="text" // Changed from "number" to "text" for better validation control
                                 value={grade.GradeScore || ""}
                                 disabled={quarter !== activeQuarter}
                                 onChange={(e) =>
                                   handleGradeChange(quarter, e.target.value)
                                 }
-                                className="w-full px-3 py-2 border rounded-md"
-                                min="0"
-                                max="100"
-                                step="0.01"
+                                className={`w-full px-3 py-2 border rounded-md ${
+                                  quarter === activeQuarter && gradeError
+                                    ? "border-red-500"
+                                    : "border-gray-300"
+                                }`}
+                                placeholder="Enter grade"
                               />
                             </td>
                           );
@@ -350,6 +391,11 @@ const ViewStudents = () => {
                   </table>
                 </div>
 
+                {/* Add error message display */}
+                {gradeError && (
+                  <div className="mt-2 text-red-500 text-sm">{gradeError}</div>
+                )}
+
                 <div className="mt-4 text-sm text-gray-500">
                   {activeQuarter
                     ? `Note: Only Quarter ${activeQuarter} is editable`
@@ -358,7 +404,10 @@ const ViewStudents = () => {
 
                 <div className="mt-4 flex justify-end gap-2">
                   <button
-                    onClick={() => setGradesModalOpen(false)}
+                    onClick={() => {
+                      setGradeError("");
+                      setGradesModalOpen(false);
+                    }}
                     className="px-4 py-2 bg-gray-300 rounded"
                   >
                     Cancel
