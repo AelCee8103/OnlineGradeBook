@@ -109,6 +109,10 @@ function App() {
           <Route path="/faculty-grades" element={<Grades />}></Route>
           <Route path="/faculty-attendance" element={<Attendance />}></Route>
           <Route path="/faculty-register" element={<Register />}></Route>
+          <Route
+            path="/faculty/students/:studentId/grades"
+            element={<StudentGrades />}
+          />
         </Routes>
       </BrowserRouter>
     </>

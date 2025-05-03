@@ -1,18 +1,17 @@
 import React, { useState } from "react";
 import NavbarFaculty from "../components/NavbarFaculty";
-import FacultySidePanel from "../components/FacultySidePanel";
-import StatCard from "../components/StatCard.jsx"
+import FacultySidePanel from "../Components/FacultySidePanel";
+import StatCard from "../Components/StatCard.jsx";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useEffect } from "react";
 
 const Attendance = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [students, setStudents] = useState([]);
-  const Navigate = useNavigate();  //  Consistent with your sample
-  
+  const Navigate = useNavigate(); //  Consistent with your sample
 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -51,7 +50,10 @@ const Attendance = () => {
   // Pagination logic
   const indexOfLastStudent = currentPage * studentsPerPage;
   const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
-  const currentStudents = students.slice(indexOfFirstStudent, indexOfLastStudent);
+  const currentStudents = students.slice(
+    indexOfFirstStudent,
+    indexOfLastStudent
+  );
   const totalPages = Math.ceil(students.length / studentsPerPage);
 
   const handleNextPage = () => {
@@ -65,13 +67,16 @@ const Attendance = () => {
   const fetchUser = async () => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:3000/auth/faculty-attendance", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await axios.get(
+        "http://localhost:3000/auth/faculty-attendance",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
       console.log("User Authenticated", response.data);
     } catch (error) {
       console.error("Error fetching data:", error);
-      Navigate("/faculty-login");   //  Same logic as your admin sample
+      Navigate("/faculty-login"); //  Same logic as your admin sample
     }
   };
 
@@ -79,106 +84,111 @@ const Attendance = () => {
     fetchUser();
   }, []);
 
-
-
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-    <div
-      className={`fixed inset-y-0 left-0 w-64 transition-transform duration-300 transform ${
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-      } sm:translate-x-0 sm:static z-50`}
-    >
-      <FacultySidePanel 
-        isSidebarOpen={isSidebarOpen} 
-        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
-      />
-    </div>
-   
-    {/* Overlay Background when Sidebar is open */}
-    {isSidebarOpen && (
-      <div 
-        className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        onClick={() => setIsSidebarOpen(false)}  // Close sidebar when overlay is clicked
-      ></div>
-    )}
+      <div
+        className={`fixed inset-y-0 left-0 w-64 transition-transform duration-300 transform ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } sm:translate-x-0 sm:static z-50`}
+      >
+        <FacultySidePanel
+          isSidebarOpen={isSidebarOpen}
+          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        />
+      </div>
+
+      {/* Overlay Background when Sidebar is open */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setIsSidebarOpen(false)} // Close sidebar when overlay is clicked
+        ></div>
+      )}
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Navbar with Sidebar Toggle on Small Screens */}
         <NavbarFaculty toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
 
-         {/* Manage Students Content */}
-                 <div className="p-8">
-                   <h1 className="text-3xl font-bold mb-6">Attendance</h1>
-         
-                   {/* Students Table */}
-                   <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
-                     <input type="text" placeholder="Search by ID number"  className="mb-4 border border-gray-300 rounded-md px-4 py-2"/>
-                     <FontAwesomeIcon icon={faMagnifyingGlass}  className="ml-3"/>
-         
-                   
-                     <table className="w-full text-left text-sm">
-                       <thead>
-                         <tr className="bg-gray-100">
-                           <th className="px-4 py-2 text-gray-600">No.</th>
-                           <th className="px-4 py-2 text-gray-600">Student Name</th>
-                           <th className="px-4 py-2 text-gray-600">Student Number</th>
-                           <th className="px-4 py-2 text-gray-600">Actions</th>
-                         </tr>
-                       </thead>
-                       <tbody>
-                         {currentStudents.length > 0 ? (
-                           currentStudents.map((student, index) => (
-                             <tr key={student.id} className="border-b">
-                               <td className="px-4 py-2">{indexOfFirstStudent + index + 1}</td>
-                               <td className="px-4 py-2">{student.name}</td>
-                               <td className="px-4 py-2">{student.studentNumber}</td>
-                               <td className="px-4 py-2">
-                                 <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">
-                                   View
-                                 </button>
-                                
-                               </td>
-                             </tr>
-                           ))
-                         ) : (
-                           <tr>
-                             <td colSpan="4" className="text-center py-4">No students found.</td>
-                           </tr>
-                         )}
-                       </tbody>
-                     </table>
-         
-                     {/* Pagination Controls */}
-                     <div className="flex justify-between items-center mt-4">
-                       <button
-                         onClick={handlePrevPage}
-                         disabled={currentPage === 1}
-                         className={`px-4 py-2 rounded ${
-                           currentPage === 1 ? "bg-gray-300" : "bg-blue-500 text-white hover:bg-blue-600"
-                         }`}
-                       >
-                         Previous
-                       </button>
-                       <span className="text-sm text-gray-700">
-                         Page {currentPage} of {totalPages}
-                       </span>
-                       <button
-                         onClick={handleNextPage}
-                         disabled={currentPage === totalPages}
-                         className={`px-4 py-2 rounded ${
-                           currentPage === totalPages
-                             ? "bg-gray-300"
-                             : "bg-blue-500 text-white hover:bg-blue-600"
-                         }`}
-                       >
-                         Next
-                       </button>
-                     </div>
-         
-                   </div>
-         </div>
+        {/* Manage Students Content */}
+        <div className="p-8">
+          <h1 className="text-3xl font-bold mb-6">Attendance</h1>
+
+          {/* Students Table */}
+          <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
+            <input
+              type="text"
+              placeholder="Search by ID number"
+              className="mb-4 border border-gray-300 rounded-md px-4 py-2"
+            />
+            <FontAwesomeIcon icon={faMagnifyingGlass} className="ml-3" />
+
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-4 py-2 text-gray-600">No.</th>
+                  <th className="px-4 py-2 text-gray-600">Student Name</th>
+                  <th className="px-4 py-2 text-gray-600">Student Number</th>
+                  <th className="px-4 py-2 text-gray-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentStudents.length > 0 ? (
+                  currentStudents.map((student, index) => (
+                    <tr key={student.id} className="border-b">
+                      <td className="px-4 py-2">
+                        {indexOfFirstStudent + index + 1}
+                      </td>
+                      <td className="px-4 py-2">{student.name}</td>
+                      <td className="px-4 py-2">{student.studentNumber}</td>
+                      <td className="px-4 py-2">
+                        <button className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="text-center py-4">
+                      No students found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+
+            {/* Pagination Controls */}
+            <div className="flex justify-between items-center mt-4">
+              <button
+                onClick={handlePrevPage}
+                disabled={currentPage === 1}
+                className={`px-4 py-2 rounded ${
+                  currentPage === 1
+                    ? "bg-gray-300"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-700">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
+                className={`px-4 py-2 rounded ${
+                  currentPage === totalPages
+                    ? "bg-gray-300"
+                    : "bg-blue-500 text-white hover:bg-blue-600"
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

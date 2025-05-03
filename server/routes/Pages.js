@@ -1039,5 +1039,25 @@ router.get('/admin-advisory-classes/:advisoryID', async (req, res) => {
   }
 });
 
+// Add this new route to get student details
+router.get('/students/:studentId', authenticateToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const [student] = await db.query(
+      'SELECT * FROM students WHERE StudentID = ?',
+      [req.params.studentId]
+    );
+
+    if (student.length === 0) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    res.status(200).json(student[0]);
+  } catch (error) {
+    console.error('Error fetching student:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 
 export default router;
