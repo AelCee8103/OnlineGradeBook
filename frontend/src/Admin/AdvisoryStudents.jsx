@@ -12,6 +12,8 @@ const AdvisoryStudents = () => {
   const [advisoryInfo, setAdvisoryInfo] = useState({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 5;
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -66,6 +68,26 @@ const AdvisoryStudents = () => {
     });
     setFilteredStudents(filtered);
   }, [searchQuery, students]);
+
+  const indexOfLastRecord = currentPage * recordsPerPage;
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+  const currentRecords = filteredStudents.slice(
+    indexOfFirstRecord,
+    indexOfLastRecord
+  );
+  const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
+
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -141,10 +163,12 @@ const AdvisoryStudents = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.length > 0 ? (
-                  filteredStudents.map((student, index) => (
+                {currentRecords.length > 0 ? (
+                  currentRecords.map((student, index) => (
                     <tr key={student.StudentID} className="border-b">
-                      <td className="px-4 py-2">{index + 1}</td>
+                      <td className="px-4 py-2">
+                        {indexOfFirstRecord + index + 1}
+                      </td>
                       <td className="px-4 py-2">{student.StudentID}</td>
                       <td className="px-4 py-2">
                         {student.FirstName} {student.MiddleName}{" "}
@@ -173,6 +197,35 @@ const AdvisoryStudents = () => {
                 )}
               </tbody>
             </table>
+            {filteredStudents.length > 0 && (
+              <div className="flex justify-between items-center mt-4">
+                <button
+                  onClick={prevPage}
+                  disabled={currentPage === 1}
+                  className={`px-4 py-2 rounded ${
+                    currentPage === 1
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
+                  }`}
+                >
+                  Previous
+                </button>
+                <span className="text-sm">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={nextPage}
+                  disabled={currentPage === totalPages}
+                  className={`px-4 py-2 rounded ${
+                    currentPage === totalPages
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

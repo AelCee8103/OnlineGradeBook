@@ -38,16 +38,26 @@ const StudentGrades = () => {
     };
 
     const fetchAdvisory = async () => {
-      const res = await axios.get(
-        "http://localhost:3000/Pages/admin-advisory-classes",
-        {
-          headers: { Authorization: `Bearer ${token}` },
+      try {
+        const token = localStorage.getItem("token");
+        const res = await axios.get(
+          `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+
+        // Check if response data exists
+        if (res.data) {
+          setAdvisoryInfo(res.data);
+        } else {
+          console.warn("No advisory data found");
+          setAdvisoryInfo({});
         }
-      );
-      const match = res.data.find(
-        (a) => a.advisoryID.toString() === advisoryID
-      );
-      setAdvisoryInfo(match);
+      } catch (error) {
+        console.error("Error fetching advisory data:", error);
+        setAdvisoryInfo({});
+      }
     };
 
     fetchGrades();
@@ -120,10 +130,10 @@ const StudentGrades = () => {
             {advisoryInfo && (
               <div className="bg-white p-4 mb-6 rounded shadow max-w-screen-md mx-auto">
                 <p>
-                  <strong>Grade:</strong> {advisoryInfo.grade}
+                  <strong>Grade:</strong> {advisoryInfo.Grade}
                 </p>
                 <p>
-                  <strong>Section:</strong> {advisoryInfo.section}
+                  <strong>Section:</strong> {advisoryInfo.Section}
                 </p>
                 <p>
                   <strong>Class Advisor:</strong> {advisoryInfo.facultyName}

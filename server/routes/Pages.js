@@ -567,7 +567,7 @@ router.post("/admin-dashboard", async (req, res) => {
     if (!SchoolYear || !year) {
       return res.status(400).json({ error: "Both School Year ID and Year are required." });
     }
-
+aaaa
     // Check if the school year already exists
     const checkSql = "SELECT * FROM schoolyear WHERE school_yearID = ?";
     const [existing] = await db.query(checkSql, [SchoolYear]);
@@ -590,6 +590,8 @@ router.post("/admin-dashboard", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
+
 
 
 router.get("/admin-subject-classes/:subjectCode/students", async (req, res) => {
