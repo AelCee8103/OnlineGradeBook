@@ -31,14 +31,14 @@ const ViewAttendance = () => {
         `http://localhost:3000/auth/attendance/view/${subjectCode}`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          params: { date }
+          params: { date },
         }
       );
 
       if (response.data.success) {
-        const formattedStudents = response.data.data.map(student => ({
+        const formattedStudents = response.data.data.map((student) => ({
           ...student,
-          StatusID: parseInt(student.StatusID) || 0 // Ensure StatusID is a number
+          StatusID: parseInt(student.StatusID) || 0, // Ensure StatusID is a number
         }));
         setStudents(formattedStudents);
       } else {
@@ -46,7 +46,9 @@ const ViewAttendance = () => {
       }
     } catch (err) {
       console.error("Attendance fetch error:", err.response?.data || err);
-      setError(err.response?.data?.message || "Failed to load attendance data.");
+      setError(
+        err.response?.data?.message || "Failed to load attendance data."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -82,8 +84,8 @@ const ViewAttendance = () => {
       );
 
       // Update local state
-      setStudents(prevStudents =>
-        prevStudents.map(student =>
+      setStudents((prevStudents) =>
+        prevStudents.map((student) =>
           student.StudentID === studentID
             ? { ...student, StatusID: newStatus }
             : student
@@ -97,19 +99,27 @@ const ViewAttendance = () => {
 
   const getStatusButtonClass = (statusID) => {
     switch (statusID) {
-      case 1: return "bg-green-500 hover:bg-green-600";
-      case 2: return "bg-red-500 hover:bg-red-600";
-      case 3: return "bg-yellow-500 hover:bg-yellow-600";
-      default: return "bg-gray-300 hover:bg-gray-400";
+      case 1:
+        return "bg-green-500 hover:bg-green-600";
+      case 2:
+        return "bg-red-500 hover:bg-red-600";
+      case 3:
+        return "bg-yellow-500 hover:bg-yellow-600";
+      default:
+        return "bg-gray-300 hover:bg-gray-400";
     }
   };
 
   const getStatusText = (statusID) => {
     switch (statusID) {
-      case 1: return "Present";
-      case 2: return "Absent";
-      case 3: return "Late";
-      default: return "Not Marked";
+      case 1:
+        return "Present";
+      case 2:
+        return "Absent";
+      case 3:
+        return "Late";
+      default:
+        return "Not Marked";
     }
   };
 
@@ -126,9 +136,7 @@ const ViewAttendance = () => {
         <main className="p-6 sm:p-8">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-800">Attendance</h1>
-            <div className="text-gray-600">
-              {currentDate}
-            </div>
+            <div className="text-gray-600">{currentDate}</div>
           </div>
 
           {subjectInfo && (
@@ -136,25 +144,27 @@ const ViewAttendance = () => {
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-sm font-medium text-gray-500">Subject</h3>
                 <p className="mt-2 text-lg font-semibold text-gray-900">
-                  {subjectInfo.SubjectName || 'N/A'}
+                  {subjectInfo.SubjectName || "N/A"}
                 </p>
               </div>
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-sm font-medium text-gray-500">Grade</h3>
                 <p className="mt-2 text-lg font-semibold text-gray-900">
-                  {subjectInfo.Grade || 'N/A'}
+                  {subjectInfo.Grade || "N/A"}
                 </p>
               </div>
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-sm font-medium text-gray-500">Section</h3>
                 <p className="mt-2 text-lg font-semibold text-gray-900">
-                  {subjectInfo.Section || 'N/A'}
+                  {subjectInfo.Section || "N/A"}
                 </p>
               </div>
               <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500">School Year</h3>
+                <h3 className="text-sm font-medium text-gray-500">
+                  School Year
+                </h3>
                 <p className="mt-2 text-lg font-semibold text-gray-900">
-                  {subjectInfo.schoolYear || 'N/A'}
+                  {subjectInfo.schoolYear || "N/A"}
                 </p>
               </div>
             </div>
@@ -167,7 +177,9 @@ const ViewAttendance = () => {
               <span className="ml-4 text-gray-600">Loading students...</span>
             </div>
           ) : error ? (
-            <div className="text-red-600 text-center text-lg mt-10">{error}</div>
+            <div className="text-red-600 text-center text-lg mt-10">
+              {error}
+            </div>
           ) : students.length === 0 ? (
             <div className="text-gray-500 text-center text-lg mt-10">
               No students found for this class.
@@ -188,34 +200,53 @@ const ViewAttendance = () => {
                     <tr key={student.StudentID} className="hover:bg-gray-50">
                       <td className="px-6 py-4">{student.StudentID}</td>
                       <td className="px-6 py-4">
-                        {student.LastName}, {student.FirstName} {student.MiddleName}
+                        {student.LastName}, {student.FirstName}{" "}
+                        {student.MiddleName}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`px-2 py-1 rounded text-white ${
-                          student.StatusID === 1 ? "bg-green-500" :
-                          student.StatusID === 2 ? "bg-red-500" :
-                          student.StatusID === 3 ? "bg-yellow-500" : "bg-gray-300"
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded text-white ${
+                            student.StatusID === 1
+                              ? "bg-green-500"
+                              : student.StatusID === 2
+                              ? "bg-red-500"
+                              : student.StatusID === 3
+                              ? "bg-yellow-500"
+                              : "bg-gray-300"
+                          }`}
+                        >
                           {getStatusText(student.StatusID)}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex space-x-2 justify-center">
                           <button
-                            onClick={() => handleStatusChange(student.StudentID, 1)}
-                            className={`px-3 py-1 rounded text-white ${getStatusButtonClass(student.StatusID === 1 ? 1 : 0)}`}
+                            onClick={() =>
+                              handleStatusChange(student.StudentID, 1)
+                            }
+                            className={`px-3 py-1 rounded text-white ${getStatusButtonClass(
+                              student.StatusID === 1 ? 1 : 0
+                            )}`}
                           >
                             Present
                           </button>
                           <button
-                            onClick={() => handleStatusChange(student.StudentID, 2)}
-                            className={`px-3 py-1 rounded text-white ${getStatusButtonClass(student.StatusID === 2 ? 2 : 0)}`}
+                            onClick={() =>
+                              handleStatusChange(student.StudentID, 2)
+                            }
+                            className={`px-3 py-1 rounded text-white ${getStatusButtonClass(
+                              student.StatusID === 2 ? 2 : 0
+                            )}`}
                           >
                             Absent
                           </button>
                           <button
-                            onClick={() => handleStatusChange(student.StudentID, 3)}
-                            className={`px-3 py-1 rounded text-white ${getStatusButtonClass(student.StatusID === 3 ? 3 : 0)}`}
+                            onClick={() =>
+                              handleStatusChange(student.StudentID, 3)
+                            }
+                            className={`px-3 py-1 rounded text-white ${getStatusButtonClass(
+                              student.StatusID === 3 ? 3 : 0
+                            )}`}
                           >
                             Late
                           </button>
