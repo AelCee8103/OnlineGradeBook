@@ -83,56 +83,85 @@ const ManageFaculty = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if ( !newFaculty.LastName || !newFaculty.FirstName) {
-      alert("Please fill in all required fields.");
+      
+    // Check all required fields
+    if (!newFaculty.LastName || !newFaculty.FirstName || !newFaculty.Email || !newFaculty.Password) {
+      toast.error("Please fill in all required fields!");
       return;
     }
-
+  
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newFaculty.Email)) {
+      toast.error("Please enter a valid email address!");
+      return;
+    }
+  
+    // Validate password length
+    if (newFaculty.Password.length < 6) {
+      toast.error("Password must be at least 6 characters long!");
+      return;
+    }
+  
     try {
       const response = await axios.post("http://localhost:3000/auth/admin-manage-faculty", newFaculty);
-      
+        
       if (response.data.exists) {
         toast.error("Faculty ID already exists!");
         return;
       }
-
+  
       toast.success("Faculty added successfully!");
-
+  
       // Reset input fields
       setNewFaculty({
-   
         LastName: "",
         FirstName: "",
+        MiddleName: "",
+        Email: "",
+        Department: "",
+        Password: "",
       });
-
-      navigate("/admin-manage-faculty");
+  
       document.getElementById('faculty_modal').close();
       fetchFaculty();
     } catch (error) {
       if (error.response && error.response.status === 400) {
-        toast.error(error.response.data.message || "Faculty ID already exists!");
+        toast.error(error.response.data.message || "Error adding faculty!");
       } else {
         console.error("Error adding faculty:", error);
-        toast.error("Faculty ID already exists.");
+        toast.error("Failed to add faculty. Please try again.");
       }
     }
-};
-
-
+  };
+  
   const handleUpdate = async (e) => {
     e.preventDefault();
+  
+    // Check required fields for edit form
+    if (!editingFaculty.LastName || !editingFaculty.FirstName || !editingFaculty.Email) {
+      toast.error("Please fill in all required fields!");
+      return;
+    }
+  
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(editingFaculty.Email)) {
+      toast.error("Please enter a valid email address!");
+      return;
+    }
+  
     try {
       await axios.put(`http://localhost:3000/Pages/admin-manage-faculty`, editingFaculty);
       toast.success("Faculty updated successfully!");
-      navigate("/admin-manage-faculty");
       document.getElementById('facultyedit_modal').close();
       fetchFaculty();
     } catch (error) {
       console.error("Error updating faculty:", error);
-      toast.error("Failed to update faculty.");
+      toast.error("Failed to update faculty. Please try again.");
     }
   };
+  
   
 
   // Pagination logic
@@ -244,6 +273,7 @@ const ManageFaculty = () => {
                         onChange={handleChanges}
                         placeholder="Enter Middle Name (optional)"
                         className="input input-bordered w-full"
+                        required
                       />
                     </div>
 
@@ -259,6 +289,7 @@ const ManageFaculty = () => {
                         onChange={handleChanges}
                         placeholder="Enter Email"
                         className="input input-bordered w-full"
+                        required
                       />
                     </div>
                     <div className="md:col-span-2 flex flex-col">
