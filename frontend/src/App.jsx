@@ -66,8 +66,8 @@ function App() {
           />
 
           <Route
-            path="/admin/advisory/:advisoryID/students/:studentID/grades"
-            element={<StudentGrades />}
+            path="/admin/advisory/:advisoryID/students/:studentId/grades" // Changed from :studentID
+            element={<StudentGrades isFaculty={false} />}
           />
 
           <Route
@@ -110,8 +110,8 @@ function App() {
           <Route path="/faculty-attendance" element={<Attendance />}></Route>
           <Route path="/faculty-register" element={<Register />}></Route>
           <Route
-            path="/faculty/students/:studentId/grades"
-            element={<StudentGrades />}
+            path="/faculty/students/:studentId/grades" // Changed from :studentID
+            element={<StudentGrades isFaculty={true} />}
           />
         </Routes>
       </BrowserRouter>

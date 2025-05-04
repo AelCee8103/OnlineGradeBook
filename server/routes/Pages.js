@@ -350,7 +350,7 @@ router.get("/student/:studentID/grades", async (req, res) => {
         sg.subject_code,
         s.SubjectName,
         sg.Quarter,
-        sg.GradeScore
+        CAST(sg.GradeScore AS DECIMAL(5,2)) as GradeScore
       FROM subjectgrades sg
       JOIN assignsubject a ON sg.subject_code = a.SubjectCode
       JOIN subjects s ON a.subjectID = s.SubjectID
@@ -364,7 +364,7 @@ router.get("/student/:studentID/grades", async (req, res) => {
       if (!groupedGrades[subject_code]) {
         groupedGrades[subject_code] = {
           subjectName: SubjectName,
-          quarters: {},
+          quarters: {}
         };
       }
       groupedGrades[subject_code].quarters[Quarter] = GradeScore;
@@ -855,99 +855,83 @@ router.get('/admin/manage-grades', async (req, res) => {
 router.post("/faculty/update-grade", authenticateToken, async (req, res) => {
   const { StudentID, subject_code, Quarter, GradeScore } = req.body;
 
-  // Enhanced validation
-  if (!StudentID || !subject_code || !Quarter || GradeScore === undefined) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-
-  // Validate grade score
-  const numericGrade = Number(GradeScore);
-  if (isNaN(numericGrade) || numericGrade < 0 || numericGrade > 100) {
-    return res.status(400).json({ 
-      error: "Invalid grade. Grade must be a number between 0 and 100" 
-    });
-  }
-
-  // Format grade to 2 decimal places
-  const formattedGrade = parseFloat(numericGrade.toFixed(2));
-
   try {
     const db = await connectToDatabase();
 
-    // Get current active quarter and school year
-    const [[activeQuarter]] = await db.query(
-      "SELECT quarter FROM quarter WHERE status = 1 LIMIT 1"
-    );
-    const [[activeYear]] = await db.query(
-      "SELECT school_yearID FROM schoolyear WHERE status = 1 LIMIT 1"
-    );
+    // Start transaction
+    await db.query('START TRANSACTION');
 
-    if (!activeQuarter || activeQuarter.quarter !== Quarter) {
-      return res.status(403).json({ error: "This quarter is not editable" });
-    }
-
-    if (!activeYear) {
-      return res.status(400).json({ error: "No active school year found" });
-    }
-
-    // Check if grade exists
-    const [[existingGrade]] = await db.query(
-      "SELECT SubjectGradeID FROM subjectgrades WHERE StudentID = ? AND subject_code = ? AND Quarter = ? AND yearID = ?",
-      [StudentID, subject_code, Quarter, activeYear.school_yearID]
-    );
-
-    // Insert or update grade
-    if (existingGrade) {
-      await db.query(
-        "UPDATE subjectgrades SET GradeScore = ? WHERE SubjectGradeID = ?",
-        [formattedGrade, existingGrade.SubjectGradeID]
+    try {
+      // Get current active quarter and school year
+      const [[activeQuarter]] = await db.query(
+        "SELECT quarter FROM quarter WHERE status = 1 LIMIT 1"
       );
-    } else {
-      await db.query(
-        "INSERT INTO subjectgrades (StudentID, subject_code, Quarter, GradeScore, yearID) VALUES (?, ?, ?, ?, ?)",
-        [StudentID, subject_code, Quarter, formattedGrade, activeYear.school_yearID]
+      const [[activeYear]] = await db.query(
+        "SELECT school_yearID FROM schoolyear WHERE status = 1 LIMIT 1"
       );
-    }
 
-    // Check if all 4 quarters exist now
-    const [allGrades] = await db.query(
-      "SELECT Quarter, GradeScore FROM subjectgrades WHERE StudentID = ? AND subject_code = ? AND yearID = ?",
-      [StudentID, subject_code, activeYear.school_yearID]
-    );
+      if (!activeQuarter || activeQuarter.quarter !== Quarter) {
+        throw new Error("Cannot update grade for inactive quarter");
+      }
 
-    if (allGrades.length === 4) {
-      // Calculate average
-      const average = allGrades.reduce((sum, grade) => sum + grade.GradeScore, 0) / 4;
-      
-      // Check if average exists
-      const [[existingAverage]] = await db.query(
-        "SELECT AverageID FROM averagegrades WHERE StudentID = ? AND subject_code = ? AND yearID = ?",
+      if (!activeYear) {
+        throw new Error("No active school year found");
+      }
+
+      // Insert or update the grade
+      await db.query(
+        `INSERT INTO subjectgrades (subject_code, StudentID, Quarter, GradeScore, yearID) 
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE GradeScore = ?`,
+        [subject_code, StudentID, Quarter, GradeScore, activeYear.school_yearID, GradeScore]
+      );
+
+      // Calculate new average grade
+      const [grades] = await db.query(
+        `SELECT GradeScore 
+         FROM subjectgrades 
+         WHERE StudentID = ? AND subject_code = ? AND yearID = ?`,
         [StudentID, subject_code, activeYear.school_yearID]
       );
 
-      if (existingAverage) {
-        await db.query(
-          "UPDATE averagegrades SET AverageGrade = ? WHERE AverageID = ?",
-          [average, existingAverage.AverageID]
-        );
-      } else {
-        await db.query(
-          "INSERT INTO averagegrades (StudentID, subject_code, AverageGrade, yearID) VALUES (?, ?, ?, ?)",
-          [StudentID, subject_code, average, activeYear.school_yearID]
-        );
+      // Calculate average only if there are grades
+      let averageGrade = null;
+      if (grades.length > 0) {
+        const sum = grades.reduce((acc, curr) => acc + Number(curr.GradeScore), 0);
+        averageGrade = sum / grades.length;
+        
+        // Round to 2 decimal places
+        averageGrade = Math.round(averageGrade * 100) / 100;
+
+        // Only insert/update average if it's a valid number
+        if (!isNaN(averageGrade)) {
+          await db.query(
+            `INSERT INTO averagegrades (StudentID, subject_code, AverageGrade, yearID)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE AverageGrade = ?`,
+            [StudentID, subject_code, averageGrade, activeYear.school_yearID, averageGrade]
+          );
+        }
       }
 
-      return res.json({ 
+      await db.query('COMMIT');
+      res.json({ 
         success: true, 
-        message: "Grade saved and average calculated",
-        averageGrade: average
+        message: "Grade updated successfully",
+        averageGrade: averageGrade
       });
+
+    } catch (error) {
+      await db.query('ROLLBACK');
+      throw error;
     }
 
-    res.json({ success: true, message: "Grade saved successfully" });
   } catch (error) {
     console.error("Error updating grade:", error);
-    res.status(500).json({ error: "Failed to update grade" });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || "Failed to update grade"
+    });
   }
 });
 
@@ -1055,6 +1039,51 @@ router.get('/students/:studentId', authenticateToken, async (req, res) => {
     res.status(200).json(student[0]);
   } catch (error) {
     console.error('Error fetching student:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Add this new endpoint for faculty view
+router.get('/faculty/student-info/:studentId', authenticateToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { studentId } = req.params;
+
+    const [student] = await db.query(`
+      SELECT 
+        s.*,
+        c.Grade,
+        c.Section,
+        CONCAT(f.FirstName, ' ', f.LastName) as advisorName,
+        sy.year as schoolYear
+      FROM students s
+      JOIN student_classes sc ON s.StudentID = sc.StudentID
+      JOIN advisory a ON sc.advisoryID = a.advisoryID
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN faculty f ON a.facultyID = f.FacultyID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE s.StudentID = ? AND sy.status = 1
+    `, [studentId]);
+
+    if (student.length === 0) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    const studentInfo = student[0];
+    const advisoryInfo = {
+      Grade: studentInfo.Grade,
+      Section: studentInfo.Section,
+      facultyName: studentInfo.advisorName,
+      SchoolYear: studentInfo.schoolYear
+    };
+
+    res.json({
+      ...studentInfo,
+      advisoryInfo
+    });
+  } catch (error) {
+    console.error('Error fetching student info:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
