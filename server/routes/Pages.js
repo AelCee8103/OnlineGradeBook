@@ -1060,4 +1060,76 @@ router.get('/students/:studentId', authenticateToken, async (req, res) => {
 });
 
 
+
+
+// Get advisory class details and students
+router.get('/admin-view-students/:advisoryID', async (req, res) => {
+  try {
+    console.log(`Fetching data for advisoryID: ${req.params.advisoryID}`); // Debug log
+    
+    const db = await connectToDatabase();
+    const { advisoryID } = req.params;
+    
+    // 1. First verify the advisory exists
+    const [advisoryCheck] = await db.query(
+      'SELECT 1 FROM advisory WHERE advisoryID = ?', 
+      [advisoryID]
+    );
+    
+    if (!advisoryCheck || advisoryCheck.length === 0) {
+      console.log(`No advisory found with ID: ${advisoryID}`);
+      return res.status(404).json({ 
+        error: 'Advisory not found',
+        advisoryID: advisoryID
+      });
+    }
+
+    // 2. Get advisory details
+    const [advisoryInfo] = await db.query(`
+      SELECT 
+        c.Grade,
+        c.Section,
+        CONCAT(f.FirstName, ' ', COALESCE(f.MiddleName, ''), ' ', f.LastName) AS facultyName,
+        sy.year AS SchoolYear
+      FROM advisory a
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN faculty f ON a.facultyID = f.FacultyID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE a.advisoryID = ?
+    `, [advisoryID]);
+
+    // 3. Get students
+    const [students] = await db.query(`
+      SELECT 
+        s.StudentID,
+        s.FirstName,
+        COALESCE(s.MiddleName, '') AS MiddleName,
+        s.LastName
+      FROM students s
+      JOIN student_classes sc ON s.StudentID = sc.StudentID
+      WHERE sc.advisoryID = ?
+      ORDER BY s.LastName, s.FirstName
+    `, [advisoryID]);
+
+    console.log(`Found ${students.length} students for advisory ${advisoryID}`); // Debug log
+    
+    res.status(200).json({
+      success: true,
+      advisoryInfo: advisoryInfo[0] || null,
+      students: students || [],
+      studentCount: students.length
+    });
+
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ 
+      error: 'Database error',
+      details: error.message 
+    });
+  }
+});
+
+
+
 export default router;

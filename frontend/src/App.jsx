@@ -84,7 +84,7 @@ function App() {
             element={<ArchiveRecords />}
           ></Route>
           <Route path="/admin-register" element={<Adminregister />}></Route>
-          <Route path="/admin-view-students" element={<ViewStudents />}></Route>
+          <Route path="/admin-view-students/:advisoryID" element={<ViewStudents />} />
           <Route
             path="/admin/advisory/:advisoryID/students"
             element={<AdvisoryStudents />}

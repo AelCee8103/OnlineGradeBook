@@ -189,7 +189,7 @@ const CreateAdvisory = () => {
   };
 
   const handleViewStudents = (advisoryID) => {
-    navigate(`/admin-view-students?advisoryID=${advisoryID}`);
+    navigate(`/admin-view-students/${advisoryID}`);
   };
 
   const filteredAdvisoryClasses = advisoryClasses.filter((advisory) => {
