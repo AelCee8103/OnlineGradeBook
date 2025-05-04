@@ -3,9 +3,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import NavbarAdmin from "../Components/NavbarAdmin";
 import AdminSidePanel from "../Components/AdminSidePanel";
+import NavbarFaculty from "../components/NavbarFaculty";
+import FacultySidePanel from "../Components/FacultySidePanel";
 
-const StudentGrades = () => {
-  const { advisoryID, studentID } = useParams();
+const StudentGrades = ({ isFaculty = false }) => {
+  // Change studentID to studentId to match route parameter
+  const { advisoryID, studentId } = useParams(); // Changed from studentID to studentId
   const [grades, setGrades] = useState({});
   const [studentInfo, setStudentInfo] = useState({});
   const [advisoryInfo, setAdvisoryInfo] = useState({});
@@ -15,55 +18,89 @@ const StudentGrades = () => {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/faculty-login");
+      return;
+    }
+
+    // Add validation for studentId
+    if (!studentId) {
+      console.error("No student ID provided");
+      navigate(-1);
+      return;
+    }
 
     const fetchGrades = async () => {
-      const res = await axios.get(
-        `http://localhost:3000/Pages/student/${studentID}/grades`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      setGrades(res.data);
-    };
-
-    const fetchStudent = async () => {
-      const res = await axios.get(
-        "http://localhost:3000/Pages/admin-manage-students",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-      const match = res.data.find((s) => s.StudentID.toString() === studentID);
-      setStudentInfo(match);
-    };
-
-    const fetchAdvisory = async () => {
       try {
-        const token = localStorage.getItem("token");
         const res = await axios.get(
-          `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
+          `http://localhost:3000/Pages/student/${studentId}/grades`, // Changed from studentID
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
+        setGrades(res.data);
+      } catch (error) {
+        console.error("Error fetching grades:", error);
+        alert("Failed to fetch grades");
+      }
+    };
 
-        // Check if response data exists
-        if (res.data) {
-          setAdvisoryInfo(res.data);
+    const fetchStudent = async () => {
+      try {
+        // For faculty view, use a different endpoint
+        const endpoint = isFaculty
+          ? `http://localhost:3000/Pages/faculty/student-info/${studentId}` // Changed from studentID
+          : "http://localhost:3000/Pages/admin-manage-students";
+
+        const res = await axios.get(endpoint, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (isFaculty) {
+          if (!res.data) {
+            throw new Error("Student not found");
+          }
+          setStudentInfo(res.data);
+          setAdvisoryInfo(res.data.advisoryInfo);
         } else {
-          console.warn("No advisory data found");
-          setAdvisoryInfo({});
+          const match = res.data.find(
+            (s) => s.StudentID.toString() === studentId // Changed from studentID
+          );
+          if (!match) {
+            throw new Error("Student not found");
+          }
+          setStudentInfo(match);
         }
       } catch (error) {
-        console.error("Error fetching advisory data:", error);
-        setAdvisoryInfo({});
+        console.error("Error fetching student info:", error);
+        alert("Failed to fetch student information");
+        navigate(-1);
+      }
+    };
+
+    const fetchAdvisory = async () => {
+      if (!isFaculty) {
+        // Only fetch separately for admin view
+        try {
+          const res = await axios.get(
+            `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          if (res.data) {
+            setAdvisoryInfo(res.data);
+          }
+        } catch (error) {
+          console.error("Error fetching advisory data:", error);
+        }
       }
     };
 
     fetchGrades();
     fetchStudent();
-    fetchAdvisory();
-  }, [studentID, advisoryID]);
+    if (!isFaculty) fetchAdvisory();
+  }, [studentId, advisoryID, isFaculty, navigate]); // Changed from studentID
 
   const handlePrint = () => {
     const confirmed = window.confirm(
@@ -81,20 +118,28 @@ const StudentGrades = () => {
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
-      <AdminSidePanel
-        isSidebarOpen={isSidebarOpen}
-        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-      />
-
-      {isSidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
-          onClick={() => setIsSidebarOpen(false)}
-        ></div>
+      {/* Use appropriate sidebar based on user type */}
+      {isFaculty ? (
+        <FacultySidePanel
+          isSidebarOpen={isSidebarOpen}
+          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        />
+      ) : (
+        <AdminSidePanel
+          isSidebarOpen={isSidebarOpen}
+          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        />
       )}
 
       <div className="flex-1 flex flex-col overflow-auto">
-        <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+        {/* Use appropriate navbar based on user type */}
+        {isFaculty ? (
+          <NavbarFaculty
+            toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+          />
+        ) : (
+          <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+        )}
 
         <div className="p-8">
           <div className="flex items-center mb-4">
@@ -161,13 +206,18 @@ const StudentGrades = () => {
                 <tbody>
                   {Object.entries(grades).map(([subjectCode, subjectData]) => {
                     const { subjectName, quarters } = subjectData;
-                    const q1 = quarters[1] || "-";
-                    const q2 = quarters[2] || "-";
-                    const q3 = quarters[3] || "-";
-                    const q4 = quarters[4] || "-";
+                    // Get grades for each quarter, ensuring they are numbers
+                    const q1 = parseFloat(quarters[1]) || null;
+                    const q2 = parseFloat(quarters[2]) || null;
+                    const q3 = parseFloat(quarters[3]) || null;
+                    const q4 = parseFloat(quarters[4]) || null;
+
+                    // Only include valid numerical grades
                     const validGrades = [q1, q2, q3, q4].filter(
-                      (n) => !isNaN(n)
+                      (grade) => grade !== null && !isNaN(grade)
                     );
+
+                    // Calculate average only if all quarters have valid grades
                     const finalGrade =
                       validGrades.length === 4
                         ? (validGrades.reduce((a, b) => a + b, 0) / 4).toFixed(
@@ -176,19 +226,19 @@ const StudentGrades = () => {
                         : "-";
 
                     const remarks =
-                      finalGrade !== "-" && parseFloat(finalGrade) >= 75
-                        ? "Passed"
-                        : finalGrade !== "-"
-                        ? "Failed"
+                      finalGrade !== "-"
+                        ? parseFloat(finalGrade) >= 75
+                          ? "Passed"
+                          : "Failed"
                         : "-";
 
                     return (
                       <tr key={subjectCode} className="border-b">
                         <td className="px-4 py-2">{subjectName}</td>
-                        <td className="px-4 py-2">{q1}</td>
-                        <td className="px-4 py-2">{q2}</td>
-                        <td className="px-4 py-2">{q3}</td>
-                        <td className="px-4 py-2">{q4}</td>
+                        <td className="px-4 py-2">{quarters[1] || "-"}</td>
+                        <td className="px-4 py-2">{quarters[2] || "-"}</td>
+                        <td className="px-4 py-2">{quarters[3] || "-"}</td>
+                        <td className="px-4 py-2">{quarters[4] || "-"}</td>
                         <td className="px-4 py-2">{finalGrade}</td>
                         <td className="px-4 py-2">{remarks}</td>
                       </tr>
@@ -196,42 +246,43 @@ const StudentGrades = () => {
                   })}
                 </tbody>
               </table>
+              {/* General Average Calculation */}
               {(() => {
-                const finalGrades = Object.values(grades)
+                const subjectsWithCompleteGrades = Object.values(grades)
                   .map(({ quarters }) => {
-                    const q1 = quarters[1];
-                    const q2 = quarters[2];
-                    const q3 = quarters[3];
-                    const q4 = quarters[4];
-                    const quarterGrades = [q1, q2, q3, q4].filter(
-                      (n) => !isNaN(n)
-                    );
-                    if (quarterGrades.length === 4) {
-                      return (
-                        quarterGrades.reduce((a, b) => a + b, 0) / 4
-                      ).toFixed(2);
-                    }
-                    return null;
+                    const quarterGrades = [1, 2, 3, 4]
+                      .map((q) => parseFloat(quarters[q]))
+                      .filter((grade) => !isNaN(grade) && grade !== null);
+
+                    // Only return average if all quarters have valid grades
+                    return quarterGrades.length === 4
+                      ? quarterGrades.reduce((a, b) => a + b, 0) / 4
+                      : null;
                   })
                   .filter((avg) => avg !== null);
 
-                if (finalGrades.length === 0) return null;
+                // Only show general average if all subjects have complete grades
+                if (
+                  subjectsWithCompleteGrades.length ===
+                    Object.keys(grades).length &&
+                  subjectsWithCompleteGrades.length > 0
+                ) {
+                  const generalAverage = (
+                    subjectsWithCompleteGrades.reduce((a, b) => a + b, 0) /
+                    subjectsWithCompleteGrades.length
+                  ).toFixed(2);
 
-                const generalAverage =
-                  finalGrades.reduce(
-                    (a, b) => parseFloat(a) + parseFloat(b),
-                    0
-                  ) / finalGrades.length;
+                  const generalRemarks =
+                    parseFloat(generalAverage) >= 75 ? "Passed" : "Failed";
 
-                const generalRemarks =
-                  generalAverage >= 75 ? "Passed" : "Failed";
-
-                return (
-                  <div className="mt-4 text-sm font-semibold text-left ml-4">
-                    <p>General Average: {generalAverage.toFixed(2)}</p>
-                    <p>Overall Remarks: {generalRemarks}</p>
-                  </div>
-                );
+                  return (
+                    <div className="mt-4 text-sm font-semibold text-left ml-4">
+                      <p>General Average: {generalAverage}</p>
+                      <p>Overall Remarks: {generalRemarks}</p>
+                    </div>
+                  );
+                }
+                return null;
               })()}
             </div>
           </div>

@@ -124,50 +124,70 @@ const ViewStudents = () => {
     const token = localStorage.getItem("token");
     const editable = studentGrades.find((g) => g.Quarter === activeQuarter);
 
-    // Validation checks
-    if (!editable) return;
-
-    // Check if grade is empty
-    if (!editable.GradeScore && editable.GradeScore !== 0) {
-      setGradeError("Grade cannot be empty");
-      return;
-    }
-
-    // Validate numeric value
-    const numericGrade = Number(editable.GradeScore);
-    if (isNaN(numericGrade)) {
-      setGradeError("Grade must be a valid number");
-      return;
-    }
-
-    // Validate range
-    if (numericGrade < 0 || numericGrade > 100) {
-      setGradeError("Grade must be between 0 and 100");
-      return;
-    }
-
     try {
-      const res = await axios.post(
+      // Input validation
+      if (!editable) {
+        setGradeError("No active quarter selected");
+        return;
+      }
+
+      if (!editable.GradeScore && editable.GradeScore !== 0) {
+        setGradeError("Grade cannot be empty");
+        return;
+      }
+
+      // Convert to number and validate
+      const numericGrade = parseFloat(editable.GradeScore);
+      if (isNaN(numericGrade)) {
+        setGradeError("Grade must be a valid number");
+        return;
+      }
+
+      if (numericGrade < 0 || numericGrade > 100) {
+        setGradeError("Grade must be between 0 and 100");
+        return;
+      }
+
+      // Round to 2 decimal places to ensure consistent format
+      const roundedGrade = Math.round(numericGrade * 100) / 100;
+
+      await axios.post(
         "http://localhost:3000/Pages/faculty/update-grade",
         {
           StudentID: selectedStudent.StudentID,
           subject_code: subjectCode,
           Quarter: activeQuarter,
-          GradeScore: numericGrade,
+          GradeScore: roundedGrade,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
       );
 
-      if (res.data.success) {
-        setGradeError("");
-        alert(res.data.message || "Grade updated successfully");
-        setGradesModalOpen(false);
-      } else {
-        setGradeError(res.data.message || "Update failed");
-      }
+      // Clear any existing errors
+      setGradeError("");
+
+      // Fetch updated grades
+      await fetchStudentGrades(selectedStudent.StudentID);
+
+      // Show success message and close modal
+      alert("Grade updated successfully");
+      setGradesModalOpen(false);
     } catch (error) {
-      console.error(error);
-      setGradeError(error.response?.data?.error || "Error updating grade");
+      console.error("Grade update error:", error);
+
+      // Handle authentication error
+      if (error.response?.status === 401) {
+        localStorage.removeItem("token");
+        navigate("/faculty-login");
+        return;
+      }
+
+      // Set error message and keep modal open
+      setGradeError("Failed to update grade. Please try again.");
     }
   };
 
