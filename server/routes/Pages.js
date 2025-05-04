@@ -567,7 +567,7 @@ router.post("/admin-dashboard", async (req, res) => {
     if (!SchoolYear || !year) {
       return res.status(400).json({ error: "Both School Year ID and Year are required." });
     }
-
+aaaa
     // Check if the school year already exists
     const checkSql = "SELECT * FROM schoolyear WHERE school_yearID = ?";
     const [existing] = await db.query(checkSql, [SchoolYear]);
@@ -590,6 +590,8 @@ router.post("/admin-dashboard", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
+
 
 
 router.get("/admin-subject-classes/:subjectCode/students", async (req, res) => {
@@ -1085,6 +1087,252 @@ router.get('/faculty/student-info/:studentId', authenticateToken, async (req, re
   } catch (error) {
     console.error('Error fetching student info:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
+
+
+// Get advisory class details and students
+router.get('/admin-view-students/:advisoryID', async (req, res) => {
+  try {
+    console.log(`Fetching data for advisoryID: ${req.params.advisoryID}`); // Debug log
+    
+    const db = await connectToDatabase();
+    const { advisoryID } = req.params;
+    
+    // 1. First verify the advisory exists
+    const [advisoryCheck] = await db.query(
+      'SELECT 1 FROM advisory WHERE advisoryID = ?', 
+      [advisoryID]
+    );
+    
+    if (!advisoryCheck || advisoryCheck.length === 0) {
+      console.log(`No advisory found with ID: ${advisoryID}`);
+      return res.status(404).json({ 
+        error: 'Advisory not found',
+        advisoryID: advisoryID
+      });
+    }
+
+    // 2. Get advisory details
+    const [advisoryInfo] = await db.query(`
+      SELECT 
+        c.Grade,
+        c.Section,
+        CONCAT(f.FirstName, ' ', COALESCE(f.MiddleName, ''), ' ', f.LastName) AS facultyName,
+        sy.year AS SchoolYear
+      FROM advisory a
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN faculty f ON a.facultyID = f.FacultyID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE a.advisoryID = ?
+    `, [advisoryID]);
+
+    // 3. Get students
+    const [students] = await db.query(`
+      SELECT 
+        s.StudentID,
+        s.FirstName,
+        COALESCE(s.MiddleName, '') AS MiddleName,
+        s.LastName
+      FROM students s
+      JOIN student_classes sc ON s.StudentID = sc.StudentID
+      WHERE sc.advisoryID = ?
+      ORDER BY s.LastName, s.FirstName
+    `, [advisoryID]);
+
+    console.log(`Found ${students.length} students for advisory ${advisoryID}`); // Debug log
+    
+    res.status(200).json({
+      success: true,
+      advisoryInfo: advisoryInfo[0] || null,
+      students: students || [],
+      studentCount: students.length
+    });
+
+  } catch (error) {
+    console.error('Database error:', error);
+    res.status(500).json({ 
+      error: 'Database error',
+      details: error.message 
+    });
+  }
+});
+
+
+
+
+//ATTENDANCE PAGE
+// Mark attendance for students in a subject
+
+// Mark attendance for a student
+router.post('/faculty-mark-attendance', authenticateToken, async (req, res) => {
+  try {
+      const db = await connectToDatabase();
+      const { SubjectCode, StudentID, StatusID } = req.body;
+      const date = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
+
+      // Validate input
+      if (!SubjectCode || !StudentID || !StatusID) {
+          return res.status(400).json({ success: false, message: 'Missing required fields' });
+      }
+
+      // Check if attendance already marked for this date
+      const existingAttendance = await db.query(
+        'SELECT * FROM attendance WHERE StudentID = ? AND SubjectCode = ? AND Date = ?',
+        [StudentID, SubjectCode, date]
+    );
+
+    if (existingAttendance.length > 0) {
+        // Update existing attendance
+        await db.query(
+            'UPDATE attendance SET StatusID = ? WHERE AttendanceID = ?',
+            [StatusID, existingAttendance[0].AttendanceID]
+        );
+    } else {
+        // Create new attendance record
+        await db.query(
+            'INSERT INTO attendance (SubjectCode, StudentID, StatusID, Date) VALUES (?, ?, ?, ?)',
+            [SubjectCode, StudentID, StatusID, date]
+        );
+    }
+
+    // Get status name for response
+    const statusResult = await db.query(
+        'SELECT StatusName FROM status WHERE StatusID = ?',
+        [StatusID]
+    );
+    
+    const StatusName = statusResult[0]?.StatusName || 'Unknown';
+
+    res.json({ 
+        success: true, 
+        message: 'Attendance marked successfully',
+        StatusName 
+    });
+
+} catch (error) {
+    console.error('Error marking attendance:', error);
+    res.status(500).json({ 
+        success: false, 
+        message: 'Server error while marking attendance' 
+    });
+}
+});
+
+// Get attendance records for a subject on a specific date
+router.get('/faculty-subject-attendance/:SubjectCode', authenticateToken, async (req, res) => {
+  try {
+      const db = await connectToDatabase();
+      const { SubjectCode } = req.params;
+      const { date } = req.query;
+
+      if (!SubjectCode || !date) {
+          return res.status(400).json({ 
+              success: false, 
+              message: 'Subject code and date are required' 
+          });
+      }
+
+      // Check if faculty teaches this subject
+      const facultySubjectCheck = await db.query(
+          'SELECT * FROM assignsubject WHERE FacultyID = ? AND SubjectCode = ?',
+          [req.user.id, SubjectCode]
+      );
+
+      if (facultySubjectCheck.length === 0) {
+          return res.status(403).json({ 
+              success: false, 
+              message: 'You are not assigned to teach this subject' 
+          });
+      }
+
+      // Get attendance records for the specified date
+      const attendanceRecords = await db.query(
+          `SELECT a.StudentID, a.StatusID, s.StatusName, 
+           CONCAT(st.FirstName, ' ', st.LastName) AS fullName
+           FROM attendance a
+           JOIN status s ON a.StatusID = s.StatusID
+           JOIN students st ON a.StudentID = st.StudentID
+           WHERE a.SubjectCode = ? AND DATE(a.Date) = ?`,
+          [SubjectCode, date]
+      );
+
+      res.json({ 
+          success: true, 
+          attendance: attendanceRecords 
+      });
+
+  } catch (error) {
+      console.error('Error fetching attendance records:', error);
+      res.status(500).json({ 
+          success: false, 
+          message: 'Server error while fetching attendance records' 
+      });
+  }
+});
+
+// Get students enrolled in a subject
+router.get('/faculty-subject-classes/:SubjectCode/students', authenticateToken, async (req, res) => {
+  try {
+      const db = await connectToDatabase();
+      const { SubjectCode } = req.params;
+
+      // Check if faculty teaches this subject
+      const facultySubjectCheck = await db.query(
+          'SELECT * FROM assignsubject WHERE FacultyID = ? AND SubjectCode = ?',
+          [req.user.id, SubjectCode]
+      );
+
+      if (facultySubjectCheck.length === 0) {
+          return res.status(403).json({ 
+              success: false, 
+              message: 'You are not assigned to teach this subject' 
+          });
+      }
+
+      // Get subject info
+      const subjectInfo = await db.query(
+          `SELECT a.SubjectCode, s.SubjectName, c.Grade, c.Section 
+           FROM assignsubject a
+           JOIN subjects s ON a.subjectID = s.SubjectID
+           JOIN advisory adv ON a.advisoryID = adv.advisoryID
+           JOIN classes c ON adv.classID = c.ClassID
+           WHERE a.SubjectCode = ?`,
+          [SubjectCode]
+      );
+
+      if (subjectInfo.length === 0) {
+          return res.status(404).json({ 
+              success: false, 
+              message: 'Subject not found' 
+          });
+      }
+
+      // Get students enrolled in this subject's advisory class
+      const students = await db.query(
+          `SELECT s.StudentID, CONCAT(s.FirstName, ' ', s.LastName) AS fullName 
+           FROM students s
+           JOIN student_classes sc ON s.StudentID = sc.StudentID
+           WHERE sc.advisoryID = ?
+           ORDER BY s.LastName, s.FirstName`,
+          [facultySubjectCheck[0].advisoryID]
+      );
+
+      res.json({ 
+          success: true, 
+          students, 
+          subjectInfo: subjectInfo[0] 
+      });
+
+  } catch (error) {
+      console.error('Error fetching students:', error);
+      res.status(500).json({ 
+          success: false, 
+          message: 'Server error while fetching students' 
+      });
   }
 });
 

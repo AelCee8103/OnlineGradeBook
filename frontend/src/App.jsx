@@ -26,6 +26,7 @@ import StudentGrades from "./Admin/StudentGrades";
 import SubjectClassStudents from "./Admin/SubjectClassStudents";
 import CreateAdvisory from "./Admin/CreateAdvisory";
 import ViewStudent from "./Pages/ViewStudents";
+import ViewAttendance from "./Pages/ViewAttendance";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -84,7 +85,7 @@ function App() {
             element={<ArchiveRecords />}
           ></Route>
           <Route path="/admin-register" element={<Adminregister />}></Route>
-          <Route path="/admin-view-students" element={<ViewStudents />}></Route>
+          <Route path="/admin-view-students/:advisoryID" element={<ViewStudents />} />
           <Route
             path="/admin/advisory/:advisoryID/students"
             element={<AdvisoryStudents />}
@@ -105,6 +106,7 @@ function App() {
             path="/faculty-view-students/:subjectCode"
             element={<ViewStudent />}
           />
+          <Route path="/faculty-view-attendance/:subjectCode" element={<ViewAttendance />}></Route>
 
           <Route path="/faculty-grades" element={<Grades />}></Route>
           <Route path="/faculty-attendance" element={<Attendance />}></Route>

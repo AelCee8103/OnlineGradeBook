@@ -189,7 +189,7 @@ const CreateAdvisory = () => {
   };
 
   const handleViewStudents = (advisoryID) => {
-    navigate(`/admin-view-students?advisoryID=${advisoryID}`);
+    navigate(`/admin-view-students/${advisoryID}`);
   };
 
   const filteredAdvisoryClasses = advisoryClasses.filter((advisory) => {
@@ -215,7 +215,7 @@ const CreateAdvisory = () => {
         <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
         <ToastContainer position="top-right" autoClose={3000} />
         <div className="p-8">
-          <h1 className="text-3xl font-bold mb-6">Assign Faculty to Advisory Classes</h1>
+          <h1 className="text-3xl font-bold mb-6">Advisory Classes</h1>
           
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
             <div className="flex items-center mb-4">
