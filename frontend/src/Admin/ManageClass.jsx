@@ -155,7 +155,7 @@ const ManageClasses = () => {
         <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
         <ToastContainer position="top-right" autoClose={3000} />
         <div className="p-8">
-          <h1 className="text-3xl font-bold mb-6">Advisory Class List</h1>
+          <h1 className="text-3xl font-bold mb-6">Class Sections</h1>
           
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
             <div className="flex items-center mb-4">

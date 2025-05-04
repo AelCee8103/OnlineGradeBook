@@ -2,6 +2,7 @@ import express from 'express';
 import { connectToDatabase } from '../lib/db.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { format } from 'date-fns';
 
 const router = express.Router();
 
@@ -46,14 +47,25 @@ router.post('/faculty-login', async (req, res) => {
       return res.status(404).json({ message: "Wrong password" });
     }
 
-    const token = jwt.sign({ FacultyID: rows[0].FacultyID }, process.env.JWT_KEY, { expiresIn: '3h' });
-    return res.status(201).json({ token: token });  // ✅ 'return' added
+    // Create token
+    const token = jwt.sign(
+      { FacultyID: rows[0].FacultyID }, 
+      process.env.JWT_KEY, 
+      { expiresIn: '3h' }
+    );
+
+    // ✅ Include facultyID in the response
+    return res.status(201).json({ 
+      token: token, 
+      facultyID: rows[0].FacultyID 
+    });
 
   } catch (err) {
     console.error("Database Error:", err.message);
-    return res.status(500).json({ error: err.message });  // ✅ 'return' added
+    return res.status(500).json({ error: err.message });
   }
 });
+
 
 
 
@@ -363,7 +375,420 @@ router.get("/faculty-assign-subjects", verifyToken, async (req, res) => {
 
 
 
+// Mark attendance for a student
+router.post('/faculty-mark-attendance', verifyToken, async (req, res) => {
+  try {
+      const { SubjectCode, StudentID, StatusID } = req.body;
+      const date = new Date().toISOString().split('T')[0]; // Current date in YYYY-MM-DD format
+
+      // Validate input
+      if (!SubjectCode || !StudentID || !StatusID) {
+          return res.status(400).json({ success: false, message: 'Missing required fields' });
+      }
+
+      // Check if faculty teaches this subject
+      const facultySubjectCheck = await db.query(
+          'SELECT * FROM assignsubject WHERE FacultyID = ? AND SubjectCode = ?',
+          [req.user.id, SubjectCode]
+      );
+
+      if (facultySubjectCheck.length === 0) {
+          return res.status(403).json({ 
+              success: false, 
+              message: 'You are not assigned to teach this subject' 
+          });
+      }
+
+      // Check if student is enrolled in this class
+      const advisoryCheck = await db.query(
+          `SELECT sc.advisoryID 
+           FROM student_classes sc
+           JOIN advisory a ON sc.advisoryID = a.advisoryID
+           WHERE sc.StudentID = ? AND a.advisoryID IN (
+               SELECT advisoryID FROM assignsubject WHERE SubjectCode = ?
+           )`,
+          [StudentID, SubjectCode]
+      );
+
+      if (advisoryCheck.length === 0) {
+          return res.status(400).json({ 
+              success: false, 
+              message: 'Student is not enrolled in this subject' 
+          });
+      }
+
+      // Get status name
+      const statusResult = await db.query(
+          'SELECT StatusName FROM status WHERE StatusID = ?',
+          [StatusID]
+      );
+      
+      if (statusResult.length === 0) {
+          return res.status(400).json({ 
+              success: false, 
+              message: 'Invalid attendance status' 
+          });
+      }
+      
+      const StatusName = statusResult[0].StatusName;
+
+      // Check if attendance already marked for today
+      const existingAttendance = await db.query(
+          'SELECT * FROM attendance WHERE StudentID = ? AND SubjectCode = ? AND Date = ?',
+          [StudentID, SubjectCode, date]
+      );
+
+      if (existingAttendance.length > 0) {
+          // Update existing attendance
+          await db.query(
+              'UPDATE attendance SET StatusID = ? WHERE AttendanceID = ?',
+              [StatusID, existingAttendance[0].AttendanceID]
+          );
+      } else {
+          // Create new attendance record
+          await db.query(
+              'INSERT INTO attendance (SubjectCode, StudentID, StatusID, Date) VALUES (?, ?, ?, ?)',
+              [SubjectCode, StudentID, StatusID, date]
+          );
+      }
+
+      res.json({ 
+          success: true, 
+          message: 'Attendance marked successfully',
+          StatusName 
+      });
+
+  } catch (error) {
+      console.error('Error marking attendance:', error);
+      res.status(500).json({ 
+          success: false, 
+          message: 'Server error while marking attendance' 
+      });
+  }
+});
+
+// Get attendance records for a subject on a specific date
+router.get('/faculty-subject-attendance/:SubjectCode', verifyToken, async (req, res) => {
+  try {
+      const { SubjectCode } = req.params;
+      const { date } = req.query;
+
+      if (!SubjectCode || !date) {
+          return res.status(400).json({ 
+              success: false, 
+              message: 'Subject code and date are required' 
+          });
+      }
+
+      // Check if faculty teaches this subject
+      const facultySubjectCheck = await db.query(
+          'SELECT * FROM assignsubject WHERE FacultyID = ? AND SubjectCode = ?',
+          [req.user.id, SubjectCode]
+      );
+
+      if (facultySubjectCheck.length === 0) {
+          return res.status(403).json({ 
+              success: false, 
+              message: 'You are not assigned to teach this subject' 
+          });
+      }
+
+      // Get attendance records for the specified date
+      const attendanceRecords = await db.query(
+          `SELECT a.StudentID, a.StatusID, s.StatusName, 
+           CONCAT(st.FirstName, ' ', st.LastName) AS fullName
+           FROM attendance a
+           JOIN status s ON a.StatusID = s.StatusID
+           JOIN students st ON a.StudentID = st.StudentID
+           WHERE a.SubjectCode = ? AND DATE(a.Date) = ?`,
+          [SubjectCode, date]
+      );
+
+      res.json({ 
+          success: true, 
+          attendance: attendanceRecords 
+      });
+
+  } catch (error) {
+      console.error('Error fetching attendance records:', error);
+      res.status(500).json({ 
+          success: false, 
+          message: 'Server error while fetching attendance records' 
+      });
+  }
+});
+
+// Get students enrolled in a subject
+router.get('/faculty-subject-classes/:SubjectCode/students', verifyToken, async (req, res) => {
+  try {
+      const { SubjectCode } = req.params;
+
+      // Check if faculty teaches this subject
+      const facultySubjectCheck = await db.query(
+          'SELECT * FROM assignsubject WHERE FacultyID = ? AND SubjectCode = ?',
+          [req.user.id, SubjectCode]
+      );
+
+      if (facultySubjectCheck.length === 0) {
+          return res.status(403).json({ 
+              success: false, 
+              message: 'You are not assigned to teach this subject' 
+          });
+      }
+
+      // Get subject info
+      const subjectInfo = await db.query(
+          `SELECT a.SubjectCode, s.SubjectName, c.Grade, c.Section 
+           FROM assignsubject a
+           JOIN subjects s ON a.subjectID = s.SubjectID
+           JOIN advisory adv ON a.advisoryID = adv.advisoryID
+           JOIN classes c ON adv.classID = c.ClassID
+           WHERE a.SubjectCode = ?`,
+          [SubjectCode]
+      );
+
+      if (subjectInfo.length === 0) {
+          return res.status(404).json({ 
+              success: false, 
+              message: 'Subject not found' 
+          });
+      }
+
+      // Get students enrolled in this subject's advisory class
+      const students = await db.query(
+          `SELECT s.StudentID, CONCAT(s.FirstName, ' ', s.LastName) AS fullName 
+           FROM students s
+           JOIN student_classes sc ON s.StudentID = sc.StudentID
+           WHERE sc.advisoryID = ?
+           ORDER BY s.LastName, s.FirstName`,
+          [facultySubjectCheck[0].advisoryID]
+      );
+
+      res.json({ 
+          success: true, 
+          students, 
+          subjectInfo: subjectInfo[0] 
+      });
+
+  } catch (error) {
+      console.error('Error fetching students:', error);
+      res.status(500).json({ 
+          success: false, 
+          message: 'Server error while fetching students' 
+      });
+  }
+});
 
 
+// Get students for attendance
+router.get('/:subjectCode',verifyToken, async (req, res) => {
+  try {
+      const db = await connectToDatabase();
+      const { subjectCode } = req.params;
+      const today = new Date().toISOString().split('T')[0]; // Get today's date in YYYY-MM-DD format
+
+      // Get students enrolled in this subject
+      const [students] = await db.query(`
+          SELECT s.StudentID, s.LastName, s.FirstName, s.MiddleName, 
+                 a.AttendanceID, a.StatusID, a.Date
+          FROM students s
+          JOIN student_classes sc ON s.StudentID = sc.StudentID
+          JOIN advisory ad ON sc.advisoryID = ad.advisoryID
+          JOIN assignsubject ass ON ad.advisoryID = ass.advisoryID
+          LEFT JOIN attendance a ON s.StudentID = a.StudentID 
+              AND a.SubjectCode = ass.SubjectCode 
+              AND a.Date = ?
+          WHERE ass.SubjectCode = ?
+          ORDER BY s.LastName, s.FirstName
+      `, [today, subjectCode]);
+
+      res.json({ success: true, data: students });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// Update attendance status
+router.post('/update', verifyToken,async (req, res) => {
+  try {
+     const db = await connectToDatabase();
+      const { studentID, subjectCode, statusID } = req.body;
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check if attendance record already exists for today
+      const [existing] = await db.query(`
+          SELECT AttendanceID FROM attendance 
+          WHERE StudentID = ? AND SubjectCode = ? AND Date = ?
+      `, [studentID, subjectCode, today]);
+
+      if (existing.length > 0) {
+          // Update existing record
+          await db.query(`
+              UPDATE attendance SET StatusID = ? 
+              WHERE AttendanceID = ?
+          `, [statusID, existing[0].AttendanceID]);
+      } else {
+          // Create new record
+          await db.query(`
+              INSERT INTO attendance (SubjectCode, StudentID, StatusID, Date)
+              VALUES (?, ?, ?, ?)
+          `, [subjectCode, studentID, statusID, today]);
+      }
+
+      res.json({ success: true });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// subjectRoutes.js
+
+router.get('/subject-info/:subjectCode', verifyToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+      const { subjectCode } = req.params;
+
+      const [subjectInfo] = await db.query(`
+          SELECT s.SubjectName, c.Grade, c.Section, sy.year AS schoolYear
+          FROM assignsubject ass
+          JOIN subjects s ON ass.subjectID = s.SubjectID
+          JOIN advisory ad ON ass.advisoryID = ad.advisoryID
+          JOIN classes c ON ad.classID = c.ClassID
+          JOIN schoolyear sy ON ass.yearID = sy.school_yearID
+          WHERE ass.SubjectCode = ?
+      `, [subjectCode]);
+
+      if (subjectInfo.length === 0) {
+          return res.status(404).json({ success: false, message: 'Subject not found' });
+      }
+
+      res.json({ success: true, data: subjectInfo[0] });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// View attendance for a subject
+router.get('/attendance/view/:subjectCode', verifyToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { subjectCode } = req.params;
+    const { date } = req.query;
+    const today = format(new Date(), 'yyyy-MM-dd');
+
+    // Get students and their attendance status
+    const [students] = await db.query(`
+      SELECT 
+        s.StudentID,
+        s.LastName,
+        s.FirstName,
+        s.MiddleName,
+        COALESCE(a.StatusID, 0) as StatusID,
+        a.AttendanceID,
+        a.Date
+      FROM students s
+      JOIN student_classes sc ON s.StudentID = sc.StudentID
+      JOIN advisory ad ON sc.advisoryID = ad.advisoryID
+      JOIN assignsubject ass ON ad.advisoryID = ass.advisoryID
+      LEFT JOIN attendance a ON (
+        s.StudentID = a.StudentID 
+        AND a.SubjectCode = ass.SubjectCode 
+        AND DATE(a.Date) = ?
+      )
+      WHERE ass.SubjectCode = ?
+      ORDER BY s.LastName, s.FirstName
+    `, [today, subjectCode]);
+
+    res.json({
+      success: true,
+      data: students,
+      date: today
+    });
+
+  } catch (error) {
+    console.error('Attendance view error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch attendance data',
+      error: error.message
+    });
+  }
+});
+
+// Update attendance status
+router.post('/attendance/update', verifyToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { studentID, subjectCode, statusID } = req.body;
+    const today = format(new Date(), 'yyyy-MM-dd');
+
+    // Validate input
+    if (!studentID || !subjectCode || !statusID) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields'
+      });
+    }
+
+    // Check if student is enrolled in the subject
+    const [enrollment] = await db.query(`
+      SELECT 1 FROM students s
+      JOIN student_classes sc ON s.StudentID = sc.StudentID
+      JOIN advisory ad ON sc.advisoryID = ad.advisoryID
+      JOIN assignsubject ass ON ad.advisoryID = ass.advisoryID
+      WHERE s.StudentID = ? AND ass.SubjectCode = ?
+    `, [studentID, subjectCode]);
+
+    if (enrollment.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not enrolled in this subject'
+      });
+    }
+
+    // Check existing attendance
+    const [existing] = await db.query(`
+      SELECT AttendanceID FROM attendance 
+      WHERE StudentID = ? AND SubjectCode = ? AND DATE(Date) = ?
+    `, [studentID, subjectCode, today]);
+
+    if (existing.length > 0) {
+      // Update existing record
+      await db.query(`
+        UPDATE attendance 
+        SET StatusID = ?, 
+            UpdatedAt = CURRENT_TIMESTAMP 
+        WHERE AttendanceID = ?
+      `, [statusID, existing[0].AttendanceID]);
+    } else {
+      // Create new record
+      await db.query(`
+        INSERT INTO attendance (
+          SubjectCode, 
+          StudentID, 
+          StatusID, 
+          Date, 
+          CreatedAt
+        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      `, [subjectCode, studentID, statusID, today]);
+    }
+
+    res.json({
+      success: true,
+      message: 'Attendance updated successfully'
+    });
+
+  } catch (error) {
+    console.error('Attendance update error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update attendance',
+      error: error.message
+    });
+  }
+});
 
 export default router;
