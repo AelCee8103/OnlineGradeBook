@@ -8,14 +8,17 @@ import axios from "axios";
 import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { Dialog } from "@headlessui/react";
+import { Toaster, toast } from "react-hot-toast"; // Changed this line
 
 const ClassAdvisory = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [advisoryData, setAdvisoryData] = useState({
     grade: "",
     section: "",
     advisorName: "Not Assigned",
-    schoolYear: "", // Add this
+    schoolYear: "",
+    advisoryID: null
   });
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +27,7 @@ const ClassAdvisory = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [selectedStudentInfo, setSelectedStudentInfo] = useState(null);
+  const [lastRequestDate, setLastRequestDate] = useState(null);
   const studentsPerPage = 5;
   const navigate = useNavigate();
 
@@ -32,7 +36,7 @@ const ClassAdvisory = () => {
       setLoading(true);
       const token = localStorage.getItem("token");
       if (!token) return navigate("/faculty-login");
-
+  
       const { data } = await axios.get(
         "http://localhost:3000/auth/faculty-class-advisory",
         {
@@ -40,27 +44,27 @@ const ClassAdvisory = () => {
           timeout: 10000,
         }
       );
-
+  
       if (data.message === "No advisory class assigned") {
         setAdvisoryData({
           grade: "",
           section: "",
           advisorName: data.advisorName || "Not Assigned",
-          schoolYear: "", // Add this
+          advisoryID: null
         });
         setStudents([]);
         setError("No advisory class assigned to you");
         return;
       }
-
+  
       if (!data.grade || !data.section)
         throw new Error("Incomplete advisory data received");
-
+  
       setAdvisoryData({
         grade: data.grade,
         section: data.section,
         advisorName: data.advisorName,
-        // Remove schoolYear: data.schoolYear,
+        advisoryID: data.advisoryID
       });
       setStudents(data.students || []);
     } catch (err) {
@@ -94,13 +98,112 @@ const ClassAdvisory = () => {
         ...response.data,
         grade: advisoryData.grade,
         section: advisoryData.section,
-        // Remove schoolYear reference
       });
       setStudentModalOpen(true);
     } catch (error) {
       console.error("Error fetching student details:", error);
-      alert("Failed to fetch student details");
+      toast.error("Failed to fetch student details", {
+        duration: 4000,
+        position: 'top-center',
+        icon: '❌'
+      });
     }
+  };
+
+  const handleValidateGrades = async () => {
+    try {
+      if (!advisoryData.advisoryID) {
+        toast.error("No advisory class assigned or advisory ID missing");
+        return;
+      }
+  
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast.error("Authentication token missing");
+        navigate("/faculty-login");
+        return;
+      }
+  
+      // Check if there's a pending request
+      const checkResponse = await axios.get(
+        `http://localhost:3000/Pages/faculty/check-pending-request/${advisoryData.advisoryID}`,
+        { 
+          headers: { Authorization: `Bearer ${token}` } 
+        }
+      );
+  
+      if (checkResponse.data.hasPendingRequest) {
+        toast.error("You already requested validation. Please wait for admin approval.");
+        return;
+      }
+  
+      setIsValidating(true);
+      const loadingToast = toast.loading("Submitting validation requests...");
+  
+      const response = await axios.post(
+        "http://localhost:3000/Pages/faculty/validate-grades",
+        { advisoryID: advisoryData.advisoryID },
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          } 
+        }
+      );
+  
+      if (response.data.success) {
+        setLastRequestDate(response.data.requestDate);
+        toast.dismiss(loadingToast);
+        toast.success("Validation request sent successfully", {
+          duration: 4000,
+          position: 'top-center',
+          icon: '✅'
+        });
+      } else {
+        throw new Error(response.data.message || "Failed to create validation requests");
+      }
+    } catch (error) {
+      console.error("Error validating grades:", error);
+      toast.dismiss();
+  
+      if (error.response?.status === 403) {
+        toast.error("You don't have permission to perform this action", {
+          duration: 4000,
+          position: 'top-center',
+          icon: '❌'
+        });
+        navigate("/faculty-login");
+      } else if (error.response?.status === 400 && error.response.data.message.includes("pending")) {
+        toast.error("You already have a pending validation request", {
+          duration: 4000,
+          position: 'top-center',
+          icon: '❌'
+        });
+      } else {
+        toast.error(
+          error.response?.data?.message || 
+          error.message || 
+          "Failed to submit grades for validation",
+          {
+            duration: 4000,
+            position: 'top-center',
+            icon: '❌'
+          }
+        );
+      }
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const filteredStudents = students.filter(
@@ -155,6 +258,17 @@ const ClassAdvisory = () => {
 
   return (
     <div className="flex h-screen bg-gray-100">
+      <Toaster
+      position="top-center"
+      reverseOrder={false}
+      toastOptions={{
+        duration: 4000,
+        style: {
+          background: '#363636',
+          color: '#fff',
+        },
+      }}
+    />
       <FacultySidePanel
         isSidebarOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -187,6 +301,14 @@ const ClassAdvisory = () => {
                 </p>
               </div>
             </div>
+            {lastRequestDate && (
+              <div className="mt-4">
+                <p className="text-sm text-gray-500">Last Validation Request</p>
+                <p className="text-lg font-semibold">
+                  {formatDate(lastRequestDate)}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-xl shadow border border-gray-200">
@@ -204,8 +326,16 @@ const ClassAdvisory = () => {
                   className="w-full pl-10 pr-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
-              <button className="ml-4 bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition">
-                Validate
+              <button 
+                onClick={handleValidateGrades}
+                disabled={isValidating || !advisoryData.advisoryID}
+                className={`ml-4 px-4 py-2 rounded-md transition ${
+                  isValidating || !advisoryData.advisoryID
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-green-700 hover:bg-green-800 text-white"
+                }`}
+              >
+                {isValidating ? "Submitting..." : "Validate"}
               </button>
             </div>
 

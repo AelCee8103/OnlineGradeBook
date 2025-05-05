@@ -11,41 +11,17 @@ const ValidationRequest = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [students, setStudents] = useState([]);
   const Navigate = useNavigate();  //  Consistent with your sample
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [showGradesModal, setShowGradesModal] = useState(false);
   
 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
   const studentsPerPage = 5; // Customize how many students per page
 
-  useEffect(() => {
-    // Simulated fetch - Replace this with your actual API call
-    setStudents([
-      { id: 1, name: "John Doe", studentNumber: "2021001" },
-      { id: 2, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 3, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 4, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 5, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 6, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 7, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 8, name: "Olivia Anderson", studentNumber: "2021008" },
-      { id: 9, name: "John Doe", studentNumber: "2021001" },
-      { id: 10, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 11, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 12, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 13, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 14, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 15, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 16, name: "Olivia Anderson", studentNumber: "2021008" },
-      { id: 17, name: "John Doe", studentNumber: "2021001" },
-      { id: 18, name: "Jane Smith", studentNumber: "2021002" },
-      { id: 19, name: "Alice Johnson", studentNumber: "2021003" },
-      { id: 20, name: "Bob Brown", studentNumber: "2021004" },
-      { id: 21, name: "Charlie Davis", studentNumber: "2021005" },
-      { id: 22, name: "Emma Wilson", studentNumber: "2021006" },
-      { id: 23, name: "Michael Miller", studentNumber: "2021007" },
-      { id: 24, name: "Olivia Anderson", studentNumber: "2021008" },
-    ]);
-  }, []);
 
   // Pagination logic
   const indexOfLastStudent = currentPage * studentsPerPage;
@@ -75,8 +51,87 @@ const ValidationRequest = () => {
   };
 
   useEffect(() => {
+    const fetchRequests = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const response = await axios.get(
+          "http://localhost:3000/Pages/admin/validation-requests",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setRequests(response.data.requests);
+      } catch (error) {
+        console.error("Error fetching requests:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRequests();
     fetchUser();
   }, []);
+
+  const handleValidationSubmit = async () => {
+    try {
+      setIsSubmitting(true);
+      const token = localStorage.getItem("token");
+      
+  
+      const advisoryId = faculty?.advisoryID; 
+      
+      if (!advisoryId) {
+        alert("No advisory class assigned");
+        return;
+      }
+  
+      await axios.post(
+        "http://localhost:3000/Pages/faculty/submit-validation",
+        { advisoryID: advisoryId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      alert("Validation request submitted successfully!");
+    } catch (error) {
+      console.error("Error submitting validation:", error);
+      alert("Failed to submit validation request");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleProcessRequest = async (requestID, action) => {
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(
+        "http://localhost:3000/Pages/admin/process-validation",
+        { requestID, action },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      // Refresh the list
+      setRequests(requests.map(req => 
+        req.requestID === requestID ? {...req, statusID: action === 'approve' ? 1 : 2} : req
+      ));
+    } catch (error) {
+      console.error("Error processing request:", error);
+      alert("Failed to process request");
+    }
+  };
+
+  const viewStudentGrades = async (requestID) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        `http://localhost:3000/Pages/admin/validation-request/${requestID}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Show the grades in a modal or navigate to a details page
+      setSelectedRequest(response.data);
+      setShowGradesModal(true);
+    } catch (error) {
+      console.error("Error fetching grades:", error);
+      toast.error("Failed to fetch grades");
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -107,7 +162,13 @@ const ValidationRequest = () => {
             <input type="text" placeholder="Search by ID number"  className="mb-4 border border-gray-300 rounded-md px-4 py-2"/>
             <FontAwesomeIcon icon={faMagnifyingGlass}  className="ml-3"/>
 
-            <button className="bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded-md ml-4">Approve All</button>
+            <button 
+              onClick={handleValidationSubmit}
+              disabled={isSubmitting}
+              className="ml-4 bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition"
+            >
+              {isSubmitting ? "Submitting..." : "Validate"}
+            </button>
             <table className="w-full text-left text-sm">
               <thead>
                 <tr className="bg-gray-100">
@@ -118,24 +179,33 @@ const ValidationRequest = () => {
                 </tr>
               </thead>
               <tbody>
-                {currentStudents.length > 0 ? (
-                  currentStudents.map((student, index) => (
-                    <tr key={student.id} className="border-b">
-                      <td className="px-4 py-2">{indexOfFirstStudent + index + 1}</td>
-                      <td className="px-4 py-2">{student.name}</td>
-                      <td className="px-4 py-2">{student.studentNumber}</td>
-                      <td className="px-4 py-2">
-                        <button className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm ml-2">
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="text-center py-4">No students found.</td>
+              {requests.map((request, index) => (
+                  <tr key={request.requestID}>
+                    <td>{index + 1}</td>
+                    <td>{request.studentName}</td>
+                    <td>{request.studentID}</td>
+                    <td>
+                      <button 
+                        onClick={() => handleProcessRequest(request.requestID, 'approve')}
+                        className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm"
+                      >
+                        Approve
+                      </button>
+                      <button 
+                        onClick={() => handleProcessRequest(request.requestID, 'reject')}
+                        className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm ml-2"
+                      >
+                        Reject
+                      </button>
+                      <button 
+                        onClick={() => Navigate(`/admin/students/${request.studentID}/grades`)}
+                        className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm ml-2"
+                      >
+                        View Grades
+                      </button>
+                    </td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
 
