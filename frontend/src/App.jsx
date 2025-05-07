@@ -27,13 +27,26 @@ import SubjectClassStudents from "./Admin/SubjectClassStudents";
 import CreateAdvisory from "./Admin/CreateAdvisory";
 import ViewStudent from "./Pages/ViewStudents";
 import ViewAttendance from "./Pages/ViewAttendance";
+import { SocketProvider } from './context/SocketContext';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
   const [count, setCount] = useState(0);
 
   return (
-    <>
+    <SocketProvider>
       <BrowserRouter>
+        <Toaster
+          position="top-center"
+          reverseOrder={false}
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: '#363636',
+              color: '#fff',
+            },
+          }}
+        />
         <Routes>
           <Route path="/" element={<Navigate to="/admin-login" />}></Route>
           <Route path="/admin-login" element={<AdminLogin />}></Route>
@@ -117,7 +130,7 @@ function App() {
           />
         </Routes>
       </BrowserRouter>
-    </>
+    </SocketProvider>
   );
 }
 
