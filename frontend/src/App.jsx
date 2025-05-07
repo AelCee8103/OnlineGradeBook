@@ -27,6 +27,7 @@ import SubjectClassStudents from "./Admin/SubjectClassStudents";
 import CreateAdvisory from "./Admin/CreateAdvisory";
 import ViewStudent from "./Pages/ViewStudents";
 import ViewAttendance from "./Pages/ViewAttendance";
+import ManageSchoolYear from "./Admin/ManageSchoolYear";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -85,7 +86,10 @@ function App() {
             element={<ArchiveRecords />}
           ></Route>
           <Route path="/admin-register" element={<Adminregister />}></Route>
-          <Route path="/admin-view-students/:advisoryID" element={<ViewStudents />} />
+          <Route
+            path="/admin-view-students/:advisoryID"
+            element={<ViewStudents />}
+          />
           <Route
             path="/admin/advisory/:advisoryID/students"
             element={<AdvisoryStudents />}
@@ -106,7 +110,10 @@ function App() {
             path="/faculty-view-students/:subjectCode"
             element={<ViewStudent />}
           />
-          <Route path="/faculty-view-attendance/:subjectCode" element={<ViewAttendance />}></Route>
+          <Route
+            path="/faculty-view-attendance/:subjectCode"
+            element={<ViewAttendance />}
+          ></Route>
 
           <Route path="/faculty-grades" element={<Grades />}></Route>
           <Route path="/faculty-attendance" element={<Attendance />}></Route>
@@ -114,6 +121,10 @@ function App() {
           <Route
             path="/faculty/students/:studentId/grades" // Changed from :studentID
             element={<StudentGrades isFaculty={true} />}
+          />
+          <Route
+            path="/admin/manage-school-year"
+            element={<ManageSchoolYear />}
           />
         </Routes>
       </BrowserRouter>

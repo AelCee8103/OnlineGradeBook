@@ -238,10 +238,11 @@ router.get("/schoolyear", async (req, res) => {
     const db = await connectToDatabase();
     const query = `
       SELECT 
-        sy.school_yearID,
-        sy.year AS SchoolYear
-      FROM schoolyear sy
-      ORDER BY sy.school_yearID
+        school_yearID,
+        year,
+        status
+      FROM schoolyear
+      ORDER BY year DESC
     `;
     const [schoolYears] = await db.query(query);
     
@@ -1335,6 +1336,64 @@ router.get('/faculty-subject-classes/:SubjectCode/students', authenticateToken, 
       });
   }
 });
+
+// Promote students to the next school year
+router.post('/admin/promote-school-year', authenticateToken, async (req, res) => {
+  const { currentYearId, nextYearId } = req.body;
+  
+  try {
+    const db = await connectToDatabase();
+    
+    // Verify years exist and next year is not active
+    const [years] = await db.query(
+      `SELECT school_yearID, year, status 
+       FROM schoolyear 
+       WHERE school_yearID IN (?, ?)`,
+      [currentYearId, nextYearId]
+    );
+
+    if (years.length !== 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid school year IDs'
+      });
+    }
+
+    const nextYear = years.find(y => y.school_yearID === nextYearId);
+    if (nextYear.status === 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Next school year is already active'
+      });
+    }
+
+    // Execute promotion procedure
+    await db.query('CALL promote_students_new_year(?, ?)', [nextYearId, currentYearId]);
+
+    // Update school year status
+    await db.query(
+      'UPDATE schoolyear SET status = CASE school_yearID ' +
+      'WHEN ? THEN 0 ' +  // Deactivate current year
+      'WHEN ? THEN 1 ' +  // Activate next year
+      'ELSE status END',
+      [currentYearId, nextYearId]
+    );
+
+    res.json({
+      success: true,
+      message: 'School year promotion completed successfully'
+    });
+
+  } catch (error) {
+    console.error('Error promoting school year:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to promote school year',
+      error: error.message
+    });
+  }
+});
+
 
 
 export default router;
