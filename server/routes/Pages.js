@@ -9,11 +9,11 @@ const router = express.Router();
 
 
 
-// GET all students
+// GET all students (only active ones)
 router.get('/admin-manage-students', async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const sql = 'SELECT * FROM students';
+    const sql = 'SELECT * FROM students WHERE Status = 1';
     const [result] = await db.query(sql);
     res.status(200).json(result);
   } catch (err) {

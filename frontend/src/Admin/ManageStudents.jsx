@@ -85,7 +85,7 @@ const ManageStudents = () => {
         // Verify authentication
         await fetchUser();
 
-        // Fetch students list
+        // Fetch only active students list (Status = 1)
         const response = await axios.get(
           "http://localhost:3000/Pages/admin-manage-students",
           {
