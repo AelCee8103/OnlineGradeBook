@@ -30,11 +30,14 @@ const ClassAdvisory = () => {
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [selectedStudentInfo, setSelectedStudentInfo] = useState(null);
   const [lastRequestDate, setLastRequestDate] = useState(null);
-  const [validationStatus, setValidationStatus] = useState({
-    hasPendingRequest: false,
-    isApproved: false,
-    isRejected: false,
-    lastRequestDate: null
+  const [validationStatus, setValidationStatus] = useState(() => {
+    const savedStatus = localStorage.getItem('validationStatus');
+    return savedStatus ? JSON.parse(savedStatus) : {
+      hasPendingRequest: false,
+      isApproved: false,
+      isRejected: false,
+      lastRequestDate: null
+    };
   });
   const studentsPerPage = 5;
   const navigate = useNavigate();
@@ -100,20 +103,38 @@ const ClassAdvisory = () => {
       );
 
       if (response.data.success) {
-        setValidationStatus({
+        const newStatus = {
           hasPendingRequest: response.data.hasPendingRequest,
           isApproved: response.data.status === 'approved',
           isRejected: response.data.status === 'rejected',
           lastRequestDate: response.data.lastRequestDate
-        });
+        };
+        
+        // Save to localStorage and update state
+        localStorage.setItem('validationStatus', JSON.stringify(newStatus));
+        setValidationStatus(newStatus);
       }
     } catch (error) {
       console.error("Error checking validation status:", error);
+      // On error, use cached status from localStorage
+      const cachedStatus = localStorage.getItem('validationStatus');
+      if (cachedStatus) {
+        setValidationStatus(JSON.parse(cachedStatus));
+      }
     }
   }, [advisoryData.advisoryID]);
 
   useEffect(() => {
     fetchAdvisoryData();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      // Clear validation status when component unmounts
+      if (!localStorage.getItem('token')) {
+        localStorage.removeItem('validationStatus');
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -129,13 +150,16 @@ const ClassAdvisory = () => {
     const handleValidationResponse = (data) => {
       const { status, message } = data;
       
-      setValidationStatus(prev => ({
-        ...prev,
+      const newStatus = {
         hasPendingRequest: false,
         isApproved: status === 'approved',
         isRejected: status === 'rejected',
         lastRequestDate: new Date().toISOString()
-      }));
+      };
+
+      // Save to localStorage and update state
+      localStorage.setItem('validationStatus', JSON.stringify(newStatus));
+      setValidationStatus(newStatus);
 
       toast[status === 'approved' ? 'success' : 'error'](
         message || `Grade validation request has been ${status}`,
@@ -184,6 +208,10 @@ const ClassAdvisory = () => {
       socket.off('validationStatusUpdate', handleStatusUpdate);
     };
   }, [socket, advisoryData.advisoryID]);
+
+  useEffect(() => {
+    localStorage.setItem('validationStatus', JSON.stringify(validationStatus));
+  }, [validationStatus]);
 
   const fetchStudentDetails = async (studentId) => {
     try {
@@ -251,11 +279,16 @@ const ClassAdvisory = () => {
           timestamp: new Date().toISOString()
         });
 
-        setValidationStatus(prev => ({
-          ...prev,
+        const newStatus = {
           hasPendingRequest: true,
+          isApproved: false,
+          isRejected: false,
           lastRequestDate: new Date().toISOString()
-        }));
+        };
+
+        // Save to localStorage and update state
+        localStorage.setItem('validationStatus', JSON.stringify(newStatus));
+        setValidationStatus(newStatus);
 
         toast.success('Validation request submitted successfully');
       }
