@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "test": "jest"
+  }
+}
+
+const { render, screen } = require('@testing-library/react');
+const ExampleComponent = require('../ExampleComponent');
+
+test('renders example component', () => {
+  render(<ExampleComponent />);
+  const linkElement = screen.getByText(/example/i);
+  expect(linkElement).toBeInTheDocument();
+});
