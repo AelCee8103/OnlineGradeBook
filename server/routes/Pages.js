@@ -10,9 +10,9 @@ const router = express.Router();
 
 
 // GET all students
-router.get('/admin-manage-students', async (req, res) => {
+router.get('/admin/manage-students', authenticateToken, async (req, res) => {
   try {
-      // Check if user is admin
+    // Check if user is admin
     if (req.user.role !== 'admin') {
       return res.status(403).json({ 
         success: false, 
@@ -21,12 +21,19 @@ router.get('/admin-manage-students', async (req, res) => {
     }
 
     const db = await connectToDatabase();
-    const sql = 'SELECT * FROM students';
-    const [result] = await db.query(sql);
-    res.status(200).json(result);
-  } catch (err) {
-    console.error('Error fetching students:', err);
-    res.status(500).json({ message: 'Server Error' });
+    const [students] = await db.query(`
+      SELECT StudentID, LastName, FirstName, MiddleName 
+      FROM students 
+      ORDER BY LastName, FirstName
+    `);
+
+    res.status(200).json(students);
+  } catch (error) {
+    console.error('Error fetching students:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch students' 
+    });
   }
 });
 
@@ -1673,5 +1680,3 @@ router.get("/faculty-class-advisory", authenticateToken, async (req, res) => {
     });
   }
 });
-
-export default router;

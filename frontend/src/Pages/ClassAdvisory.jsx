@@ -1,6 +1,6 @@
 // ClassAdvisory.jsx
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import NavbarFaculty from "../components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
@@ -11,6 +11,27 @@ import { Dialog } from "@headlessui/react";
 import { Toaster, toast } from "react-hot-toast";
 import { useSocket } from '../context/SocketContext'; // Use the socket from context
 import NotificationDropdown from "../components/NotificationDropdown";
+
+// Add this helper function at the top of the file, outside the component
+const getStoredValidationStatus = (advisoryID) => {
+  try {
+    const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+    return allStatuses[advisoryID] || {
+      hasPendingRequest: false,
+      isApproved: false,
+      isRejected: false,
+      lastRequestDate: null
+    };
+  } catch (error) {
+    console.error('Error parsing stored validation status:', error);
+    return {
+      hasPendingRequest: false,
+      isApproved: false,
+      isRejected: false,
+      lastRequestDate: null
+    };
+  }
+};
 
 const ClassAdvisory = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -30,18 +51,13 @@ const ClassAdvisory = () => {
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [selectedStudentInfo, setSelectedStudentInfo] = useState(null);
   const [lastRequestDate, setLastRequestDate] = useState(null);
-  const [validationStatus, setValidationStatus] = useState(() => {
-    const savedStatus = localStorage.getItem('validationStatus');
-    return savedStatus ? JSON.parse(savedStatus) : {
-      hasPendingRequest: false,
-      isApproved: false,
-      isRejected: false,
-      lastRequestDate: null
-    };
-  });
+  const [validationStatus, setValidationStatus] = useState(() => 
+    getStoredValidationStatus(localStorage.getItem('currentAdvisoryID'))
+  );
   const studentsPerPage = 5;
   const navigate = useNavigate();
   const socket = useSocket(); // Use the socket from context
+  const currentAdvisoryIDRef = useRef(null);
 
   const fetchAdvisoryData = async () => {
     try {
@@ -72,12 +88,21 @@ const ClassAdvisory = () => {
       if (!data.grade || !data.section)
         throw new Error("Incomplete advisory data received");
 
+      // Store the advisory ID
+      localStorage.setItem('currentAdvisoryID', data.advisoryID);
+      currentAdvisoryIDRef.current = data.advisoryID;
+
       setAdvisoryData({
         grade: data.grade,
         section: data.section,
         advisorName: data.advisorName,
         advisoryID: data.advisoryID
       });
+
+      // Load the stored validation status for this advisory
+      const storedStatus = getStoredValidationStatus(data.advisoryID);
+      setValidationStatus(storedStatus);
+
       setStudents(data.students || []);
     } catch (err) {
       const msg =
@@ -110,31 +135,23 @@ const ClassAdvisory = () => {
           lastRequestDate: response.data.lastRequestDate
         };
         
-        // Save to localStorage and update state
-        localStorage.setItem('validationStatus', JSON.stringify(newStatus));
+        // Save to localStorage with advisoryID as key
+        const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+        allStatuses[advisoryData.advisoryID] = newStatus;
+        localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
+        
         setValidationStatus(newStatus);
       }
     } catch (error) {
       console.error("Error checking validation status:", error);
-      // On error, use cached status from localStorage
-      const cachedStatus = localStorage.getItem('validationStatus');
-      if (cachedStatus) {
-        setValidationStatus(JSON.parse(cachedStatus));
-      }
+      // On error, use cached status
+      const cachedStatus = getStoredValidationStatus(advisoryData.advisoryID);
+      setValidationStatus(cachedStatus);
     }
   }, [advisoryData.advisoryID]);
 
   useEffect(() => {
     fetchAdvisoryData();
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      // Clear validation status when component unmounts
-      if (!localStorage.getItem('token')) {
-        localStorage.removeItem('validationStatus');
-      }
-    };
   }, []);
 
   useEffect(() => {
@@ -145,7 +162,7 @@ const ClassAdvisory = () => {
   }, [checkValidationStatus]);
 
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !advisoryData.advisoryID) return;
 
     const handleValidationResponse = (data) => {
       const { status, message } = data;
@@ -157,8 +174,11 @@ const ClassAdvisory = () => {
         lastRequestDate: new Date().toISOString()
       };
 
-      // Save to localStorage and update state
-      localStorage.setItem('validationStatus', JSON.stringify(newStatus));
+      // Update localStorage with the new status
+      const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+      allStatuses[advisoryData.advisoryID] = newStatus;
+      localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
+
       setValidationStatus(newStatus);
 
       toast[status === 'approved' ? 'success' : 'error'](
@@ -174,43 +194,24 @@ const ClassAdvisory = () => {
       }
     };
 
-    // Listen for validation responses
     socket.on('validationResponseReceived', handleValidationResponse);
 
-    // Clean up the listener when component unmounts or socket changes
     return () => {
       socket.off('validationResponseReceived', handleValidationResponse);
     };
-  }, [socket, fetchAdvisoryData]);
+  }, [socket, advisoryData.advisoryID, fetchAdvisoryData]);
 
   useEffect(() => {
-    if (!socket) return;
-
-    // Get faculty information from localStorage
-    const facultyID = localStorage.getItem('facultyID');
-
-    // Handle socket events here
-    const handleStatusUpdate = (data) => {
-      if (data.advisoryID === advisoryData.advisoryID) {
-        setValidationStatus(prev => ({
-          ...prev,
-          hasPendingRequest: false,
-          isApproved: data.status === 'approved',
-          isRejected: data.status === 'rejected',
-          lastRequestDate: new Date(data.timestamp)
-        }));
+    return () => {
+      // Keep validation statuses in localStorage even after logout
+      // They will be cleared only when explicitly needed
+      const currentAdvisoryID = currentAdvisoryIDRef.current;
+      if (currentAdvisoryID) {
+        const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+        allStatuses[currentAdvisoryID] = validationStatus;
+        localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
       }
     };
-
-    socket.on('validationStatusUpdate', handleStatusUpdate);
-
-    return () => {
-      socket.off('validationStatusUpdate', handleStatusUpdate);
-    };
-  }, [socket, advisoryData.advisoryID]);
-
-  useEffect(() => {
-    localStorage.setItem('validationStatus', JSON.stringify(validationStatus));
   }, [validationStatus]);
 
   const fetchStudentDetails = async (studentId) => {
@@ -287,7 +288,9 @@ const ClassAdvisory = () => {
         };
 
         // Save to localStorage and update state
-        localStorage.setItem('validationStatus', JSON.stringify(newStatus));
+        const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+        allStatuses[advisoryData.advisoryID] = newStatus;
+        localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
         setValidationStatus(newStatus);
 
         toast.success('Validation request submitted successfully');
