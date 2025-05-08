@@ -128,31 +128,43 @@ io.on('connection', (socket) => {
   });
 
   // Handle validation responses
- // In index.js socket.io handler
-  socket.on('validationResponse', (data) => {
-  try {
-    if (!socket.userID || socket.userType !== 'admin') {
-      throw new Error('Unauthorized');
-    }
+  socket.on('validationResponse', async (data) => {
+    try {
+      if (!socket.userID || socket.userType !== 'admin') {
+        throw new Error('Unauthorized');
+      }
 
-    console.log('Validation response:', data);
-    
-    // Find faculty socket
-    const facultyInfo = connectedUsers.get(data.facultyID);
-    
-    if (facultyInfo) {
-      console.log(`Sending notification to faculty ${data.facultyID}`);
-      io.to(facultyInfo.socket).emit('validationResponseReceived', {
-        ...data,
-        timestamp: new Date().toISOString()
+      const { facultyID, status, requestID, message } = data;
+      const facultySocket = Array.from(connectedUsers.entries())
+        .find(([id, user]) => id === facultyID)?.[1]?.socket;
+
+      if (facultySocket) {
+        io.to(facultySocket).emit('validationResponseReceived', {
+          status,
+          requestID,
+          message,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // Broadcast the status update to all admin users
+      const adminSockets = Array.from(connectedUsers.entries())
+        .filter(([_, user]) => user.userType === 'admin')
+        .map(([_, user]) => user.socket);
+
+      adminSockets.forEach(adminSocket => {
+        io.to(adminSocket).emit('validationStatusUpdate', {
+          requestID,
+          status,
+          timestamp: new Date().toISOString()
+        });
       });
-    } else {
-      console.log(`Faculty ${data.facultyID} not currently connected`);
+
+    } catch (error) {
+      console.error('Error handling validation response:', error);
+      socket.emit('error', { message: 'Failed to process validation response' });
     }
-  } catch (error) {
-    console.error('Error handling validation response:', error);
-  }
-});
+  });
 
   socket.on('disconnect', () => {
     if (socket.userID) {

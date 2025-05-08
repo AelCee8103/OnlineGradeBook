@@ -50,67 +50,40 @@ const ValidationRequest = () => {
     }
   }, [navigate]);
 
- // Update the useEffect for socket handling in ValidationRequest.jsx
-useEffect(() => {
-  // Load stored requests on mount
-  fetchRequests();
+  // Update the useEffect for socket handling
+  useEffect(() => {
+    fetchRequests();
 
-  if (!socket) return;
+    if (!socket) return;
 
-  const adminID = localStorage.getItem('adminID');
-  const adminName = localStorage.getItem('adminName');
+    const handleNewRequest = (data) => {
+      console.log('New validation request received:', data);
+      setRequests(prev => {
+        const newRequest = {
+          requestID: data.requestID,
+          facultyID: data.facultyID,
+          facultyName: data.facultyName,
+          Grade: data.grade,
+          Section: data.section,
+          schoolYear: data.schoolYear,
+          advisoryID: data.advisoryID,
+          requestDate: new Date().toLocaleString()
+        };
+        return [newRequest, ...prev];
+      });
+    };
 
-  const handleAuthenticated = (response) => {
-    if (response.success) {
-      console.log('Admin socket authenticated successfully');
-    } else {
-      console.error('Admin socket authentication failed:', response.error);
-      toast.error('Failed to connect to notification service');
-    }
-  };
+    socket.on('newValidationRequest', handleNewRequest);
 
-  const handleNewRequest = (data) => {
-    console.log('New validation request received:', data);
-    setRequests(prev => {
-      const newRequest = {
-        requestID: data.requestID,
-        facultyID: data.facultyID,
-        facultyName: data.facultyName,
-        Grade: data.grade,
-        Section: data.section,
-        schoolYear: data.schoolYear,
-        advisoryID: data.advisoryID,
-        requestDate: new Date().toLocaleString()
-      };
-      return [newRequest, ...prev];
-    });
-    toast.success(`New validation request from ${data.facultyName}`);
-  };
-
-  if (adminID) {
-    socket.emit('authenticate', {
-      userType: 'admin',
-      userID: adminID,
-      adminName: adminName
-    });
-
-    socket.on('authenticated', handleAuthenticated);
-  }
-
-  socket.on('newValidationRequest', handleNewRequest);
-
-  return () => {
-    if (socket) {
-      socket.off('authenticated', handleAuthenticated);
+    return () => {
       socket.off('newValidationRequest', handleNewRequest);
-    }
-  };
-}, [socket, fetchRequests]);
+    };
+  }, [socket, fetchRequests]);
 
+  // Update handleProcessRequest to emit real-time updates
   const handleProcessRequest = async (requestID, action, facultyID, advisoryID) => {
     try {
       const token = localStorage.getItem("token");
-
       const response = await axios.post(
         "http://localhost:3000/Pages/admin/process-validation",
         { requestID, action },
@@ -118,7 +91,7 @@ useEffect(() => {
       );
 
       if (response.data.success) {
-        // Remove processed request from list
+        // Remove processed request from list immediately
         setRequests(prev => prev.filter(req => req.requestID !== requestID));
         
         // Emit socket event for faculty notification
@@ -126,7 +99,7 @@ useEffect(() => {
           requestID,
           facultyID,
           status: action,
-          message: `Request ${action}ed successfully`,
+          message: `Grade validation request has been ${action}ed`,
           timestamp: new Date().toISOString()
         });
       }
