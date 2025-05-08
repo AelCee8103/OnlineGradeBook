@@ -114,24 +114,106 @@ router.get('/admin-manage-faculty', async (req, res) => {
 });
 
 // POST add student
-router.post('/admin-manage-students', async (req, res) => {
+router.post('/admin-manage-students', authenticateToken, async (req, res) => {
+  const { LastName, FirstName, MiddleName, studentType, grade } = req.body;
+  let db;
+  
   try {
-    const db = await connectToDatabase();
+    db = await connectToDatabase();
+    await db.query('START TRANSACTION');
 
-    const { StudentID, LastName, FirstName, MiddleName} = req.body;
+    // Set grade level based on student type
+    const studentGrade = studentType === 'new' ? 7 : parseInt(grade);
 
-    // Validate that none of the fields are undefined
-    if (!StudentID || !LastName || !FirstName || !MiddleName) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    // Input validation
+    if (!LastName || !FirstName || !MiddleName || !studentType) {
+      await db.query('ROLLBACK');
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields' 
+      });
     }
 
-    const sql = "INSERT INTO students (StudentID, LastName, FirstName, MiddleName) VALUES (?, ?, ?, ?)";
-    const [result] = await db.query(sql, [StudentID, LastName, FirstName, MiddleName]);
+    if (studentType === 'transferee' && !grade) {
+      await db.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: 'Grade level is required for transferee students'
+      });
+    }
 
-    res.status(200).json({ message: 'Student added successfully', result });
-  } catch (err) {
-    console.error('Error adding student:', err);
-    res.status(500).json({ message: 'Server Error' });
+    // Get current school year
+    const [currentYear] = await db.query(
+      'SELECT school_yearID FROM schoolyear WHERE status = 1'
+    );
+
+    if (!currentYear.length) {
+      await db.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: 'No active school year found'
+      });
+    }
+
+    // Insert student
+    const [studentResult] = await db.query(
+      'INSERT INTO students (LastName, FirstName, MiddleName, Status, isNew) VALUES (?, ?, ?, 1, ?)',
+      [LastName, FirstName, MiddleName, studentType === 'new' ? 1 : 0]
+    );
+
+    const StudentID = studentResult.insertId;
+
+    // Find available advisory for grade level
+    const [advisory] = await db.query(`
+      SELECT a.advisoryID 
+      FROM advisory a 
+      JOIN classes c ON a.classID = c.ClassID  
+      LEFT JOIN student_classes sc ON a.advisoryID = sc.advisoryID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      WHERE c.Grade = ? 
+      AND cy.yearID = ?
+      GROUP BY a.advisoryID
+      HAVING COUNT(sc.StudentID) < 50 OR COUNT(sc.StudentID) IS NULL
+      ORDER BY COUNT(sc.StudentID) ASC
+      LIMIT 1
+    `, [studentGrade, currentYear[0].school_yearID]);
+
+    if (!advisory.length) {
+      await db.query('ROLLBACK');
+      return res.status(400).json({
+        success: false,
+        error: `No available section found for Grade ${studentGrade}`
+      });
+    }
+
+    // Assign student to advisory class
+    await db.query(
+      'INSERT INTO student_classes (StudentID, school_yearID, advisoryID) VALUES (?, ?, ?)',
+      [StudentID, currentYear[0].school_yearID, advisory[0].advisoryID]
+    );
+
+    await db.query('COMMIT');
+
+    // Return success response with student data
+    res.status(201).json({ 
+      success: true, 
+      student: {
+        StudentID,
+        LastName,
+        FirstName,
+        MiddleName,
+        grade: studentGrade,
+        advisoryID: advisory[0].advisoryID
+      }
+    });
+
+  } catch (error) {
+    if (db) await db.query('ROLLBACK');
+    console.error('Error adding student:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to add student'
+    });
   }
 });
 
