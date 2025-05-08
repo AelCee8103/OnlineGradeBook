@@ -10,6 +10,32 @@ const NotificationDropdown = ({ userType }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const socket = useSocket();
 
+  // Load notifications from localStorage on mount
+  useEffect(() => {
+    const savedNotifications = localStorage.getItem(`${userType}Notifications`);
+    if (savedNotifications) {
+      const parsedNotifications = JSON.parse(savedNotifications);
+      setNotifications(parsedNotifications);
+      setUnreadCount(parsedNotifications.filter(n => !n.read).length);
+    }
+  }, [userType]);
+
+  // Save notifications to localStorage whenever they change
+  useEffect(() => {
+    if (notifications.length > 0) {
+      localStorage.setItem(`${userType}Notifications`, JSON.stringify(notifications));
+    }
+  }, [notifications, userType]);
+
+  const handleNewNotification = (notification) => {
+    setNotifications(prev => {
+      const newNotifications = [notification, ...prev];
+      localStorage.setItem(`${userType}Notifications`, JSON.stringify(newNotifications));
+      return newNotifications;
+    });
+    setUnreadCount(prev => prev + 1);
+  };
+
   useEffect(() => {
     if (!socket) return;
 
@@ -22,23 +48,19 @@ const NotificationDropdown = ({ userType }) => {
         status: data.status,
         read: false
       };
-
-      setNotifications(prev => [newNotification, ...prev]);
-      setUnreadCount(prev => prev + 1);
+      handleNewNotification(newNotification);
     };
 
     const handleNewValidationRequest = (data) => {
       const newNotification = {
         id: Date.now(),
         message: `New validation request from ${data.facultyName} for Grade ${data.grade} - ${data.section}`,
-        timestamp: new Date(data.timestamp).toISOString(),
+        timestamp: new Date().toISOString(),
         type: 'new_request',
         facultyName: data.facultyName,
         read: false
       };
-
-      setNotifications(prev => [newNotification, ...prev]);
-      setUnreadCount(prev => prev + 1);
+      handleNewNotification(newNotification);
     };
 
     if (userType === 'faculty') {
@@ -55,21 +77,6 @@ const NotificationDropdown = ({ userType }) => {
       }
     };
   }, [socket, userType]);
-
-  // Load notifications from localStorage on mount
-  useEffect(() => {
-    const savedNotifications = localStorage.getItem(`${userType}Notifications`);
-    if (savedNotifications) {
-      const parsedNotifications = JSON.parse(savedNotifications);
-      setNotifications(parsedNotifications);
-      setUnreadCount(parsedNotifications.filter(n => !n.read).length);
-    }
-  }, [userType]);
-
-  // Save notifications to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem(`${userType}Notifications`, JSON.stringify(notifications));
-  }, [notifications, userType]);
 
   const markAsRead = (notificationId) => {
     setNotifications(prev => 
