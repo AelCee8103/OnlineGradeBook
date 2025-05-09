@@ -1,3 +1,5 @@
+// ClassAdvisory.jsx
+
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import NavbarFaculty from "../components/NavbarFaculty";
@@ -14,27 +16,12 @@ import NotificationDropdown from "../components/NotificationDropdown";
 const getStoredValidationStatus = (advisoryID) => {
   try {
     const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
-    const storedStatus = allStatuses[advisoryID] || {
+    return allStatuses[advisoryID] || {
       hasPendingRequest: false,
       isApproved: false,
       isRejected: false,
       lastRequestDate: null
     };
-
-    // Clear pending status if it's older than 1 hour (3600000 ms)
-    if (storedStatus.hasPendingRequest && storedStatus.lastRequestDate) {
-      const requestAge = Date.now() - new Date(storedStatus.lastRequestDate).getTime();
-      if (requestAge > 3600000) { // 1 hour
-        return {
-          hasPendingRequest: false,
-          isApproved: false,
-          isRejected: false,
-          lastRequestDate: storedStatus.lastRequestDate
-        };
-      }
-    }
-
-    return storedStatus;
   } catch (error) {
     console.error('Error parsing stored validation status:', error);
     return {
@@ -44,7 +31,7 @@ const getStoredValidationStatus = (advisoryID) => {
       lastRequestDate: null
     };
   }
-};  
+};
 
 const ClassAdvisory = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -133,30 +120,31 @@ const ClassAdvisory = () => {
   const checkValidationStatus = useCallback(async () => {
     try {
       if (!advisoryData.advisoryID) return;
-  
+
       const token = localStorage.getItem("token");
       const response = await axios.get(
         `http://localhost:3000/Pages/faculty/check-pending-request/${advisoryData.advisoryID}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-  
-      // Always use server response as source of truth
-      const newStatus = {
-        hasPendingRequest: response.data.hasPendingRequest,
-        isApproved: response.data.status === 'approved',
-        isRejected: response.data.status === 'rejected',
-        lastRequestDate: response.data.lastRequestDate
-      };
-      
-      // Save to localStorage with advisoryID as key
-      const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
-      allStatuses[advisoryData.advisoryID] = newStatus;
-      localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
-      
-      setValidationStatus(newStatus);
+
+      if (response.data.success) {
+        const newStatus = {
+          hasPendingRequest: response.data.hasPendingRequest,
+          isApproved: response.data.status === 'approved',
+          isRejected: response.data.status === 'rejected',
+          lastRequestDate: response.data.lastRequestDate
+        };
+        
+        // Save to localStorage with advisoryID as key
+        const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+        allStatuses[advisoryData.advisoryID] = newStatus;
+        localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
+        
+        setValidationStatus(newStatus);
+      }
     } catch (error) {
       console.error("Error checking validation status:", error);
-      // On error, use cached status but clear if pending is too old
+      // On error, use cached status
       const cachedStatus = getStoredValidationStatus(advisoryData.advisoryID);
       setValidationStatus(cachedStatus);
     }
@@ -454,16 +442,16 @@ const ClassAdvisory = () => {
                       'bg-blue-400'
                     }`} />
                     <p className="text-lg font-semibold">
-                    {validationStatus.hasPendingRequest ? (
-                      <span className="text-yellow-600">Pending Approval</span>
-                    ) : validationStatus.isApproved ? (
-                      <span className="text-green-600">Approved ({formatDate(validationStatus.lastRequestDate)})</span>
-                    ) : validationStatus.isRejected ? (
-                      <span className="text-red-600">Rejected</span>
-                    ) : (
-                      <span className="text-blue-600">Ready for Validation</span>
-                    )}
-                  </p>
+                      {validationStatus.hasPendingRequest ? (
+                        <span className="text-yellow-600">Pending Approval</span>
+                      ) : validationStatus.isApproved ? (
+                        <span className="text-green-600">Approved</span>
+                      ) : validationStatus.isRejected ? (
+                        <span className="text-red-600">Rejected</span>
+                      ) : (
+                        <span className="text-blue-600">Ready for Validation</span>
+                      )}
+                    </p>
                   </div>
                   {validationStatus.lastRequestDate && (
                     <p className="text-sm text-gray-500 mt-1">
@@ -472,24 +460,16 @@ const ClassAdvisory = () => {
                   )}
                 </div>
                 <button 
-                onClick={handleValidateGrades}
-                disabled={
-                  isValidating || 
-                  validationStatus.hasPendingRequest || 
-                  // Remove validationStatus.isApproved from here
-                  !advisoryData.advisoryID
-                }
-                className={`px-4 py-2 rounded-md transition ${
-                  isValidating || validationStatus.hasPendingRequest || !advisoryData.advisoryID
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-green-700 hover:bg-green-800 text-white"
-                }`}
-              >
-                {isValidating ? "Submitting..." : 
-                validationStatus.hasPendingRequest ? "Pending Approval" :
-                validationStatus.isApproved ? "Validate Again" : 
-                "Validate Grades"}
-              </button>
+                  onClick={handleValidateGrades}
+                  disabled={isValidating || validationStatus.hasPendingRequest || validationStatus.isApproved}
+                  className={`px-4 py-2 rounded-md transition ${
+                    isValidating || validationStatus.hasPendingRequest || validationStatus.isApproved
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-green-700 hover:bg-green-800 text-white"
+                  }`}
+                >
+                  {isValidating ? "Submitting..." : "Validate Grades"}
+                </button>
               </div>
             </div>
           </div>

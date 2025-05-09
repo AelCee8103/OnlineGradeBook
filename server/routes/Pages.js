@@ -10,15 +10,30 @@ const router = express.Router();
 
 
 // GET all students
-router.get('/admin-manage-students', async (req, res) => {
+router.get('/admin/manage-students', authenticateToken, async (req, res) => {
   try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Unauthorized access' 
+      });
+    }
+
     const db = await connectToDatabase();
-    const sql = 'SELECT * FROM students';
-    const [result] = await db.query(sql);
-    res.status(200).json(result);
-  } catch (err) {
-    console.error('Error fetching students:', err);
-    res.status(500).json({ message: 'Server Error' });
+    const [students] = await db.query(`
+      SELECT StudentID, LastName, FirstName, MiddleName 
+      FROM students 
+      ORDER BY LastName, FirstName
+    `);
+
+    res.status(200).json(students);
+  } catch (error) {
+    console.error('Error fetching students:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch students' 
+    });
   }
 });
 
@@ -1366,17 +1381,8 @@ router.post('/faculty/submit-validation', authenticateToken, async (req, res) =>
 });
 
 
-// Get all pending validation requests
 router.get('/admin/validation-requests', authenticateToken, async (req, res) => {
   try {
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Unauthorized access' 
-      });
-    }
-
     const db = await connectToDatabase();
     
     const [requests] = await db.query(`
@@ -1388,26 +1394,22 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
         CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
         c.Grade,
         c.Section,
-        sy.year AS schoolYear,
-        vs.status_name AS status
+        sy.year AS schoolYear
       FROM validation_request vr
       JOIN faculty f ON vr.facultyID = f.FacultyID
       JOIN advisory a ON vr.advisoryID = a.advisoryID
       JOIN classes c ON a.classID = c.ClassID
       JOIN class_year cy ON a.advisoryID = cy.advisoryID
       JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      JOIN validation_status vs ON vr.statusID = vs.validation_statusID
-      ORDER BY 
-        CASE WHEN vr.statusID = 0 THEN 0 ELSE 1 END, -- Show pending requests first
-        vr.requestDate DESC
+      WHERE vr.statusID = 0
+      ORDER BY vr.requestDate DESC
     `);
 
     res.json({ 
       success: true, 
       requests: requests.map(req => ({
         ...req,
-        requestDate: new Date(req.requestDate).toLocaleString(),
-        isPending: req.status === 'Pending'
+        requestDate: new Date(req.requestDate).toLocaleString()
       }))
     });
 
@@ -1421,131 +1423,17 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
   }
 });
 
-// Get details of a specific validation request
-router.get('/admin/validation-requests/:requestID', authenticateToken, async (req, res) => {
+router.post('/admin/process-validation', async (req, res) => {
+  const { requestID, action } = req.body; // action: 'approve' or 'reject'
+
   try {
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Unauthorized access' 
-      });
-    }
-
     const db = await connectToDatabase();
-    const { requestID } = req.params;
-
-    const [request] = await db.query(`
-      SELECT 
-        vr.*,
-        CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
-        c.Grade,
-        c.Section,
-        sy.year AS schoolYear,
-        vs.status_name AS status
-      FROM validation_request vr
-      JOIN faculty f ON vr.facultyID = f.FacultyID
-      JOIN advisory a ON vr.advisoryID = a.advisoryID
-      JOIN classes c ON a.classID = c.ClassID
-      JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      JOIN validation_status vs ON vr.statusID = vs.validation_statusID
-      WHERE vr.requestID = ?
-    `, [requestID]);
-
-    if (request.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Request not found' 
-      });
-    }
-
-    // Get students in this advisory class
-    const [students] = await db.query(`
-      SELECT 
-        s.StudentID,
-        CONCAT(s.LastName, ', ', s.FirstName) AS studentName
-      FROM students s
-      JOIN student_classes sc ON s.StudentID = sc.StudentID
-      WHERE sc.advisoryID = ?
-      ORDER BY s.LastName, s.FirstName
-    `, [request[0].advisoryID]);
-
-    res.json({ 
-      success: true, 
-      request: {
-        ...request[0],
-        requestDate: new Date(request[0].requestDate).toLocaleString(),
-        students
-      }
-    });
-
-  } catch (error) {
-    console.error("Error fetching validation request:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch request",
-      error: error.message 
-    });
-  }
-});
-
-// Admin approve/reject validation request
-router.post('/admin/process-validation', authenticateToken, async (req, res) => {
-  try {
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Unauthorized access' 
-      });
-    }
-
-    const db = await connectToDatabase();
-    const { requestID, action } = req.body; // action: 'approve' or 'reject'
-
-    // Validate input
-    if (!requestID || !action || !['approve', 'reject'].includes(action)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid request data' 
-      });
-    }
-
-    // Set statusID based on action
     const statusID = action === 'approve' ? 1 : 2;
 
-    // Update the validation request
-    const [result] = await db.query(
-      `UPDATE validation_request 
-       SET statusID = ? 
-       WHERE requestID = ?`,
+    await db.query(
+      `UPDATE validation_request SET statusID = ? WHERE requestID = ?`,
       [statusID, requestID]
     );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Request not found' 
-      });
-    }
-
-    // If approved, we might want to do additional actions like finalizing grades
-    if (action === 'approve') {
-      // Get the advisoryID from the request
-      const [requestData] = await db.query(
-        `SELECT advisoryID FROM validation_request WHERE requestID = ?`,
-        [requestID]
-      );
-      
-      if (requestData.length > 0) {
-        const advisoryID = requestData[0].advisoryID;
-        
-        // Here you could add logic to finalize grades for this advisory class
-        // For example:
-        // await finalizeGradesForAdvisory(advisoryID);
-      }
-    }
 
     res.json({ 
       success: true, 
@@ -1554,11 +1442,7 @@ router.post('/admin/process-validation', authenticateToken, async (req, res) => 
 
   } catch (error) {
     console.error("Error processing validation:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to process request",
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: "Failed to process request" });
   }
 });
 
@@ -1796,5 +1680,3 @@ router.get("/faculty-class-advisory", authenticateToken, async (req, res) => {
     });
   }
 });
-
-export default router;

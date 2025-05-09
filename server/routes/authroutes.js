@@ -197,7 +197,7 @@ const verifyAdminToken = (req, res, next) => {
 };
 
 // Admin Dashboard (Protected Route)
-router.get(['/admin-dashboard','/admin-manage-students', '/admin-manage-faculty', '/admin-manage-grades', '/admin-adivsory-classes', '/admin-validation-request', '/admin-archive-records', '/admin-enrollment', '/admin-manage-subject',], verifyAdminToken, async (req, res) => {
+router.get(['/admin-dashboard','/admin-manage-students', '/admin-manage-faculty', '/admin-manage-grades', '/admin-adivsory-classes', '/admin-validation-request', '/admin-archive-records', '/admin-enrollment', '/admin-manage-subject'], verifyAdminToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
 
