@@ -32,7 +32,7 @@ import { Toaster } from 'react-hot-toast';
 
 function App() {
   return (
-    <SocketProvider>
+   
       <BrowserRouter>
         <Toaster
           position="top-center"
@@ -128,7 +128,7 @@ function App() {
           />
         </Routes>
       </BrowserRouter>
-    </SocketProvider>
+
   );
 }
 
