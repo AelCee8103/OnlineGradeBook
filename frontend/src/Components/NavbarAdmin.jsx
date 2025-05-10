@@ -4,6 +4,8 @@ import { faUser, faBars } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"; 
 import NotificationDropdown from "../components/NotificationDropdown"; // Adjust the import path as necessary
 import { useSocket } from "../context/SocketContext";
+import { toast } from 'react-hot-toast';
+import { showUniqueToast } from '../utils/notificationUtils';
 
 const NavbarAdmin = ({ toggleSidebar }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -12,14 +14,27 @@ const NavbarAdmin = ({ toggleSidebar }) => {
   const socket = useSocket();
 
   useEffect(() => {
-    if (!socket) return;
-
-    socket.on('connect', () => {
+    if (!socket) return;    socket.on('connect', () => {
       setSocketStatus('connected');
+      console.log('Admin socket connected');
+
+      // Re-authenticate when socket connects
+      const adminID = localStorage.getItem("adminID");
+      const adminName = localStorage.getItem("adminName");
+      
+      if (adminID && adminName) {
+        socket.emit('authenticate', {
+          userType: 'admin',
+          userID: adminID,
+          adminName: adminName
+        });
+        console.log('Admin authentication sent');
+      }
     });
 
     socket.on('disconnect', () => {
       setSocketStatus('disconnected');
+      console.log('Admin socket disconnected');
     });
 
     socket.on('authenticated', (response) => {

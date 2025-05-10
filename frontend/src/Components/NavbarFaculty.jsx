@@ -5,6 +5,7 @@ import NotificationDropdown from "./NotificationDropdown";
 import axios from "axios";
 import { useSocket } from '../context/SocketContext';
 import { toast } from 'react-hot-toast';
+import { showUniqueToast } from '../utils/notificationUtils';
 
 const NavbarFaculty = ({ toggleSidebar }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -53,14 +54,27 @@ const NavbarFaculty = ({ toggleSidebar }) => {
   }, [socket]);
 
   useEffect(() => {
-    if (!socket) return;
-
-    socket.on('connect', () => {
+    if (!socket) return;    socket.on('connect', () => {
       setSocketStatus('connected');
+      console.log('Faculty socket connected');
+
+      // Re-authenticate when socket connects
+      const facultyID = localStorage.getItem("facultyID");
+      const facultyName = localStorage.getItem("facultyName");
+      
+      if (facultyID && facultyName) {
+        socket.emit('authenticate', {
+          userType: 'faculty',
+          userID: facultyID,
+          facultyName: facultyName
+        });
+        console.log('Faculty authentication sent');
+      }
     });
 
     socket.on('disconnect', () => {
       setSocketStatus('disconnected');
+      console.log('Faculty socket disconnected');
     });
 
     socket.on('authenticated', (response) => {
