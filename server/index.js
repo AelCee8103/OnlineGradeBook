@@ -179,38 +179,38 @@ io.on('connection', (socket) => {
 
   // Handle validation responses from admins
   socket.on('validationResponse', async (data) => {
-    try {
-      if (!socket.userID || socket.userType !== 'admin') {
-        throw new Error('Unauthorized');
-      }
-
-      // Verify the request exists before broadcasting
-      const db = await connectToDatabase();
-      const [request] = await db.query(
-        'SELECT * FROM validation_request WHERE requestID = ?',
-        [data.requestID]
-      );
-
-      if (request.length > 0) {
-        // Broadcast to all admins
-        io.to('admins').emit('validationStatusUpdate', {
-          requestID: data.requestID,
-          status: data.status,
-          timestamp: new Date().toISOString()
-        });
-
-        // Notify faculty
-        io.to(`faculty_${data.facultyID}`).emit('validationResponseReceived', {
-          status: data.status,
-          requestID: data.requestID,
-          message: data.message,
-          timestamp: data.timestamp
-        });
-      }
-    } catch (error) {
-      console.error('Error handling validation response:', error);
+  try {
+    if (!socket.userID || socket.userType !== 'admin') {
+      throw new Error('Unauthorized');
     }
-  });
+
+    // Verify the request exists before broadcasting
+    const db = await connectToDatabase();
+    const [request] = await db.query(
+      'SELECT * FROM validation_request WHERE requestID = ?',
+      [data.requestID]
+    );
+
+    if (request.length > 0) {
+      // Broadcast to all admins
+      io.to('admins').emit('validationStatusUpdate', {
+        requestID: data.requestID,
+        status: data.status,
+        timestamp: new Date().toISOString()
+      });
+
+     // In your validationResponse handler in index.js
+      io.to(`faculty_${data.facultyID}`).emit('validationResponseReceived', {
+        status: data.status,
+        requestID: data.requestID,
+        message: data.message || `Your validation request has been ${data.status}`,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Error handling validation response:', error);
+  }
+});
 
   socket.on('disconnect', () => {
     if (socket.userID) {

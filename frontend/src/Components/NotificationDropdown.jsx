@@ -10,47 +10,32 @@ const NotificationDropdown = ({ userType }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const socket = useSocket();
 
-  // Load notifications from localStorage on mount
   useEffect(() => {
-    const savedNotifications = localStorage.getItem(`${userType}Notifications`);
-    if (savedNotifications) {
-      const parsedNotifications = JSON.parse(savedNotifications);
-      setNotifications(parsedNotifications);
-      setUnreadCount(parsedNotifications.filter(n => !n.read).length);
-    }
-  }, [userType]);
-
-  // Save notifications to localStorage whenever they change
-  useEffect(() => {
-    if (notifications.length > 0) {
-      localStorage.setItem(`${userType}Notifications`, JSON.stringify(notifications));
-    }
-  }, [notifications, userType]);
-
-  const handleNewNotification = (notification) => {
-    setNotifications(prev => {
-      const newNotifications = [notification, ...prev];
-      localStorage.setItem(`${userType}Notifications`, JSON.stringify(newNotifications));
-      return newNotifications;
-    });
-    setUnreadCount(prev => prev + 1);
-  };
-
-  useEffect(() => {
-    if (!socket) return;
-
     const handleValidationResponse = (data) => {
       const newNotification = {
         id: Date.now(),
-        message: `Grade validation request has been ${data.status}`,
-        timestamp: new Date(data.timestamp).toISOString(),
+        message: data.message || `Grade validation request has been ${data.status}`,
+        timestamp: data.timestamp || new Date().toISOString(),
         type: 'validation_response',
         status: data.status,
         read: false
       };
-      handleNewNotification(newNotification);
+      setNotifications((prev) => [...prev, newNotification]);
+      setUnreadCount((prev) => prev + 1);
     };
 
+    if (userType === 'faculty') {
+      socket.on('validationResponseReceived', handleValidationResponse);
+    }
+
+    return () => {
+      if (userType === 'faculty') {
+        socket.off('validationResponseReceived', handleValidationResponse);
+      }
+    };
+  }, [socket, userType]);
+
+  useEffect(() => {
     const handleNewValidationRequest = (data) => {
       const newNotification = {
         id: Date.now(),
@@ -60,36 +45,33 @@ const NotificationDropdown = ({ userType }) => {
         facultyName: data.facultyName,
         read: false
       };
-      handleNewNotification(newNotification);
+      setNotifications((prev) => [...prev, newNotification]);
+      setUnreadCount((prev) => prev + 1);
     };
 
-    if (userType === 'faculty') {
-      socket.on('validationResponseReceived', handleValidationResponse);
-    } else if (userType === 'admin') {
+    if (userType === 'admin') {
       socket.on('newValidationRequest', handleNewValidationRequest);
     }
 
     return () => {
-      if (userType === 'faculty') {
-        socket.off('validationResponseReceived', handleValidationResponse);
-      } else if (userType === 'admin') {
+      if (userType === 'admin') {
         socket.off('newValidationRequest', handleNewValidationRequest);
       }
     };
   }, [socket, userType]);
 
   const markAsRead = (notificationId) => {
-    setNotifications(prev => 
-      prev.map(notif => 
+    setNotifications((prev) =>
+      prev.map((notif) =>
         notif.id === notificationId ? { ...notif, read: true } : notif
       )
     );
-    setUnreadCount(prev => Math.max(0, prev - 1));
+    setUnreadCount((prev) => Math.max(0, prev - 1));
   };
 
   const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(notif => ({ ...notif, read: true }))
+    setNotifications((prev) =>
+      prev.map((notif) => ({ ...notif, read: true }))
     );
     setUnreadCount(0);
   };
@@ -98,7 +80,6 @@ const NotificationDropdown = ({ userType }) => {
     setNotifications([]);
     setUnreadCount(0);
   };
-
   return (
     <div className="relative">
       <button

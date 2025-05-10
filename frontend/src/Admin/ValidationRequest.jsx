@@ -92,34 +92,38 @@ const ValidationRequest = () => {
   }, [socket, fetchRequests]);
 
 
-  const handleProcessRequest = async (requestID, action, facultyID, advisoryID) => {
-    try {
-      const token = localStorage.getItem("token");
-      
-      const response = await axios.post(
-        "http://localhost:3000/Pages/admin/process-validation",
-        { requestID, action },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+  // In ValidationRequest.jsx
+const handleProcessRequest = async (requestID, action, facultyID, advisoryID) => {
+  try {
+    const token = localStorage.getItem("token");
+    
+    const response = await axios.post(
+      "http://localhost:3000/Pages/admin/process-validation",
+      { requestID, action },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-      if (response.data.success) {
-        // Let the socket event handler update the UI after server confirms
-        socket.emit("validationResponse", {
-          requestID,
-          facultyID,
-          advisoryID,
-          status: action,
-          message: `Request ${action}ed successfully`,
-          timestamp: new Date().toISOString(),
-        });
-      }
-    } catch (error) {
-      console.error("Error processing request:", error);
-      toast.error("Failed to process request");
-      // Re-fetch to ensure UI matches server state
-      fetchRequests();
+    if (response.data.success && socket) {
+      socket.emit("validationResponse", {
+        requestID,
+        facultyID,
+        advisoryID,
+        status: action,
+        message: `Your validation request has been ${action}d`,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // Update local state optimistically
+      setRequests(prev => 
+        prev.filter(req => req.requestID !== requestID)
+      );
     }
-  };
+  } catch (error) {
+    console.error("Error processing request:", error);
+    toast.error("Failed to process request");
+    fetchRequests(); // Re-fetch to ensure UI matches server state
+  }
+};
 
   const filteredRequests = requests.filter((request) =>
     request.facultyName.toLowerCase().includes(searchTerm.toLowerCase()) ||

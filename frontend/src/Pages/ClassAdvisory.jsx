@@ -172,45 +172,62 @@ const ClassAdvisory = () => {
     return () => clearInterval(interval);
   }, [checkValidationStatus]);
 
-  useEffect(() => {
-    if (!socket || !advisoryData.advisoryID) return;
+  // ClassAdvisory.jsx - Add this effect
+useEffect(() => {
+  if (!socket) return;
 
-    const handleValidationResponse = (data) => {
-      const { status, message } = data;
-      
-      const newStatus = {
-        hasPendingRequest: false,
-        isApproved: status === 'approved',
-        isRejected: status === 'rejected',
-        lastRequestDate: new Date().toISOString()
-      };
+  const facultyID = localStorage.getItem('facultyID');
+  const facultyName = localStorage.getItem('facultyName');
 
-      // Update localStorage with the new status
-      const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
-      allStatuses[advisoryData.advisoryID] = newStatus;
-      localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
+  if (facultyID && facultyName) {
+    socket.emit('authenticate', {
+      userType: 'faculty',
+      userID: facultyID,
+      facultyName: facultyName
+    });
+  }
+}, [socket]);
 
-      setValidationStatus(newStatus);
+  // In ClassAdvisory.jsx
+useEffect(() => {
+  if (!socket || !advisoryData.advisoryID) return;
 
-      toast[status === 'approved' ? 'success' : 'error'](
-        message || `Grade validation request has been ${status}`,
-        {
-          duration: 5000,
-          position: 'top-right'
-        }
-      );
+  const handleValidationResponse = (data) => {
+    const { status, message } = data;
+    
+    const newStatus = {
+      hasPendingRequest: false,
+      isApproved: status === 'approved',
+      isRejected: status === 'rejected',
+      lastRequestDate: new Date().toISOString()
+    };
 
-      if (status === 'approved') {
-        fetchAdvisoryData();
+    // Update localStorage with the new status
+    const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+    allStatuses[advisoryData.advisoryID] = newStatus;
+    localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
+
+    setValidationStatus(newStatus);
+
+    toast[status === 'approved' ? 'success' : 'error'](
+      message || `Grade validation request has been ${status}`,
+      {
+        duration: 5000,
+        position: 'top-right'
       }
-    };
+    );
 
-    socket.on('validationResponseReceived', handleValidationResponse);
+    if (status === 'approved') {
+      fetchAdvisoryData();
+    }
+  };
 
-    return () => {
-      socket.off('validationResponseReceived', handleValidationResponse);
-    };
-  }, [socket, advisoryData.advisoryID, fetchAdvisoryData]);
+  socket.on('validationResponseReceived', handleValidationResponse);
+
+  return () => {
+    socket.off('validationResponseReceived', handleValidationResponse);
+  };
+}, [socket, advisoryData.advisoryID, fetchAdvisoryData]);
 
   useEffect(() => {
     return () => {
@@ -251,67 +268,68 @@ const ClassAdvisory = () => {
     }
   };
 
-  const handleValidateGrades = async () => {
-    try {
-      setIsValidating(true);
-      const token = localStorage.getItem("token");
-      const facultyID = localStorage.getItem("facultyID");
-      const facultyName = localStorage.getItem("facultyName");
+  // ClassAdvisory.jsx - Update handleValidateGrades
+const handleValidateGrades = async () => {
+  try {
+    setIsValidating(true);
+    const token = localStorage.getItem("token");
+    const facultyID = localStorage.getItem("facultyID");
+    const facultyName = localStorage.getItem("facultyName");
 
-      // Make sure token is available
-      if (!token) {
-        toast.error("Authentication token missing");
-        navigate("/faculty-login");
-        return;
-      }
-
-      const response = await axios.post(
-        "http://localhost:3000/Pages/faculty/validate-grades",
-        { 
-          advisoryID: advisoryData.advisoryID,
-          facultyID: facultyID 
-        },
-        { 
-          headers: { 
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          } 
-        }
-      );
-
-      if (response.data.success && socket) {
-        socket.emit('validationRequest', {
-          requestID: response.data.requestID,
-          facultyID: facultyID,
-          facultyName: facultyName,
-          grade: advisoryData.grade,
-          section: advisoryData.section,
-          advisoryID: advisoryData.advisoryID,
-          schoolYear: advisoryData.schoolYear,
-          timestamp: new Date().toISOString()
-        });
-
-        const newStatus = {
-          hasPendingRequest: true,
-          isApproved: false,
-          isRejected: false,
-          lastRequestDate: new Date().toISOString()
-        };
-
-        // Save to localStorage and update state
-        const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
-        allStatuses[advisoryData.advisoryID] = newStatus;
-        localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
-        setValidationStatus(newStatus);
-
-        toast.success('Validation request submitted successfully');
-      }
-    } catch (error) {
-      handleValidationError(error);
-    } finally {
-      setIsValidating(false);
+    if (!token) {
+      toast.error("Authentication token missing");
+      navigate("/faculty-login");
+      return;
     }
-  };
+
+    const response = await axios.post(
+      "http://localhost:3000/Pages/faculty/validate-grades",
+      { 
+        advisoryID: advisoryData.advisoryID,
+        facultyID: facultyID 
+      },
+      { 
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
+
+    if (response.data.success && socket) {
+      const requestData = {
+        requestID: response.data.requestID,
+        facultyID: facultyID,
+        facultyName: facultyName,
+        grade: advisoryData.grade,
+        section: advisoryData.section,
+        advisoryID: advisoryData.advisoryID,
+        timestamp: new Date().toISOString()
+      };
+
+      socket.emit('validationRequest', requestData);
+
+      const newStatus = {
+        hasPendingRequest: true,
+        isApproved: false,
+        isRejected: false,
+        lastRequestDate: new Date().toISOString()
+      };
+
+      // Save to localStorage and update state
+      const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+      allStatuses[advisoryData.advisoryID] = newStatus;
+      localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
+      setValidationStatus(newStatus);
+
+      toast.success('Validation request submitted successfully');
+    }
+  } catch (error) {
+    handleValidationError(error);
+  } finally {
+    setIsValidating(false);
+  }
+};
 
   const handleValidationError = (error) => {
     if (error.response?.status === 403) {

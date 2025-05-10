@@ -9,6 +9,33 @@ export const SocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+  if (!socket) return;
+
+  const facultyID = localStorage.getItem('facultyID');
+  const facultyName = localStorage.getItem('facultyName');
+
+  if (facultyID && facultyName) {
+    socket.emit('authenticate', {
+      userType: 'faculty',
+      userID: facultyID,
+      facultyName: facultyName
+    });
+  }
+
+  const handleValidationResponse = (data) => {
+    console.log('Validation response received:', data);
+    // This will trigger the notification dropdown
+  };
+
+  socket.on('validationResponseReceived', handleValidationResponse);
+
+  return () => {
+    socket.off('validationResponseReceived', handleValidationResponse);
+  };
+}, [socket]);
+
+
+  useEffect(() => {
     // Only create socket if it doesn't exist
     if (!socket) {
       const newSocket = io('http://localhost:3000', {
@@ -32,21 +59,21 @@ export const SocketProvider = ({ children }) => {
         const adminID = localStorage.getItem('adminID');
         const adminName = localStorage.getItem('adminName');
 
-        // Authenticate based on user type
-        if (facultyID && facultyName) {
-          newSocket.emit('authenticate', {
-            userType: 'faculty',
-            userID: facultyID,
-            facultyName: facultyName
-          });
-        } else if (adminID && adminName) {
-          newSocket.emit('authenticate', {
-            userType: 'admin',
-            userID: adminID,
-            adminName: adminName
-          });
-        }
-      });  
+          // Authenticate based on available user data
+          if (userData.facultyID && userData.facultyName) {
+            newSocket.emit('authenticate', {
+              userType: 'faculty',
+              userID: userData.facultyID,
+              facultyName: userData.facultyName
+            });
+          } else if (userData.adminID && userData.adminName) {
+            newSocket.emit('authenticate', {
+              userType: 'admin',
+              userID: userData.adminID,
+              adminName: userData.adminName
+            });
+          }
+        });
        
       // In SocketContext.jsx
         newSocket.on('reconnect', (attempt) => {
