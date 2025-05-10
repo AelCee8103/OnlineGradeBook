@@ -5,7 +5,6 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { Toaster, toast } from "react-hot-toast";
 import { useSocket } from '../context/SocketContext';
-import { showUniqueToast } from '../utils/notificationUtils';
 
 const ValidationRequest = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -15,6 +14,7 @@ const ValidationRequest = () => {
   const navigate = useNavigate();
   const socket = useSocket();
 
+  
   const fetchRequests = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
@@ -36,7 +36,6 @@ const ValidationRequest = () => {
 
       if (response.data.success) {
         setRequests(response.data.requests);
-        localStorage.setItem("validationRequests", JSON.stringify(response.data.requests));
       } else {
         throw new Error(response.data.message || "Failed to fetch requests");
       }
@@ -48,129 +47,81 @@ const ValidationRequest = () => {
     }
   }, [navigate]);
 
+
   useEffect(() => {
     fetchRequests();
 
-     if (!socket) return;
+    if (!socket) return;
 
-  const adminID = localStorage.getItem("adminID");
-  const adminName = localStorage.getItem("adminName");
-
-  const handleAuthenticated = (response) => {
-    if (response.success) {
-      console.log("Admin socket authenticated successfully");
-    } else {
-      console.error("Admin socket authentication failed:", response.error);
-      toast.error("Failed to connect to notification service");
-    }
-  };
-  const handleNewRequest = (data) => {
-    console.log("New validation request received:", data);
-    const newRequest = {
-      requestID: data.requestID,
-      facultyID: data.facultyID,
-      facultyName: data.facultyName,
-      Grade: data.grade,
-      Section: data.section,
-      schoolYear: data.schoolYear,
-      advisoryID: data.advisoryID,
-      requestDate: new Date().toLocaleString()
+    const handleNewRequest = (data) => {
+      // Verify the new request with the server before adding to UI
+      fetchRequests().then(() => {
+        toast.success(`New validation request from ${data.facultyName}`);
+      });
     };
-    setRequests(prev => [newRequest, ...prev]);
-    // Toast notification is removed here since it's now handled by NotificationDropdown component
-  };
-  const handleValidationResponse = (data) => {
-    console.log("Validation processed:", data);
-    setRequests(prev => prev.filter(req => req.requestID !== data.requestID));
-    // Toast removed - already handled during action processing
-  };
 
-  const handleValidationStatusUpdate = (data) => {
-    console.log("Status update received:", data);
-    setRequests(prev => prev.filter(req => req.requestID !== data.requestID));
-    // Toast removed - already handled during action processing
-  };
+    const handleStatusUpdate = (data) => {
+      // Always verify with server after status updates
+      fetchRequests().then(() => {
+        toast.success(`Request ${data.status}ed successfully`);
+      });
+    };
 
-  // Add this new handler for initial data sync
-  const handleInitialRequests = (data) => {
-    console.log("Initial requests received:", data);
-    setRequests(data.requests);
-  };
+    const handleInitialRequests = (data) => {
+      // Use server-sent data directly
+      setRequests(data.requests);
+      setLoading(false);
+    };
 
-  if (adminID) {
-    socket.emit("authenticate", {
-      userType: "admin",
-      userID: adminID,
-      adminName: adminName,
+    socket.on("newValidationRequest", handleNewRequest);
+    socket.on("validationStatusUpdate", handleStatusUpdate);
+    socket.on("initialRequests", handleInitialRequests);
+    socket.on("socketError", (error) => {
+      toast.error(error.message);
     });
 
-    socket.on("authenticated", handleAuthenticated);
-  }
+    // Request fresh data when component mounts
+    socket.emit("getInitialRequests");
 
-  socket.on("newValidationRequest", handleNewRequest);
-  socket.on("validationResponse", handleValidationResponse);
-  socket.on("validationStatusUpdate", handleValidationStatusUpdate);
-  socket.on("initialRequests", handleInitialRequests);
+    return () => {
+      socket.off("newValidationRequest", handleNewRequest);
+      socket.off("validationStatusUpdate", handleStatusUpdate);
+      socket.off("initialRequests", handleInitialRequests);
+      socket.off("socketError");
+    };
+  }, [socket, fetchRequests]);
 
-  // Request initial data from server via socket
-  socket.emit("getInitialRequests");
 
-  return () => {
-    socket.off("authenticated", handleAuthenticated);
-    socket.off("newValidationRequest", handleNewRequest);
-    socket.off("validationResponse", handleValidationResponse);
-    socket.off("validationStatusUpdate", handleValidationStatusUpdate);
-    socket.off("initialRequests", handleInitialRequests);
-  };
-}, [socket, fetchRequests]);  const handleProcessRequest = async (requestID, action, facultyID, advisoryID) => {
+  // In ValidationRequest.jsx
+const handleProcessRequest = async (requestID, action, facultyID, advisoryID) => {
   try {
     const token = localStorage.getItem("token");
     
-    if (!token) {
-      toast.error("Authentication token missing. Please log in again.");
-      navigate("/admin-login");
-      return;
-    }
-
     const response = await axios.post(
       "http://localhost:3000/Pages/admin/process-validation",
       { requestID, action },
       { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    if (response.data.success) {
-      // Remove the request from UI immediately
-      setRequests(prev => prev.filter(req => req.requestID !== requestID));      // Emit to all connected admins
+    if (response.data.success && socket) {
       socket.emit("validationResponse", {
         requestID,
         facultyID,
         advisoryID,
         status: action,
-        message: `Your grade validation request has been ${action}ed`,
-        timestamp: new Date().toISOString(),
-      });      showUniqueToast(
-        'success', 
-        `Request ${action}ed successfully`, 
-        `admin-validation-${requestID}-${action}`
-      );
-
-      // Also emit a status update to all admins
-      socket.emit("validationStatusUpdate", {
-        requestID,
-        status: action,
+        message: `Your validation request has been ${action}d`,
         timestamp: new Date().toISOString(),
       });
-    }  } catch (error) {
-    console.error("Error processing request:", error);
-    const errorMessage = error.response?.data?.message || "Failed to process request";
-    
-    // Check if the error is due to authentication issues
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      toast.error("Authentication error. Please log in again.");
-      navigate("/admin-login");
-    } else {
-      toast.error(errorMessage);
+      
+      // Update local state optimistically
+      setRequests(prev => 
+        prev.filter(req => req.requestID !== requestID)
+      );
     }
+  } catch (error) {
+    console.error("Error processing request:", error);
+    toast.error("Failed to process request");
+    fetchRequests(); // Re-fetch to ensure UI matches server state
   }
 };
 

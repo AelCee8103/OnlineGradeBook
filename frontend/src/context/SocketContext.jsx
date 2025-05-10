@@ -9,78 +9,31 @@ export const SocketProvider = ({ children }) => {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
-    if (!socket) return;
+  if (!socket) return;
 
-    const facultyID = localStorage.getItem('facultyID');
-    const facultyName = localStorage.getItem('facultyName');
-    const adminID = localStorage.getItem('adminID');
-    const adminName = localStorage.getItem('adminName');
+  const facultyID = localStorage.getItem('facultyID');
+  const facultyName = localStorage.getItem('facultyName');
 
-    const authenticateSocket = () => {
-      if (facultyID && facultyName) {
-        socket.emit('authenticate', {
-          userType: 'faculty',
-          userID: facultyID,
-          facultyName: facultyName
-        });
-      } else if (adminID && adminName) {
-        socket.emit('authenticate', {
-          userType: 'admin',
-          userID: adminID,
-          adminName: adminName
-        });
-      }
-    };
+  if (facultyID && facultyName) {
+    socket.emit('authenticate', {
+      userType: 'faculty',
+      userID: facultyID,
+      facultyName: facultyName
+    });
+  }
 
-    // Authenticate on initial connection
-    authenticateSocket();
+  const handleValidationResponse = (data) => {
+    console.log('Validation response received:', data);
+    // This will trigger the notification dropdown
+  };
 
-    // Add authentication response handler
-    const handleAuthenticated = (response) => {
-      if (response.success) {
-        console.log('Socket authenticated successfully');
-      } else {
-        console.error('Socket authentication failed:', response.error);
-        toast.error('Connection error. Please refresh the page.');
-      }
-    };
-    
-    socket.on('authenticated', handleAuthenticated);
+  socket.on('validationResponseReceived', handleValidationResponse);
 
-    // Add error handler
-    const handleSocketError = (errorData) => {
-      console.error('Socket error:', errorData);
-      toast.error(errorData.message || 'Connection error. Please refresh the page.');
-    };
-    
-    socket.on('socketError', handleSocketError);
+  return () => {
+    socket.off('validationResponseReceived', handleValidationResponse);
+  };
+}, [socket]);
 
-    // Set up reconnection handler
-    const handleReconnect = () => {
-      authenticateSocket();
-      
-      // For faculty, re-fetch validation status
-      if (facultyID) {
-        const advisoryID = localStorage.getItem('currentAdvisoryID');
-        if (advisoryID) {
-          socket.emit('getValidationStatus', { advisoryID });
-        }
-      }
-      
-      // For admins, re-fetch pending requests
-      if (adminID) {
-        socket.emit('getInitialRequests');
-      }
-    };
-
-    socket.on('reconnect', handleReconnect);
-
-    return () => {
-      socket.off('authenticated', handleAuthenticated);
-      socket.off('socketError', handleSocketError);
-      socket.off('reconnect', handleReconnect);
-    };
-  }, [socket]);
 
   useEffect(() => {
     // Only create socket if it doesn't exist
@@ -98,24 +51,26 @@ export const SocketProvider = ({ children }) => {
 
       newSocket.on('connect', () => {
         console.log('Socket connected successfully');
-        setIsConnected(true);        // Get user information from localStorage
+        setIsConnected(true);
+
+        // Get user information from localStorage
         const facultyID = localStorage.getItem('facultyID');
         const facultyName = localStorage.getItem('facultyName');
         const adminID = localStorage.getItem('adminID');
         const adminName = localStorage.getItem('adminName');
 
           // Authenticate based on available user data
-          if (facultyID && facultyName) {
+          if (userData.facultyID && userData.facultyName) {
             newSocket.emit('authenticate', {
               userType: 'faculty',
-              userID: facultyID,
-              facultyName: facultyName
+              userID: userData.facultyID,
+              facultyName: userData.facultyName
             });
-          } else if (adminID && adminName) {
+          } else if (userData.adminID && userData.adminName) {
             newSocket.emit('authenticate', {
               userType: 'admin',
-              userID: adminID,
-              adminName: adminName
+              userID: userData.adminID,
+              adminName: userData.adminName
             });
           }
         });

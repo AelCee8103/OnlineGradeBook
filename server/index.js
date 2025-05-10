@@ -72,26 +72,16 @@ io.on('connection', (socket) => {
       const { userType, userID, facultyName, adminName } = data;
       console.log(`${userType} authentication attempt:`, userID);
       
-      // Enhanced validation
+      // Simple validation
       if (!userID || !userType) {
         throw new Error('Invalid authentication data');
       }
-      
-      if (userType === 'faculty' && (!facultyName)) {
-        throw new Error('Missing faculty information');
-      }
-      
-      if (userType === 'admin' && (!adminName)) {
-        throw new Error('Missing admin information');
-      }
 
-      // Store user connection info with more details
+      // Store user connection info
       const userInfo = {
         socket: socket.id,
         userType,
-        name: userType === 'faculty' ? facultyName : adminName,
-        connectionTime: new Date(),
-        lastActivity: new Date()
+        name: userType === 'faculty' ? facultyName : adminName
       };
       
       connectedUsers.set(userID, userInfo);
@@ -188,46 +178,20 @@ io.on('connection', (socket) => {
   });
 
   // Handle validation responses from admins
-  // In your validationResponse handler in index.js
-socket.on('validationResponse', async (data) => {
+  socket.on('validationResponse', async (data) => {
   try {
     if (!socket.userID || socket.userType !== 'admin') {
       throw new Error('Unauthorized');
     }
 
+    // Verify the request exists before broadcasting
     const db = await connectToDatabase();
-    
-    // Verify and update the request in database
-    const [result] = await db.query(
-      'UPDATE validation_request SET statusID = ?, processedBy = ?, processedDate = NOW() ' +
-      'WHERE requestID = ? AND statusID = 0',
-      [
-        data.status === 'approve' ? 1 : 2,
-        socket.userID,
-        data.requestID
-      ]
-    );
-
-    if (result.affectedRows === 0) {
-      throw new Error('Request not found or already processed');
-    }
-
-    // Get updated request details
     const [request] = await db.query(
-      `SELECT vr.facultyID, vr.advisoryID, 
-        CONCAT(f.FirstName, ' ', f.LastName) as facultyName,
-        c.Grade, c.Section
-       FROM validation_request vr
-       JOIN faculty f ON vr.facultyID = f.FacultyID
-       JOIN advisory a ON vr.advisoryID = a.advisoryID
-       JOIN classes c ON a.classID = c.ClassID
-       WHERE vr.requestID = ?`,
+      'SELECT * FROM validation_request WHERE requestID = ?',
       [data.requestID]
     );
 
     if (request.length > 0) {
-      const reqData = request[0];
-      
       // Broadcast to all admins
       io.to('admins').emit('validationStatusUpdate', {
         requestID: data.requestID,
@@ -235,71 +199,18 @@ socket.on('validationResponse', async (data) => {
         timestamp: new Date().toISOString()
       });
 
-      // Notify specific faculty member
-      io.to(`faculty_${reqData.facultyID}`).emit('validationResponseReceived', {
+     // In your validationResponse handler in index.js
+      io.to(`faculty_${data.facultyID}`).emit('validationResponseReceived', {
         status: data.status,
         requestID: data.requestID,
-        message: data.message || `Your validation request for Grade ${reqData.Grade}-${reqData.Section} has been ${data.status}d`,
-        timestamp: new Date().toISOString(),
-        advisoryID: reqData.advisoryID
+        message: data.message || `Your validation request has been ${data.status}`,
+        timestamp: new Date().toISOString()
       });
     }
   } catch (error) {
     console.error('Error handling validation response:', error);
-    socket.emit('validationError', { 
-      message: 'Failed to process validation response' 
-    });
   }
 });
-  // Add handler for getValidationStatus
-  socket.on('getValidationStatus', async (data) => {
-    try {
-      if (!socket.userID || socket.userType !== 'faculty') {
-        throw new Error('Unauthorized');
-      }
-
-      if (!data.advisoryID) {
-        throw new Error('Advisory ID is required');
-      }
-
-      const db = await connectToDatabase();
-      
-      const [results] = await db.query(
-        `SELECT 
-          vr.requestID, vr.statusID, vr.requestDate, vr.processedDate
-        FROM validation_request vr
-        WHERE vr.advisoryID = ? 
-        ORDER BY vr.requestDate DESC 
-        LIMIT 1`,
-        [data.advisoryID]
-      );
-
-      // Send response directly to the requesting faculty
-      if (results.length > 0) {
-        const status = 
-          results[0].statusID === 0 ? 'pending' : 
-          results[0].statusID === 1 ? 'approved' : 'rejected';
-        
-        socket.emit('validationStatus', {
-          status,
-          requestID: results[0].requestID,
-          timestamp: new Date().toISOString(),
-          advisoryID: data.advisoryID
-        });
-      } else {
-        // No validation requests found
-        socket.emit('validationStatus', {
-          status: null, 
-          advisoryID: data.advisoryID
-        });
-      }
-    } catch (error) {
-      console.error('Error getting validation status:', error);
-      socket.emit('validationError', { 
-        message: 'Failed to fetch validation status' 
-      });
-    }
-  });
 
   socket.on('disconnect', () => {
     if (socket.userID) {

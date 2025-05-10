@@ -1416,7 +1416,7 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
   }
 });
 
-router.post('/admin/process-validation', authenticateToken, async (req, res) => {
+router.post('/admin/process-validation', async (req, res) => {
   const { requestID, action } = req.body;
   const io = req.app.get('socketio');
   const db = await connectToDatabase();

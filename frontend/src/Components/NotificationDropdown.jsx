@@ -3,138 +3,76 @@ import { faBell } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useSocket } from '../context/SocketContext';
 import { format } from 'date-fns';
-import { toast } from 'react-hot-toast';
-import { saveNotifications, getStoredNotifications, showUniqueToast } from '../utils/notificationUtils';
 
 const NotificationDropdown = ({ userType }) => {
-  const [notifications, setNotifications] = useState(() => getStoredNotifications(userType));
+  const [notifications, setNotifications] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(() => {
-    return getStoredNotifications(userType).filter(notif => !notif.read).length;
-  });
+  const [unreadCount, setUnreadCount] = useState(0);
   const socket = useSocket();
 
-  // Save notifications to localStorage whenever they change
   useEffect(() => {
-    saveNotifications(notifications, userType);
-  }, [notifications, userType]);
-  
-  // Handle faculty validation responses
-  useEffect(() => {
-    if (!socket) return;
-
     const handleValidationResponse = (data) => {
-      console.log("Faculty received validation response:", data);
-      
-      const message = data.message || `Your grade validation request has been ${data.status}d`;
-      const isApproved = data.status === 'approve' || data.status === 'approved';
-      
       const newNotification = {
         id: Date.now(),
-        message: message,
+        message: data.message || `Grade validation request has been ${data.status}`,
         timestamp: data.timestamp || new Date().toISOString(),
         type: 'validation_response',
         status: data.status,
-        read: false,
-        advisoryID: data.advisoryID
+        read: false
       };
-      
-      setNotifications(prev => {
-        // Add at the beginning (most recent first)
-        const updated = [newNotification, ...prev];
-        return updated;
-      });
-      
-      setUnreadCount(prev => prev + 1);
-      
-      // Show a single toast notification for important events using our utility
-      showUniqueToast(
-        isApproved ? 'success' : 'error', 
-        message, 
-        `validation-${data.requestID}`,
-        { position: 'top-right' }
-      );
+      setNotifications((prev) => [...prev, newNotification]);
+      setUnreadCount((prev) => prev + 1);
     };
 
     if (userType === 'faculty') {
-      console.log("Setting up validationResponseReceived listener for faculty");
       socket.on('validationResponseReceived', handleValidationResponse);
     }
 
     return () => {
       if (userType === 'faculty') {
-        console.log("Cleaning up validationResponseReceived listener");
         socket.off('validationResponseReceived', handleValidationResponse);
       }
     };
   }, [socket, userType]);
 
-  // Handle admin notifications for new validation requests
   useEffect(() => {
-    if (!socket) return;
-    
     const handleNewValidationRequest = (data) => {
-      console.log("Admin received new validation request:", data);
-      
-      const message = `New validation request from ${data.facultyName} for Grade ${data.grade} - ${data.section}`;
-      
       const newNotification = {
         id: Date.now(),
-        message: message,
+        message: `New validation request from ${data.facultyName} for Grade ${data.grade} - ${data.section}`,
         timestamp: new Date().toISOString(),
         type: 'new_request',
         facultyName: data.facultyName,
-        read: false,
-        requestID: data.requestID
+        read: false
       };
-      
-      setNotifications(prev => {
-        // Add at the beginning (most recent first)
-        const updated = [newNotification, ...prev];
-        return updated;
-      });
-      
-      setUnreadCount(prev => prev + 1);
-      
-      // Use our utility function for showing a unique toast notification
-      showUniqueToast(
-        'info', 
-        message, 
-        `admin-new-request-${data.requestID}`, 
-        { position: 'top-center' }
-      );
+      setNotifications((prev) => [...prev, newNotification]);
+      setUnreadCount((prev) => prev + 1);
     };
 
     if (userType === 'admin') {
-      console.log("Setting up newValidationRequest listener for admin");
       socket.on('newValidationRequest', handleNewValidationRequest);
     }
 
     return () => {
       if (userType === 'admin') {
-        console.log("Cleaning up newValidationRequest listener");
         socket.off('newValidationRequest', handleNewValidationRequest);
       }
     };
   }, [socket, userType]);
 
   const markAsRead = (notificationId) => {
-    setNotifications(prev => {
-      const updated = prev.map(notif => 
+    setNotifications((prev) =>
+      prev.map((notif) =>
         notif.id === notificationId ? { ...notif, read: true } : notif
-      );
-      return updated;
-    });
-    
-    setUnreadCount(prev => Math.max(0, prev - 1));
+      )
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
   };
 
   const markAllAsRead = () => {
-    setNotifications(prev => {
-      const updated = prev.map(notif => ({ ...notif, read: true }));
-      return updated;
-    });
-    
+    setNotifications((prev) =>
+      prev.map((notif) => ({ ...notif, read: true }))
+    );
     setUnreadCount(0);
   };
 
@@ -189,7 +127,7 @@ const NotificationDropdown = ({ userType }) => {
                     notification.read ? 'bg-gray-50' : 'bg-white'
                   } ${
                     notification.type === 'validation_response'
-                      ? notification.status === 'approve' || notification.status === 'approved'
+                      ? notification.status === 'approved'
                         ? 'hover:bg-green-50'
                         : 'hover:bg-red-50'
                       : 'hover:bg-blue-50'
