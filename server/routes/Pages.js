@@ -1422,55 +1422,82 @@ router.get('/faculty-subject-classes/:SubjectCode/students', authenticateToken, 
 // Promote students to the next school year
 router.post('/admin/promote-school-year', authenticateToken, async (req, res) => {
   const { currentYearId, nextYearId } = req.body;
+  let db;
   
   try {
-    const db = await connectToDatabase();
-    
-    // Verify years exist and next year is not active
-    const [years] = await db.query(
-      `SELECT school_yearID, year, status 
-       FROM schoolyear 
-       WHERE school_yearID IN (?, ?)`,
-      [currentYearId, nextYearId]
-    );
-
-    if (years.length !== 2) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid school year IDs'
-      });
-    }
-
-    const nextYear = years.find(y => y.school_yearID === nextYearId);
-    if (nextYear.status === 1) {
-      return res.status(400).json({
-        success: false,
-        message: 'Next school year is already active'
-      });
-    }
-
-    // Execute promotion procedure
-    await db.query('CALL promote_students_new_year(?, ?)', [nextYearId, currentYearId]);
+    db = await connectToDatabase();
+    await db.query('START TRANSACTION');
 
     // Update school year status
-    await db.query(
-      'UPDATE schoolyear SET status = CASE school_yearID ' +
-      'WHEN ? THEN 0 ' +  // Deactivate current year
-      'WHEN ? THEN 1 ' +  // Activate next year
-      'ELSE status END',
-      [currentYearId, nextYearId]
-    );
+    await db.query('UPDATE schoolyear SET status = 0 WHERE school_yearID = ?', [currentYearId]);
+    await db.query('UPDATE schoolyear SET status = 1 WHERE school_yearID = ?', [nextYearId]);
+
+    // Update class_year records for the new year
+    await db.query(`
+      INSERT INTO class_year (advisoryID, yearID)
+      SELECT a.advisoryID, ?
+      FROM advisory a
+      WHERE NOT EXISTS (
+        SELECT 1 
+        FROM class_year cy 
+        WHERE cy.advisoryID = a.advisoryID 
+        AND cy.yearID = ?
+      )
+    `, [nextYearId, nextYearId]);
+
+    // Update all new students to be marked as old students
+    await db.query('UPDATE students SET isNew = 0 WHERE isNew = 1');
+
+    // Update Grade 12 students as inactive
+    await db.query(`
+      UPDATE students s
+      JOIN student_classes sc ON s.StudentID = sc.StudentID
+      JOIN advisory a ON sc.advisoryID = a.advisoryID
+      JOIN classes c ON a.classID = c.ClassID
+      SET s.Status = 0
+      WHERE sc.school_yearID = ? 
+      AND c.Grade = 12
+    `, [currentYearId]);
+
+    // Update student_classes for continuing students
+    await db.query(`
+      UPDATE student_classes sc
+      JOIN advisory a ON sc.advisoryID = a.advisoryID  
+      JOIN classes c ON a.classID = c.ClassID
+      SET 
+        sc.school_yearID = ?,
+        sc.advisoryID = (
+          SELECT a_next.advisoryID
+          FROM advisory a_next
+          JOIN classes c_next ON a_next.classID = c_next.ClassID
+          WHERE c_next.Grade = c.Grade + 1
+          AND c_next.Grade <= 12
+          LIMIT 1
+        )
+      WHERE sc.school_yearID = ?
+      AND c.Grade < 12
+    `, [nextYearId, currentYearId]);
+
+    // Update assignsubject records to the new school year
+    await db.query(`
+      UPDATE assignsubject 
+      SET yearID = ? 
+      WHERE yearID = ?
+    `, [nextYearId, currentYearId]);
+
+    await db.query('COMMIT');
 
     res.json({
       success: true,
-      message: 'School year promotion completed successfully'
+      message: "School year promotion completed successfully"
     });
 
   } catch (error) {
-    console.error('Error promoting school year:', error);
+    if (db) await db.query('ROLLBACK');
+    console.error("Error in school year promotion:", error);
     res.status(500).json({
-      success: false,
-      message: 'Failed to promote school year',
+      success: false, 
+      message: "Failed to promote school year",
       error: error.message
     });
   }
