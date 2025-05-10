@@ -10,15 +10,8 @@ const router = express.Router();
 
 
 // GET all students
-router.get('/admin/manage-students', authenticateToken, async (req, res) => {
+router.get('/admin-manage-students', authenticateToken, async (req, res) => {
   try {
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Unauthorized access' 
-      });
-    }
 
     const db = await connectToDatabase();
     const [students] = await db.query(`

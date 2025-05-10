@@ -220,7 +220,7 @@ router.get(['/admin-dashboard','/admin-manage-students', '/admin-manage-faculty'
 });
 
 
-router.get('/auth/admin-manage-students', async (req, res) => {
+router.get('/admin-manage-students', async (req, res) => {
   try {
     const adminId = req.user.id; // if you're using JWT token, extract ID from token
     const [admin] = await db.query('SELECT FirstName FROM admin WHERE AdminID = ?', [adminId]);
