@@ -1424,16 +1424,62 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
 });
 
 router.post('/admin/process-validation', async (req, res) => {
-  const { requestID, action } = req.body; // action: 'approve' or 'reject'
+  const { requestID, action } = req.body;
+  const io = req.app.get('socketio');
+  const db = await connectToDatabase();
 
   try {
-    const db = await connectToDatabase();
-    const statusID = action === 'approve' ? 1 : 2;
+    // First verify the request exists and is pending
+    const [request] = await db.query(
+      'SELECT * FROM validation_request WHERE requestID = ? AND statusID = 0',
+      [requestID]
+    );
 
+    if (request.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Request not found or already processed' 
+      });
+    }
+
+    const statusID = action === 'approve' ? 1 : 2;
+    
+    // Update in database
     await db.query(
-      `UPDATE validation_request SET statusID = ? WHERE requestID = ?`,
+      'UPDATE validation_request SET statusID = ? WHERE requestID = ?',
       [statusID, requestID]
     );
+
+    // Get updated request details
+    const [updatedRequest] = await db.query(`
+      SELECT vr.facultyID, vr.advisoryID,
+        CONCAT(f.FirstName, ' ', f.LastName) as facultyName,
+        c.Grade, c.Section
+      FROM validation_request vr
+      JOIN faculty f ON vr.facultyID = f.FacultyID
+      JOIN advisory a ON vr.advisoryID = a.advisoryID
+      JOIN classes c ON a.classID = c.ClassID
+      WHERE vr.requestID = ?
+    `, [requestID]);
+
+    if (updatedRequest.length > 0) {
+      const reqData = updatedRequest[0];
+      
+      // Broadcast update
+      io.to('admins').emit('validationStatusUpdate', {
+        requestID,
+        status: action,
+        timestamp: new Date().toISOString()
+      });
+
+      // Notify faculty
+      io.to(`faculty_${reqData.facultyID}`).emit('validationResponseReceived', {
+        status: action,
+        requestID,
+        message: `Your validation request for Grade ${reqData.Grade}-${reqData.Section} has been ${action}d`,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.json({ 
       success: true, 

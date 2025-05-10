@@ -46,7 +46,31 @@ export const SocketProvider = ({ children }) => {
             adminName: adminName
           });
         }
-      });
+      });  
+       
+      // In SocketContext.jsx
+        newSocket.on('reconnect', (attempt) => {
+          console.log(`Reconnected after ${attempt} attempts`);
+          // Re-authenticate
+          const facultyID = localStorage.getItem('facultyID');
+          const facultyName = localStorage.getItem('facultyName');
+          const adminID = localStorage.getItem('adminID');
+          const adminName = localStorage.getItem('adminName');
+          
+          if (facultyID && facultyName) {
+            newSocket.emit('authenticate', {
+              userType: 'faculty',
+              userID: facultyID,
+              facultyName: facultyName
+            });
+          } else if (adminID && adminName) {
+            newSocket.emit('authenticate', {
+              userType: 'admin',
+              userID: adminID,
+              adminName: adminName
+            });
+          }
+        });
 
       newSocket.on('disconnect', () => {
         console.log('Socket disconnected');

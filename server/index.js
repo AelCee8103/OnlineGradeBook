@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import authRouter from './routes/authroutes.js';
 import Pages from './routes/Pages.js';
 import dotenv from 'dotenv';
+import { connectToDatabase } from './lib/db.js';
 
 dotenv.config();
 
@@ -41,12 +42,21 @@ const io = new Server(httpServer, {
   pingTimeout: 5000
 });
 
+// Make io accessible to routes
+app.set('socketio', io);
+
 // Store connected users
 const connectedUsers = new Map();
 
 // Update the socket.io connection handler in index.js
 io.on('connection', (socket) => {
   console.log('New client connected:', socket.id);
+
+  // Add error handler
+  socket.on('error', (error) => {
+    console.error('Socket error:', error);
+    socket.emit('socketError', { message: 'Connection error. Please refresh the page.' });
+  });
 
   // Authentication timeout
   const authTimeout = setTimeout(() => {
@@ -78,9 +88,22 @@ io.on('connection', (socket) => {
       socket.userID = userID;
       socket.userType = userType;
 
+      // Add user to appropriate rooms
+      if (userType === 'admin') {
+        socket.join('admins'); // All admins room
+        socket.join(`admin_${userID}`); // Private admin room
+      } else if (userType === 'faculty') {
+        socket.join(`faculty_${userID}`); // Private faculty room
+      }
+
       console.log(`${userType} authenticated successfully:`, userID);
       socket.emit('authenticated', { success: true });
       
+      // For admins, send initial requests immediately after auth
+      if (userType === 'admin') {
+        socket.emit('getInitialRequests');
+      }
+
       // Log current connected users
       console.log('Connected users:', Array.from(connectedUsers.entries()));
     } catch (error) {
@@ -93,7 +116,47 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle validation requests
+  // Handle initial requests for admins
+  socket.on('getInitialRequests', async () => {
+    try {
+      if (!socket.userID || socket.userType !== 'admin') {
+        throw new Error('Unauthorized');
+      }
+
+      const db = await connectToDatabase();
+      const [requests] = await db.query(`
+        SELECT 
+          vr.requestID,
+          vr.advisoryID,
+          vr.facultyID,
+          vr.requestDate,
+          CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
+          c.Grade,
+          c.Section,
+          sy.year AS schoolYear
+        FROM validation_request vr
+        JOIN faculty f ON vr.facultyID = f.FacultyID
+        JOIN advisory a ON vr.advisoryID = a.advisoryID
+        JOIN classes c ON a.classID = c.ClassID
+        JOIN class_year cy ON a.advisoryID = cy.advisoryID
+        JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+        WHERE vr.statusID = 0
+        ORDER BY vr.requestDate DESC
+      `);
+
+      socket.emit('initialRequests', {
+        requests: requests.map(req => ({
+          ...req,
+          requestDate: new Date(req.requestDate).toLocaleString()
+        }))
+      });
+    } catch (error) {
+      console.error('Error fetching initial requests:', error);
+      socket.emit('socketError', { message: 'Failed to load requests' });
+    }
+  });
+
+  // Handle validation requests from faculty
   socket.on('validationRequest', async (data) => {
     try {
       if (!socket.userID || socket.userType !== 'faculty') {
@@ -102,67 +165,50 @@ io.on('connection', (socket) => {
 
       console.log('Validation request received:', data);
       
-      // Find all admin sockets
-      const adminUsers = Array.from(connectedUsers.entries())
-        .filter(([_, user]) => user.userType === 'admin');
+      // Broadcast to all admins through the 'admins' room
+      io.to('admins').emit('newValidationRequest', {
+        ...data,
+        timestamp: new Date().toISOString()
+      });
 
-      console.log('Connected admins:', adminUsers);
-
-      if (adminUsers.length === 0) {
-        console.log('No admins connected to notify');
-        return;
-      }
-
-      // Emit to all connected admins
-      for (const [adminId, adminInfo] of adminUsers) {
-        console.log(`Sending notification to admin ${adminId}`);
-        io.to(adminInfo.socket).emit('newValidationRequest', {
-          ...data,
-          timestamp: new Date().toISOString()
-        });
-      }
     } catch (error) {
       console.error('Error handling validation request:', error);
       socket.emit('error', { message: 'Failed to process validation request' });
     }
   });
 
-  // Handle validation responses
+  // Handle validation responses from admins
   socket.on('validationResponse', async (data) => {
     try {
       if (!socket.userID || socket.userType !== 'admin') {
         throw new Error('Unauthorized');
       }
 
-      const { facultyID, status, requestID, message } = data;
-      const facultySocket = Array.from(connectedUsers.entries())
-        .find(([id, user]) => id === facultyID)?.[1]?.socket;
+      // Verify the request exists before broadcasting
+      const db = await connectToDatabase();
+      const [request] = await db.query(
+        'SELECT * FROM validation_request WHERE requestID = ?',
+        [data.requestID]
+      );
 
-      if (facultySocket) {
-        io.to(facultySocket).emit('validationResponseReceived', {
-          status,
-          requestID,
-          message,
+      if (request.length > 0) {
+        // Broadcast to all admins
+        io.to('admins').emit('validationStatusUpdate', {
+          requestID: data.requestID,
+          status: data.status,
           timestamp: new Date().toISOString()
+        });
+
+        // Notify faculty
+        io.to(`faculty_${data.facultyID}`).emit('validationResponseReceived', {
+          status: data.status,
+          requestID: data.requestID,
+          message: data.message,
+          timestamp: data.timestamp
         });
       }
-
-      // Broadcast the status update to all admin users
-      const adminSockets = Array.from(connectedUsers.entries())
-        .filter(([_, user]) => user.userType === 'admin')
-        .map(([_, user]) => user.socket);
-
-      adminSockets.forEach(adminSocket => {
-        io.to(adminSocket).emit('validationStatusUpdate', {
-          requestID,
-          status,
-          timestamp: new Date().toISOString()
-        });
-      });
-
     } catch (error) {
       console.error('Error handling validation response:', error);
-      socket.emit('error', { message: 'Failed to process validation response' });
     }
   });
 

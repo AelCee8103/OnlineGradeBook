@@ -127,20 +127,31 @@ const ClassAdvisory = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      if (response.data.success) {
+     if (response.data.success && response.data.status !== null) {
         const newStatus = {
-          hasPendingRequest: response.data.hasPendingRequest,
+          hasPendingRequest: response.data.status === 'pending',
           isApproved: response.data.status === 'approved',
           isRejected: response.data.status === 'rejected',
           lastRequestDate: response.data.lastRequestDate
         };
-        
-        // Save to localStorage with advisoryID as key
+
         const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
         allStatuses[advisoryData.advisoryID] = newStatus;
         localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
-        
+
         setValidationStatus(newStatus);
+      } else {
+        // Reset to initial state (no validation ever done)
+        const cleanStatus = {
+          hasPendingRequest: false,
+          isApproved: false,
+          isRejected: false,
+          lastRequestDate: null
+        };
+        const allStatuses = JSON.parse(localStorage.getItem('validationStatuses')) || {};
+        allStatuses[advisoryData.advisoryID] = cleanStatus;
+        localStorage.setItem('validationStatuses', JSON.stringify(allStatuses));
+        setValidationStatus(cleanStatus);
       }
     } catch (error) {
       console.error("Error checking validation status:", error);
@@ -452,6 +463,7 @@ const ClassAdvisory = () => {
                         <span className="text-blue-600">Ready for Validation</span>
                       )}
                     </p>
+
                   </div>
                   {validationStatus.lastRequestDate && (
                     <p className="text-sm text-gray-500 mt-1">

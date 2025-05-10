@@ -3,8 +3,6 @@ import NavbarAdmin from "../Components/NavbarAdmin";
 import AdminSidePanel from "../Components/AdminSidePanel";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
 import { Toaster, toast } from "react-hot-toast";
 import { useSocket } from '../context/SocketContext';
 
@@ -16,6 +14,7 @@ const ValidationRequest = () => {
   const navigate = useNavigate();
   const socket = useSocket();
 
+  
   const fetchRequests = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
@@ -27,18 +26,16 @@ const ValidationRequest = () => {
 
       const response = await axios.get(
         "http://localhost:3000/Pages/admin/validation-requests",
-        { 
-          headers: { 
+        {
+          headers: {
             Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          } 
+            "Content-Type": "application/json",
+          },
         }
       );
 
       if (response.data.success) {
         setRequests(response.data.requests);
-        // Store requests in localStorage for persistence
-        localStorage.setItem('validationRequests', JSON.stringify(response.data.requests));
       } else {
         throw new Error(response.data.message || "Failed to fetch requests");
       }
@@ -50,67 +47,55 @@ const ValidationRequest = () => {
     }
   }, [navigate]);
 
- // Update the useEffect for socket handling in ValidationRequest.jsx
-useEffect(() => {
-  // Load stored requests on mount
-  fetchRequests();
 
-  if (!socket) return;
+  useEffect(() => {
+    fetchRequests();
 
-  const adminID = localStorage.getItem('adminID');
-  const adminName = localStorage.getItem('adminName');
+    if (!socket) return;
 
-  const handleAuthenticated = (response) => {
-    if (response.success) {
-      console.log('Admin socket authenticated successfully');
-    } else {
-      console.error('Admin socket authentication failed:', response.error);
-      toast.error('Failed to connect to notification service');
-    }
-  };
+    const handleNewRequest = (data) => {
+      // Verify the new request with the server before adding to UI
+      fetchRequests().then(() => {
+        toast.success(`New validation request from ${data.facultyName}`);
+      });
+    };
 
-  const handleNewRequest = (data) => {
-    console.log('New validation request received:', data);
-    setRequests(prev => {
-      const newRequest = {
-        requestID: data.requestID,
-        facultyID: data.facultyID,
-        facultyName: data.facultyName,
-        Grade: data.grade,
-        Section: data.section,
-        schoolYear: data.schoolYear,
-        advisoryID: data.advisoryID,
-        requestDate: new Date().toLocaleString()
-      };
-      return [newRequest, ...prev];
-    });
-    toast.success(`New validation request from ${data.facultyName}`);
-  };
+    const handleStatusUpdate = (data) => {
+      // Always verify with server after status updates
+      fetchRequests().then(() => {
+        toast.success(`Request ${data.status}ed successfully`);
+      });
+    };
 
-  if (adminID) {
-    socket.emit('authenticate', {
-      userType: 'admin',
-      userID: adminID,
-      adminName: adminName
+    const handleInitialRequests = (data) => {
+      // Use server-sent data directly
+      setRequests(data.requests);
+      setLoading(false);
+    };
+
+    socket.on("newValidationRequest", handleNewRequest);
+    socket.on("validationStatusUpdate", handleStatusUpdate);
+    socket.on("initialRequests", handleInitialRequests);
+    socket.on("socketError", (error) => {
+      toast.error(error.message);
     });
 
-    socket.on('authenticated', handleAuthenticated);
-  }
+    // Request fresh data when component mounts
+    socket.emit("getInitialRequests");
 
-  socket.on('newValidationRequest', handleNewRequest);
+    return () => {
+      socket.off("newValidationRequest", handleNewRequest);
+      socket.off("validationStatusUpdate", handleStatusUpdate);
+      socket.off("initialRequests", handleInitialRequests);
+      socket.off("socketError");
+    };
+  }, [socket, fetchRequests]);
 
-  return () => {
-    if (socket) {
-      socket.off('authenticated', handleAuthenticated);
-      socket.off('newValidationRequest', handleNewRequest);
-    }
-  };
-}, [socket, fetchRequests]);
 
   const handleProcessRequest = async (requestID, action, facultyID, advisoryID) => {
     try {
       const token = localStorage.getItem("token");
-
+      
       const response = await axios.post(
         "http://localhost:3000/Pages/admin/process-validation",
         { requestID, action },
@@ -118,24 +103,25 @@ useEffect(() => {
       );
 
       if (response.data.success) {
-        // Remove processed request from list
-        setRequests(prev => prev.filter(req => req.requestID !== requestID));
-        
-        // Emit socket event for faculty notification
-        socket.emit('validationResponse', {
+        // Let the socket event handler update the UI after server confirms
+        socket.emit("validationResponse", {
           requestID,
           facultyID,
+          advisoryID,
           status: action,
           message: `Request ${action}ed successfully`,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
       }
     } catch (error) {
       console.error("Error processing request:", error);
+      toast.error("Failed to process request");
+      // Re-fetch to ensure UI matches server state
+      fetchRequests();
     }
   };
 
-  const filteredRequests = requests.filter(request => 
+  const filteredRequests = requests.filter((request) =>
     request.facultyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     `Grade ${request.Grade} - ${request.Section}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -151,10 +137,8 @@ useEffect(() => {
         isSidebarOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
       />
-
       <div className="flex-1 flex flex-col overflow-hidden">
         <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
           <div className="container mx-auto px-6 py-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Validation Requests</h1>
@@ -169,7 +153,6 @@ useEffect(() => {
                   className="w-full max-w-md px-4 py-2 rounded-md border focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -190,23 +173,13 @@ useEffect(() => {
                         <td className="px-6 py-4 whitespace-nowrap">{request.requestDate}</td>
                         <td className="px-6 py-4 whitespace-nowrap space-x-2">
                           <button
-                            onClick={() => handleProcessRequest(
-                              request.requestID, 
-                              'approve', 
-                              request.facultyID,
-                              request.advisoryID
-                            )}
+                            onClick={() => handleProcessRequest(request.requestID, 'approve', request.facultyID, request.advisoryID)}
                             className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
                           >
                             Approve
                           </button>
                           <button
-                            onClick={() => handleProcessRequest(
-                              request.requestID, 
-                              'reject', 
-                              request.facultyID,
-                              request.advisoryID
-                            )}
+                            onClick={() => handleProcessRequest(request.requestID, 'reject', request.facultyID, request.advisoryID)}
                             className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
                           >
                             Reject
@@ -215,7 +188,7 @@ useEffect(() => {
                       </tr>
                     ))}
                     {filteredRequests.length === 0 && (
-                      <tr key="no-requests">
+                      <tr>
                         <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
                           No validation requests found
                         </td>
