@@ -1680,3 +1680,6 @@ router.get("/faculty-class-advisory", authenticateToken, async (req, res) => {
     });
   }
 });
+
+
+export default router;
