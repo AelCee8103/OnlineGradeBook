@@ -7,6 +7,8 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 const ManageStudents = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -35,6 +37,11 @@ const ManageStudents = () => {
     FirstName: "",
     MiddleName: "",
   });
+
+  // New states for file handling
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [uploadErrors, setUploadErrors] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Pagination logic
   const indexOfLastStudent = currentPage * studentsPerPage;
@@ -77,6 +84,22 @@ const ManageStudents = () => {
     }
   };
 
+  const fetchStudents = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get(
+        "http://localhost:3000/Pages/admin-manage-students",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setStudents(response.data);
+    } catch (error) {
+      console.error("Error fetching students:", error);
+      toast.error("Failed to fetch students");
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -104,6 +127,7 @@ const ManageStudents = () => {
     };
 
     fetchData();
+    fetchStudents();
   }, []);
 
   const handleChange = (e) => {
@@ -209,6 +233,127 @@ const ManageStudents = () => {
     setSelectedStudent({ ...selectedStudent, [e.target.name]: e.target.value });
   };
 
+  // New functions for file handling
+  const downloadTemplate = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Template");
+
+    // Add headers
+    worksheet.columns = [
+      { header: "LastName", key: "lastName" },
+      { header: "FirstName", key: "firstName" },
+      { header: "MiddleName", key: "middleName" },
+      { header: "StudentType", key: "studentType" },
+      { header: "Grade", key: "grade" },
+    ];
+
+    // Add sample data
+    worksheet.addRow({
+      lastName: "Doe",
+      firstName: "John",
+      middleName: "Smith",
+      studentType: "new",
+      grade: "7",
+    });
+
+    // Generate buffer
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(blob, "student_upload_template.xlsx");
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(await file.arrayBuffer());
+      const worksheet = workbook.getWorksheet(1);
+
+      const jsonData = [];
+      const headers = {};
+
+      // Get headers
+      worksheet.getRow(1).eachCell((cell, colNumber) => {
+        headers[colNumber] = cell.value;
+      });
+
+      // Get data
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber > 1) {
+          // Skip header row
+          const rowData = {};
+          row.eachCell((cell, colNumber) => {
+            rowData[headers[colNumber]] = cell.value;
+          });
+          jsonData.push(rowData);
+        }
+      });
+
+      setUploadedFile(jsonData);
+      setUploadErrors([]);
+    } catch (error) {
+      console.error("Error parsing file:", error);
+      setUploadErrors(["Invalid file format"]);
+    }
+  };
+
+  const handleBulkUpload = async () => {
+    if (!uploadedFile || uploadedFile.length === 0) {
+      toast.error("No data to upload");
+      return;
+    }
+
+    setIsUploading(true);
+    const errors = [];
+
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.post(
+        "http://localhost:3000/Pages/admin-manage-students/bulk",
+        { students: uploadedFile },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (response.data.success) {
+        // Update the local students state with the newly added students
+        setStudents((prevStudents) => [
+          ...prevStudents,
+          ...response.data.addedStudents,
+        ]);
+
+        // Show success message
+        toast.success(
+          `Successfully uploaded ${response.data.addedStudents.length} students`
+        );
+
+        // Reset upload states
+        setUploadedFile(null);
+        setUploadErrors([]);
+
+        // Close the modal
+        document.getElementById("bulk_upload_modal").close();
+      } else {
+        // Handle partial success or failure
+        if (response.data.errors && response.data.errors.length > 0) {
+          setUploadErrors(response.data.errors);
+          toast.error(`Failed to upload some students. Check the errors.`);
+        }
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast.error("Failed to upload students");
+      setUploadErrors([error.response?.data?.message || "Upload failed"]);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
       {/* Sidebar */}
@@ -274,6 +419,94 @@ const ManageStudents = () => {
               >
                 Add Student
               </button>
+
+              {/* Button to Download Template */}
+              <button
+                className="btn bg-green-500 hover:bg-green-600 text-white ml-3"
+                onClick={downloadTemplate}
+              >
+                Download Template
+              </button>
+
+              {/* Bulk Upload Button - NEW */}
+              <button
+                className="btn bg-green-500 hover:bg-green-600 text-white ml-3"
+                onClick={() =>
+                  document.getElementById("bulk_upload_modal").showModal()
+                }
+              >
+                Bulk Upload
+              </button>
+
+              {/* Bulk Upload Modal - NEW */}
+              <dialog
+                id="bulk_upload_modal"
+                className="modal modal-bottom sm:modal-middle"
+              >
+                <div className="modal-box">
+                  <h3 className="font-bold text-lg mb-4">
+                    Bulk Upload Students
+                  </h3>
+
+                  <div className="mb-4">
+                    <button
+                      onClick={downloadTemplate}
+                      className="btn btn-outline btn-sm mb-2"
+                    >
+                      Download Template
+                    </button>
+
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={handleFileUpload}
+                      className="file-input file-input-bordered w-full"
+                    />
+                  </div>
+
+                  {uploadedFile && (
+                    <div className="mb-4">
+                      <p className="text-sm text-gray-600">
+                        {uploadedFile.length} students found in file
+                      </p>
+                    </div>
+                  )}
+
+                  {uploadErrors.length > 0 && (
+                    <div className="mb-4 p-3 bg-red-100 rounded">
+                      <p className="font-semibold text-red-700">Errors:</p>
+                      <ul className="list-disc pl-5">
+                        {uploadErrors.map((error, index) => (
+                          <li key={index} className="text-sm text-red-600">
+                            {error}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="modal-action">
+                    <button
+                      onClick={handleBulkUpload}
+                      disabled={isUploading || !uploadedFile}
+                      className="btn bg-green-700 text-white"
+                    >
+                      {isUploading ? "Uploading..." : "Upload Students"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        document.getElementById("bulk_upload_modal").close();
+                        setUploadedFile(null);
+                        setUploadErrors([]);
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </dialog>
             </div>
 
             {/* Modal */}

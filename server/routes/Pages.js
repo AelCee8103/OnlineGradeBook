@@ -1476,6 +1476,113 @@ router.post('/admin/promote-school-year', authenticateToken, async (req, res) =>
   }
 });
 
+// Bulk upload students
+router.post('/admin-manage-students/bulk', authenticateToken, async (req, res) => {
+  const { students } = req.body;
+  const errors = [];
+  const addedStudents = [];
+  let db;
+
+  try {
+    db = await connectToDatabase();
+    await db.query('START TRANSACTION');
+
+    // Get current school year
+    const [currentYear] = await db.query(
+      'SELECT school_yearID FROM schoolyear WHERE status = 1'
+    );
+
+    if (!currentYear.length) {
+      throw new Error('No active school year found');
+    }
+
+    for (const student of students) {
+      try {
+        // Validate student data
+        if (!student.LastName || !student.FirstName || !student.MiddleName || !student.StudentType) {
+          errors.push(`Missing required fields for student: ${student.LastName || 'Unknown'}`);
+          continue;
+        }
+
+        const studentGrade = student.StudentType === 'new' ? 7 : parseInt(student.Grade);
+        
+        if (student.StudentType === 'transferee' && !student.Grade) {
+          errors.push(`Grade required for transferee: ${student.LastName}`);
+          continue;
+        }
+
+        // Insert student
+        const [studentResult] = await db.query(
+          'INSERT INTO students (LastName, FirstName, MiddleName, Status, isNew) VALUES (?, ?, ?, 1, ?)',
+          [student.LastName, student.FirstName, student.MiddleName, student.StudentType === 'new' ? 1 : 0]
+        );
+
+        // Find available advisory for grade level
+        const [advisory] = await db.query(`
+          SELECT a.advisoryID 
+          FROM advisory a 
+          JOIN classes c ON a.classID = c.ClassID  
+          LEFT JOIN student_classes sc ON a.advisoryID = sc.advisoryID
+          JOIN class_year cy ON a.advisoryID = cy.advisoryID
+          WHERE c.Grade = ? 
+          AND cy.yearID = ?
+          GROUP BY a.advisoryID
+          HAVING COUNT(sc.StudentID) < 50 OR COUNT(sc.StudentID) IS NULL
+          ORDER BY COUNT(sc.StudentID) ASC
+          LIMIT 1
+        `, [studentGrade, currentYear[0].school_yearID]);
+
+        if (!advisory.length) {
+          errors.push(`No available section found for Grade ${studentGrade} student: ${student.LastName}`);
+          continue;
+        }
+
+        // Assign student to advisory class
+        await db.query(
+          'INSERT INTO student_classes (StudentID, school_yearID, advisoryID) VALUES (?, ?, ?)',
+          [studentResult.insertId, currentYear[0].school_yearID, advisory[0].advisoryID]
+        );
+
+        // Add the newly created student to addedStudents array
+        addedStudents.push({
+          StudentID: studentResult.insertId,
+          LastName: student.LastName,
+          FirstName: student.FirstName,
+          MiddleName: student.MiddleName,
+          grade: studentGrade,
+          studentType: student.StudentType,
+          advisoryID: advisory[0].advisoryID
+        });
+      } catch (err) {
+        errors.push(`Failed to add student ${student.FirstName} ${student.LastName}: ${err.message}`);
+      }
+    }
+
+    await db.query('COMMIT');
+
+    // Return appropriate response
+    if (addedStudents.length > 0) {
+      res.status(200).json({
+        success: true,
+        addedStudents,
+        errors: errors.length > 0 ? errors : null,
+        message: `Successfully added ${addedStudents.length} students${errors.length > 0 ? ` with ${errors.length} errors` : ''}`
+      });
+    } else {
+      throw new Error('No students were added');
+    }
+
+  } catch (error) {
+    if (db) await db.query('ROLLBACK');
+    console.error('Bulk upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to upload students',
+      errors: errors.length > 0 ? errors : [error.message]
+    });
+  }
+});
+
 
 
 export default router;
