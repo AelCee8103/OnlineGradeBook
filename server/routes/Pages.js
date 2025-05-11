@@ -122,7 +122,7 @@ router.get('/admin-manage-faculty', async (req, res) => {
 });
 
 // POST add student
-router.post('/admin-manage-students', async (req, res) => {
+router.post('/admin-manage-students', authenticateToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
 
@@ -143,7 +143,7 @@ router.post('/admin-manage-students', async (req, res) => {
   }
 });
 
-router.put('/admin-manage-students', async (req, res) => {
+router.put('/admin-manage-students', authenticateToken, async (req, res) => {
   try {
      const db = await connectToDatabase();
      const { StudentID, LastName, FirstName, MiddleName} = req.body;
