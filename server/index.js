@@ -65,16 +65,27 @@ io.on('connection', (socket) => {
       socket.disconnect(true);
     }
   }, 10000); // 10 seconds timeout
-
   socket.on('authenticate', async (data) => {
     try {
       clearTimeout(authTimeout);
+      
+      // Add logging to diagnose authentication issues
+      console.log('Received authentication data:', JSON.stringify(data, null, 2));
+      
       const { userType, userID, facultyName, adminName } = data;
       console.log(`${userType} authentication attempt:`, userID);
       
-      // Simple validation
-      if (!userID || !userType) {
-        throw new Error('Invalid authentication data');
+      // Enhanced validation with more detailed error messages
+      if (!userID) {
+        console.error('Authentication failed: Missing userID');
+        socket.emit('socketError', { message: 'Authentication failed: Missing user ID' });
+        return;
+      }
+      
+      if (!userType || (userType !== 'faculty' && userType !== 'admin')) {
+        console.error('Authentication failed: Invalid userType:', userType);
+        socket.emit('socketError', { message: 'Authentication failed: Invalid user type' });
+        return;
       }
 
       // Store user connection info
@@ -87,6 +98,13 @@ io.on('connection', (socket) => {
       connectedUsers.set(userID, userInfo);
       socket.userID = userID;
       socket.userType = userType;
+      
+      // Send authentication success message back to client
+      socket.emit('authenticationSuccess', { 
+        userID,
+        userType,
+        message: `Successfully authenticated as ${userType}` 
+      });
 
       // Add user to appropriate rooms
       if (userType === 'admin') {
@@ -164,10 +182,10 @@ io.on('connection', (socket) => {
       }
 
       console.log('Validation request received:', data);
-      
-      // Broadcast to all admins through the 'admins' room
+        // Broadcast detailed notification to all admins through the 'admins' room
       io.to('admins').emit('newValidationRequest', {
         ...data,
+        message: `Faculty ${data.facultyName} has requested grade validation for Grade ${data.grade} - ${data.section}`,
         timestamp: new Date().toISOString()
       });
 
@@ -177,40 +195,26 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle validation responses from admins
+  // Handle validation responses from admins  // This handler is now deprecated - validation processing is handled directly in Pages.js route
   socket.on('validationResponse', async (data) => {
-  try {
-    if (!socket.userID || socket.userType !== 'admin') {
-      throw new Error('Unauthorized');
+    try {
+      if (!socket.userID || socket.userType !== 'admin') {
+        throw new Error('Unauthorized');
+      }
+        console.log('Received validation response via socket, but this is now handled by the HTTP endpoint');
+      // No action needed here - removed to prevent duplicate notifications
+      // The HTTP endpoint in Pages.js now handles all notification sending
+      
+      /* Disabled to prevent duplicate notifications:
+      const db = await connectToDatabase();
+      const [request] = await db.query(
+        'SELECT * FROM validation_request WHERE requestID = ?',
+        [data.requestID]
+      );
+      */    } catch (error) {
+      console.error('Error handling validation response:', error);
     }
-
-    // Verify the request exists before broadcasting
-    const db = await connectToDatabase();
-    const [request] = await db.query(
-      'SELECT * FROM validation_request WHERE requestID = ?',
-      [data.requestID]
-    );
-
-    if (request.length > 0) {
-      // Broadcast to all admins
-      io.to('admins').emit('validationStatusUpdate', {
-        requestID: data.requestID,
-        status: data.status,
-        timestamp: new Date().toISOString()
-      });
-
-     // In your validationResponse handler in index.js
-      io.to(`faculty_${data.facultyID}`).emit('validationResponseReceived', {
-        status: data.status,
-        requestID: data.requestID,
-        message: data.message || `Your validation request has been ${data.status}`,
-        timestamp: new Date().toISOString()
-      });
-    }
-  } catch (error) {
-    console.error('Error handling validation response:', error);
-  }
-});
+  });
 
   socket.on('disconnect', () => {
     if (socket.userID) {
