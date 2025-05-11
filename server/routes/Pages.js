@@ -1416,15 +1416,7 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
   }
 });
 
-router.post('/admin/process-validation', authenticateToken, async (req, res) => {
-  // Verify this is an admin request
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Only admin users can process validation requests'
-    });
-  }
-
+router.post('/admin/process-validation', async (req, res) => {
   const { requestID, action } = req.body;
   const io = req.app.get('socketio');
   const db = await connectToDatabase();
@@ -1461,25 +1453,23 @@ router.post('/admin/process-validation', authenticateToken, async (req, res) => 
       JOIN advisory a ON vr.advisoryID = a.advisoryID
       JOIN classes c ON a.classID = c.ClassID
       WHERE vr.requestID = ?
-    `, [requestID]);    if (updatedRequest.length > 0) {
+    `, [requestID]);
+
+    if (updatedRequest.length > 0) {
       const reqData = updatedRequest[0];
       
-      // Send a UI refresh event to admins instead of a notification
-      // This will update their request list without creating a notification
-      io.to('admins').emit('requestProcessed', {
+      // Broadcast update
+      io.to('admins').emit('validationStatusUpdate', {
         requestID,
-        action,
+        status: action,
         timestamp: new Date().toISOString()
-      });// Notify faculty with a proper detailed message
+      });
+
+      // Notify faculty
       io.to(`faculty_${reqData.facultyID}`).emit('validationResponseReceived', {
-        status: action === 'approve' ? 'approved' : 'rejected',
+        status: action,
         requestID,
-        advisoryID: reqData.advisoryID,
-        grade: reqData.Grade,
-        section: reqData.Section,
-        message: action === 'approve' 
-          ? 'Your grade validation request has been approved. Please visit the office to finalize your validation status.'
-          : 'Your grade validation request has been rejected. Please visit the office to discuss your validation status.',
+        message: `Your validation request for Grade ${reqData.Grade}-${reqData.Section} has been ${action}d`,
         timestamp: new Date().toISOString()
       });
     }
@@ -1488,17 +1478,9 @@ router.post('/admin/process-validation', authenticateToken, async (req, res) => 
       success: true, 
       message: `Request ${action === 'approve' ? 'approved' : 'rejected'}` 
     });
+
   } catch (error) {
     console.error("Error processing validation:", error);
-    
-    // Check if it's a token/auth error
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        success: false, 
-        message: "Authentication failed. Please log in again." 
-      });
-    }
-    
     res.status(500).json({ success: false, message: "Failed to process request" });
   }
 });

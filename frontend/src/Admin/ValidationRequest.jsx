@@ -3,9 +3,8 @@ import NavbarAdmin from "../Components/NavbarAdmin";
 import AdminSidePanel from "../Components/AdminSidePanel";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-// Removed toast imports - using notifications dropdown instead
+import { Toaster, toast } from "react-hot-toast";
 import { useSocket } from '../context/SocketContext';
-import { axiosInstance, useAxios } from '../utils/axiosConfig';
 
 const ValidationRequest = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -14,19 +13,25 @@ const ValidationRequest = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
   const socket = useSocket();
-  // Use our axios instance with authentication interceptors
-  const http = useAxios();
 
-    const fetchRequests = useCallback(async () => {
+  
+  const fetchRequests = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) {        alert("Authentication token missing. Please login again.");
+      if (!token) {
+        toast.error("Authentication token missing");
         navigate("/admin-login");
         return;
       }
 
-      const response = await http.get(
-        "/Pages/admin/validation-requests"
+      const response = await axios.get(
+        "http://localhost:3000/Pages/admin/validation-requests",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
       );
 
       if (response.data.success) {
@@ -36,174 +41,87 @@ const ValidationRequest = () => {
       }
     } catch (error) {
       console.error("Error fetching requests:", error);
-      console.error("Failed to fetch validation requests:", error);
-      // Display error in the UI instead of toast
-      const errorMessage = error.response?.data?.message || "Failed to fetch validation requests";
+      toast.error(error.response?.data?.message || "Failed to fetch validation requests");
     } finally {
       setLoading(false);
     }
   }, [navigate]);
+
+
   useEffect(() => {
-    // Ensure we always fetch requests even if socket initialization fails
     fetchRequests();
-    
-    // If we don't have a socket, don't try to use socket functionality
-    if (!socket) {
-      console.warn("Socket not available, falling back to HTTP only");
-      setLoading(false); // Make sure we're not stuck in loading state
-      return;
-    }
-    
-    // Define event handlers
-    const handleNewRequest = (data) => {      
-      // Refresh data from the server - notification is handled by the NotificationDropdown
-      fetchRequests();
+
+    if (!socket) return;
+
+    const handleNewRequest = (data) => {
+      // Verify the new request with the server before adding to UI
+      fetchRequests().then(() => {
+        toast.success(`New validation request from ${data.facultyName}`);
+      });
     };
-    
-    const handleRequestProcessed = (data) => {
-      // This handler is for requests processed by this admin - no notification needed
-      console.log(`Request ${data.requestID} processed with action: ${data.action}`);
-      fetchRequests();
+
+    const handleStatusUpdate = (data) => {
+      // Always verify with server after status updates
+      fetchRequests().then(() => {
+        toast.success(`Request ${data.status}ed successfully`);
+      });
     };
 
     const handleInitialRequests = (data) => {
       // Use server-sent data directly
-      if (data && data.requests) {
-        setRequests(data.requests);
-        setLoading(false);
-      } else {
-        console.warn("Received empty or invalid initial requests data");
-        // Ensure we don't stay in loading state
-        setLoading(false);
-      }
+      setRequests(data.requests);
+      setLoading(false);
     };
-    
-    // Add handlers with error handling
+
     socket.on("newValidationRequest", handleNewRequest);
-    socket.on("requestProcessed", handleRequestProcessed);
+    socket.on("validationStatusUpdate", handleStatusUpdate);
     socket.on("initialRequests", handleInitialRequests);
     socket.on("socketError", (error) => {
-      console.error("Socket error:", error.message);
-      // Ensure we don't stay in loading state if socket errors
-      setLoading(false);
+      toast.error(error.message);
     });
 
-    try {
-      // Request fresh data when component mounts
-      console.log("Requesting initial validation requests data...");
-      socket.emit("getInitialRequests");
-    } catch (error) {
-      console.error("Error requesting initial data:", error);
-      // Make sure we're not stuck in loading state
-      setLoading(false);
-    }
-        // Add a fallback timeout to ensure we exit the loading state
-      const fallbackTimer = setTimeout(() => {
-        if (loading) {
-          console.warn("Timeout waiting for socket response, exiting loading state");
-          setLoading(false);
-        }
-      }, 5000); // 5 second timeout
-    
-    // The cleanup function for this useEffect
+    // Request fresh data when component mounts
+    socket.emit("getInitialRequests");
+
     return () => {
-      clearTimeout(fallbackTimer);
-      
-      // Make sure socket exists before trying to remove listeners
-      if (socket) {
-        socket.off("newValidationRequest", handleNewRequest);
-        socket.off("requestProcessed", handleRequestProcessed);
-        socket.off("initialRequests", handleInitialRequests);
-        socket.off("socketError");
-      }
+      socket.off("newValidationRequest", handleNewRequest);
+      socket.off("validationStatusUpdate", handleStatusUpdate);
+      socket.off("initialRequests", handleInitialRequests);
+      socket.off("socketError");
     };
   }, [socket, fetchRequests]);
 
-  // Process validation request (approve/reject)
-const handleProcessRequest = async (requestID, action, facultyID, advisoryID, grade, section, facultyName) => {
+
+  // In ValidationRequest.jsx
+const handleProcessRequest = async (requestID, action, facultyID, advisoryID) => {
   try {
     const token = localStorage.getItem("token");
     
-    if (!token) {
-      console.error("No token found - user may be logged out");
-      alert("Authentication error. Please log in again.");
-      navigate('/admin-login');
-      return;
-    }
-      const response = await http.post(
-      "/Pages/admin/process-validation",
-      { 
-        requestID, 
-        action,
-        grade,
-        section 
-      }
-    );    if (response.data.success) {
-      // Generate appropriate message based on action
-      let message = action === 'approve' ? 
-        'Your grade validation request has been approved. Please visit the office to finalize your validation status.' :
-        'Your grade validation request has been rejected. Please visit the office to discuss your validation status.';
-      
-      // Only need to inform the server that the request was processed
-      console.log(`${action === 'approve' ? 'Approved' : 'Rejected'} request ID: ${requestID}`);
+    const response = await axios.post(
+      "http://localhost:3000/Pages/admin/process-validation",
+      { requestID, action },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (response.data.success && socket) {
+      socket.emit("validationResponse", {
+        requestID,
+        facultyID,
+        advisoryID,
+        status: action,
+        message: `Your validation request has been ${action}d`,
+        timestamp: new Date().toISOString(),
+      });
       
       // Update local state optimistically
       setRequests(prev => 
         prev.filter(req => req.requestID !== requestID)
       );
-      
-      // If socket exists, emit event to refresh data on other clients
-      if (socket && socket.connected) {
-        try {
-          socket.emit("requestProcessed", {
-            requestID,
-            action,
-            processed: true
-          });
-        } catch (socketError) {
-          console.warn("Socket error when emitting requestProcessed:", socketError);
-          // Non-critical error, continue without the socket notification
-        }
-      }
-  }} catch (error) {
+    }
+  } catch (error) {
     console.error("Error processing request:", error);
-    
-    // Check if it's an authentication error
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.error("Authentication failed - redirecting to login");
-      alert("Your session has expired. Please log in again.");
-      
-      // Clear all authentication data
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminID");
-      localStorage.removeItem("adminName");
-      
-      // Use setTimeout to avoid navigation during the error handling
-      setTimeout(() => {
-        navigate('/admin-login');
-      }, 100);
-      return;
-    }
-    
-    // Handle network errors
-    if (error.message && error.message.includes('Network Error')) {
-      alert("Network connection issue. Please check your internet connection and try again.");
-      return;
-    }
-    
-    // Handle server errors
-    if (error.response && error.response.status >= 500) {
-      alert("Server error. The system is currently unavailable. Please try again later.");
-      return;
-    }
-    
-    // Handle other types of errors
-    alert("Failed to process validation request. Please try again.");
-    
-    // Re-fetch to ensure UI matches server state after a short delay
-    setTimeout(() => {
-      fetchRequests();
-    }, 500);
+    toast.error("Failed to process request");
+    fetchRequests(); // Re-fetch to ensure UI matches server state
   }
 };
 
@@ -218,7 +136,7 @@ const handleProcessRequest = async (requestID, action, facultyID, advisoryID, gr
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Removed Toaster - notifications now handled by NotificationDropdown */}
+      <Toaster position="top-center" />
       <AdminSidePanel
         isSidebarOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -258,28 +176,14 @@ const handleProcessRequest = async (requestID, action, facultyID, advisoryID, gr
                         <td className="px-6 py-4 whitespace-nowrap">{request.schoolYear}</td>
                         <td className="px-6 py-4 whitespace-nowrap">{request.requestDate}</td>
                         <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                          <button                            onClick={() => handleProcessRequest(
-                              request.requestID, 
-                              'approve', 
-                              request.facultyID, 
-                              request.advisoryID,
-                              request.grade,
-                              request.section,
-                              request.facultyName
-                            )}
+                          <button
+                            onClick={() => handleProcessRequest(request.requestID, 'approve', request.facultyID, request.advisoryID)}
                             className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
                           >
                             Approve
                           </button>
-                          <button                            onClick={() => handleProcessRequest(
-                              request.requestID, 
-                              'reject',
-                              request.facultyID, 
-                              request.advisoryID,
-                              request.grade,
-                              request.section,
-                              request.facultyName
-                            )}
+                          <button
+                            onClick={() => handleProcessRequest(request.requestID, 'reject', request.facultyID, request.advisoryID)}
                             className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
                           >
                             Reject

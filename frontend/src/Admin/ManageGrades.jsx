@@ -5,8 +5,6 @@ import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
-import { axiosInstance, useAxios } from '../utils/axiosConfig';
-import { useSocket } from '../context/SocketContext';
 
 const ManageGrades = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -15,29 +13,16 @@ const ManageGrades = () => {
   const navigate = useNavigate();
   const [advisorySearch, setAdvisorySearch] = useState("");
   const [subjectSearch, setSubjectSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const socket = useSocket();
-  const http = useAxios(); // Get axios instance with auth handling
 
   // Authenticate Admin
   const fetchUser = async () => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) {
-        console.error("No authentication token found");
-        navigate("/admin-login");
-        return;
-      }
-      
-      // Use http instead of axiosInstance for proper error handling with navigation
-      await http.get("/auth/admin-dashboard");
+      await axios.get("http://localhost:3000/auth/admin-manage-grades", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
     } catch (error) {
-      console.error("Error authenticating admin:", error);
-      // Clear invalid token and admin data
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminID");
-      localStorage.removeItem("adminName");
+      console.error("Error fetching data:", error);
       navigate("/admin-login");
     }
   };
@@ -50,18 +35,17 @@ const ManageGrades = () => {
   useEffect(() => {
     const fetchAdvisories = async () => {
       try {
-        // Use http instance instead of axiosInstance for proper error handling with navigation
-        const response = await http.get("/Pages/admin/manage-grades");
+        const token = localStorage.getItem("token");
+        const response = await axios.get(
+          "http://localhost:3000/Pages/admin/manage-grades",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
 
         console.log("Advisory API response:", response.data);
 
         const rawData = Array.isArray(response.data)
           ? response.data
           : response.data.advisories || [];
-          
-        if (!rawData || rawData.length === 0) {
-          console.warn("No advisory data received from server");
-        }
 
         const formatted = rawData.map((item) => ({
           advisoryID: item.advisoryID,
@@ -85,15 +69,11 @@ const ManageGrades = () => {
   useEffect(() => {
     const fetchSubjectClasses = async () => {
       try {
-        // Use http instance instead of axiosInstance for proper error handling with navigation
-        const response = await http.get("/Pages/admin-assign-subject");
-        
-        // Add null check and better error handling
-        if (!response.data) {
-          console.warn("No subject class data received");
-          return;
-        }
-        
+        const token = localStorage.getItem("token");
+        const response = await axios.get(
+          "http://localhost:3000/Pages/admin-assign-subject",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
         const formatted = response.data.map((item) => ({
           subjectCode: item.subjectCode,
           subjectName: item.subjectName,
