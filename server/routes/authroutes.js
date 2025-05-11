@@ -156,15 +156,24 @@ router.post('/admin-login', async (req, res) => {
     const [rows] = await db.query('SELECT * FROM admin WHERE AdminID = ?', [AdminID]);
     if (rows.length === 0) {
       return res.status(404).json({ message: "Admin does not exist" });
-    }
-
-    const isMatch = await bcrypt.compare(Password, rows[0].Password);
+    }    const isMatch = await bcrypt.compare(Password, rows[0].Password);
     if (!isMatch) {
       return res.status(404).json({ message: "Incorrect password" });
     }
 
-    const token = jwt.sign({ AdminID: rows[0].AdminID }, process.env.JWT_KEY, { expiresIn: '3h' });
-    return res.status(201).json({ token: token });
+    // Create an admin name from the database record
+    const adminName = `${rows[0].FirstName || ''} ${rows[0].LastName || ''}`.trim() || 'Admin';
+
+    const token = jwt.sign({ 
+      AdminID: rows[0].AdminID,
+      role: 'admin',
+      name: adminName
+    }, process.env.JWT_KEY, { expiresIn: '3h' });
+    
+    return res.status(201).json({ 
+      token: token,
+      adminName: adminName
+    });
 
   } catch (err) {
     console.error("Database Error:", err.message);
@@ -177,22 +186,56 @@ const verifyAdminToken = (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
     if (!authHeader) {
-      return res.status(403).json({ message: "No token provided" });
+      return res.status(403).json({ 
+        success: false, 
+        message: "No token provided" 
+      });
     }
 
     const token = authHeader.split(' ')[1];
     if (!token) {
-      return res.status(403).json({ message: "Token missing" });
+      return res.status(403).json({ 
+        success: false, 
+        message: "Token missing" 
+      });
+    }    const decoded = jwt.verify(token, process.env.JWT_KEY);
+    
+    // Check if it's an admin token
+    if (!decoded.AdminID && decoded.role !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        message: "Not authorized as admin" 
+      });
     }
-
-    const decoded = jwt.verify(token, process.env.JWT_KEY);
+    
     req.AdminID = decoded.AdminID;
+    req.user = {
+      adminID: decoded.AdminID,
+      role: 'admin',
+      name: decoded.name || 'Admin'
+    };
 
     next();
 
   } catch (err) {
     console.error("Token verification error:", err.message);
-    return res.status(401).json({ message: "Invalid token" });
+    
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Token expired. Please login again."
+      });
+    } else if (err.name === 'JsonWebTokenError') {
+      return res.status(401).json({ 
+        success: false, 
+        message: "Invalid token. Please login again."
+      });
+    }
+    
+    return res.status(401).json({ 
+      success: false, 
+      message: "Authentication failed. Please login again."
+    });
   }
 };
 

@@ -16,7 +16,6 @@ const AdminLogin = () => {
     setValues({ ...values, [e.target.name]: e.target.value });
   };
 
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -25,17 +24,51 @@ const AdminLogin = () => {
       alert("Please fill in both Admin ID and Password.");
       return;
     }
-
+    
     try {
+      // First clear any previous authentication data
+      localStorage.removeItem('token');
+      localStorage.removeItem('adminID');
+      localStorage.removeItem('adminName');
+      localStorage.removeItem('facultyID');
+      localStorage.removeItem('facultyName');
+      
       const response = await axios.post('http://localhost:3000/auth/admin-login', values);
-      if (response.status === 201) {
+      if (response.status === 201 && response.data.token) {
+        // Store authentication data
         localStorage.setItem('token', response.data.token);
-       
-        navigate('/admin-dashboard');
+        localStorage.setItem('adminID', values.AdminID);
+        localStorage.setItem('adminName', response.data.adminName || 'Admin');
+        
+        console.log("Admin login successful, redirecting to dashboard");
+        
+        // Add a small delay before redirect to ensure localStorage is updated
+        setTimeout(() => {
+          navigate('/admin-dashboard');
+        }, 100);
+      } else {
+        // Handle unexpected response
+        alert("Login failed. Unexpected server response.");
       }
     } catch (err) {
-      console.log(err);
-      alert("Invalid credentials or server error.");
+      console.error("Login error:", err);
+      
+      if (err.response) {
+        // Handle specific error responses
+        if (err.response.status === 404) {
+          alert("Admin ID not found or password incorrect.");
+        } else if (err.response.status === 500) {
+          alert("Server error. Please try again later.");
+        } else {
+          alert(err.response.data?.message || "Login failed. Please try again.");
+        }
+      } else if (err.request) {
+        // Network error
+        alert("Network error. Please check your internet connection.");
+      } else {
+        // Unexpected error
+        alert("Invalid credentials or server error.");
+      }
     }
   };
 

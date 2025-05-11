@@ -29,10 +29,11 @@ export const authenticateToken = (req, res, next) => {
       });
     }
 
-    // Standardize the user object
+    // Standardize the user object - handle both faculty and admin tokens
     req.user = {
       facultyID: decoded.FacultyID || decoded.facultyID,
-      role: decoded.role || 'faculty'
+      adminID: decoded.AdminID || decoded.adminID,
+      role: decoded.role || (decoded.AdminID ? 'admin' : 'faculty')
     };
     next();
   });
