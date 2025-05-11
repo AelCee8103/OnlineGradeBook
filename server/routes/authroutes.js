@@ -246,7 +246,7 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
     }
     const currentSchoolYearID = currentYear[0].school_yearID;
 
-    // Rest of your existing code...
+    // Get faculty details
     const [faculty] = await db.query(
       'SELECT FirstName, LastName, MiddleName FROM faculty WHERE FacultyID = ?',
       [facultyID]
@@ -256,6 +256,7 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
       return res.status(404).json({ message: "Faculty not found" });
     }
 
+    // Get advisory class details
     const [advisoryClasses] = await db.query(
       `SELECT a.advisoryID, c.Grade, c.Section 
        FROM advisory a
@@ -270,20 +271,23 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
         grade: "",
         section: "",
         advisorName: `${faculty[0].LastName}, ${faculty[0].FirstName}`,
+        advisoryID: null,
+        facultyID: facultyID,
         students: [],
         message: "No advisory class assigned"
       });
     }
 
-    const { Grade, Section } = advisoryClasses[0];
+    const { advisoryID, Grade, Section } = advisoryClasses[0];
     
+    // Get students in advisory class
     const [students] = await db.query(
       `SELECT s.StudentID, s.FirstName, s.MiddleName, s.LastName
        FROM students s
        JOIN student_classes sc ON s.StudentID = sc.StudentID
        WHERE sc.advisoryID = ? AND sc.school_yearID = ?
        ORDER BY s.LastName, s.FirstName`,
-      [advisoryClasses[0].advisoryID, currentSchoolYearID]
+      [advisoryID, currentSchoolYearID]
     );
 
     res.status(200).json({
@@ -292,6 +296,8 @@ router.get("/faculty-class-advisory", verifyToken, async (req, res) => {
       advisorName: `${faculty[0].LastName}, ${faculty[0].FirstName}${
         faculty[0].MiddleName ? ` ${faculty[0].MiddleName.charAt(0)}.` : ''
       }`,
+      advisoryID: advisoryID,
+      facultyID: facultyID,
       students: students.map(s => ({
         StudentID: s.StudentID.toString(),
         FirstName: s.FirstName || '',

@@ -531,77 +531,62 @@ router.get("/admin-manage-subject", async (req, res) => {
 
 router.post("/admin-assign-subject", async (req, res) => {
   try {
-    const { SubjectCode, subjectID, FacultyID, school_yearID, advisoryID } = req.body;
-    
+    const {subjectID, FacultyID, school_yearID, advisoryID } = req.body;
+
     // Validate all required fields
-    if (!SubjectCode || !subjectID || !FacultyID || !school_yearID || !advisoryID) {
+    if (!subjectID || !FacultyID || !school_yearID || !advisoryID) {
       return res.status(400).json({ error: "All fields are required" });
     }
 
     const db = await connectToDatabase();
-    
-    // Verify advisory exists
-    const [advisoryCheck] = await db.query(
-      "SELECT advisoryID FROM advisory WHERE advisoryID = ?", 
-      [advisoryID]
+
+    // Check for duplicate assignment
+    const [duplicateCheck] = await db.query(
+      `SELECT * FROM assignsubject 
+       WHERE subjectID = ? AND FacultyID = ? AND yearID = ? AND advisoryID = ?`,
+      [subjectID, FacultyID, school_yearID, advisoryID]
     );
-    if (!advisoryCheck.length) {
-      return res.status(400).json({ error: "Specified advisory class does not exist" });
+
+    if (duplicateCheck.length > 0) {
+      return res.status(409).json({ 
+        error: "This subject is already assigned to the selected faculty and advisory for the school year" 
+      });
     }
 
-    // Verify faculty exists
-    const [facultyCheck] = await db.query(
-      "SELECT FacultyID FROM faculty WHERE FacultyID = ?", 
-      [FacultyID]
+    // Insert new assignment - Let MySQL auto-increment handle the SubjectCode
+    const [result] = await db.query(
+      `INSERT INTO assignsubject 
+       (subjectID, FacultyID, yearID, advisoryID)
+       VALUES (?, ?, ?, ?)`,
+      [subjectID, FacultyID, school_yearID, advisoryID]
     );
-    if (!facultyCheck.length) {
-      return res.status(400).json({ error: "Specified faculty does not exist" });
+
+    if (!result.insertId) {
+      throw new Error("Failed to create assignment");
     }
 
-    // Verify subject exists
-    const [subjectCheck] = await db.query(
-      "SELECT SubjectID FROM subjects WHERE SubjectID = ?", 
-      [subjectID]
-    );
-    if (!subjectCheck.length) {
-      return res.status(400).json({ error: "Specified subject does not exist" });
-    }
+    res.status(201).json({ 
+      message: "Assignment created successfully",
+      SubjectCode: result.insertId 
+    });
 
-    // Verify school year exists
-    const [yearCheck] = await db.query(
-      "SELECT school_yearID FROM schoolyear WHERE school_yearID = ?", 
-      [school_yearID]
-    );
-    if (!yearCheck.length) {
-      return res.status(400).json({ error: "Specified school year does not exist" });
-    }
-
-    // Create assignment
-    await db.query(`
-      INSERT INTO assignsubject 
-        (SubjectCode, subjectID, FacultyID, yearID, advisoryID)
-      VALUES (?, ?, ?, ?, ?)`,
-      [SubjectCode, subjectID, FacultyID, school_yearID, advisoryID]
-    );
-    
-    res.status(201).json({ message: "Assignment created successfully" });
   } catch (error) {
     console.error("Error creating assignment:", error);
-    
-    // More specific error messages
+
     if (error.code === 'ER_NO_REFERENCED_ROW_2') {
       return res.status(400).json({ 
         error: "Reference error - one of the referenced IDs doesn't exist",
         details: error.sqlMessage
       });
     }
-    
+
     res.status(500).json({ 
       error: "Failed to create assignment",
       details: error.message 
     });
   }
 });
+
 
 
 
@@ -650,7 +635,7 @@ router.post("/admin-dashboard", async (req, res) => {
     if (!SchoolYear || !year) {
       return res.status(400).json({ error: "Both School Year ID and Year are required." });
     }
-aaaa
+
     // Check if the school year already exists
     const checkSql = "SELECT * FROM schoolyear WHERE school_yearID = ?";
     const [existing] = await db.query(checkSql, [SchoolYear]);
@@ -896,8 +881,11 @@ router.get('/admin-create-advisory', async (req, res) => {
   try {
     db = await connectToDatabase();
     const [advisories] = await db.query(`
-      SELECT advisoryID, classID, facultyID 
-      FROM advisory
+      SELECT a.advisoryID, a.classID, a.facultyID
+      FROM advisory a
+      INNER JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      INNER JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE sy.status = 1
     `);
 
     res.status(200).json(advisories);
@@ -906,6 +894,7 @@ router.get('/admin-create-advisory', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch advisory classes' });
   }
 });
+
 
 // Get advisory classes with faculty and class info for active school year
 router.get('/admin/manage-grades', async (req, res) => {
@@ -1611,5 +1600,345 @@ router.post('/admin-manage-students/bulk', authenticateToken, async (req, res) =
 });
 
 
+
+//Validation requests
+
+router.post('/faculty/submit-validation', authenticateToken, async (req, res) => {
+  const { advisoryID } = req.body;
+  const facultyID = req.facultyID; // From auth token
+
+  try {
+    const db = await connectToDatabase();
+    
+    // Get all students in this advisory class
+    const [students] = await db.query(
+      `SELECT StudentID FROM student_classes WHERE advisoryID = ?`,
+      [advisoryID]
+    );
+
+    // Start transaction
+    await db.query('START TRANSACTION');
+
+    // Create validation request for each student
+    for (const student of students) {
+      await db.query(
+        `INSERT INTO validation_request 
+        (studentID, facultyID, advisoryID, statusID) 
+        VALUES (?, ?, ?, 0) 
+        ON DUPLICATE KEY UPDATE statusID = 0`,
+        [student.StudentID, facultyID, advisoryID]
+      );
+    }
+
+    await db.query('COMMIT');
+    res.json({ success: true, message: "Validation request submitted" });
+
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error("Error submitting validation:", error);
+    res.status(500).json({ success: false, message: "Failed to submit validation" });
+  }
+});
+
+
+router.get('/admin/validation-requests', authenticateToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    
+    const [requests] = await db.query(`
+      SELECT 
+        vr.requestID,
+        vr.advisoryID,
+        vr.facultyID,
+        vr.requestDate,
+        CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
+        c.Grade,
+        c.Section,
+        sy.year AS schoolYear
+      FROM validation_request vr
+      JOIN faculty f ON vr.facultyID = f.FacultyID
+      JOIN advisory a ON vr.advisoryID = a.advisoryID
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE vr.statusID = 0
+      ORDER BY vr.requestDate DESC
+    `);
+
+    res.json({ 
+      success: true, 
+      requests: requests.map(req => ({
+        ...req,
+        requestDate: new Date(req.requestDate).toLocaleString()
+      }))
+    });
+
+  } catch (error) {
+    console.error("Error fetching validation requests:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch requests",
+      error: error.message 
+    });
+  }
+});
+
+router.post('/admin/process-validation', async (req, res) => {
+  const { requestID, action } = req.body; // action: 'approve' or 'reject'
+
+  try {
+    const db = await connectToDatabase();
+    const statusID = action === 'approve' ? 1 : 2;
+
+    await db.query(
+      `UPDATE validation_request SET statusID = ? WHERE requestID = ?`,
+      [statusID, requestID]
+    );
+
+    res.json({ 
+      success: true, 
+      message: `Request ${action === 'approve' ? 'approved' : 'rejected'}` 
+    });
+
+  } catch (error) {
+    console.error("Error processing validation:", error);
+    res.status(500).json({ success: false, message: "Failed to process request" });
+  }
+});
+
+// Simplified validation request route
+router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
+  const db = await connectToDatabase();
+  
+  try {
+    const { advisoryID } = req.body;
+    const facultyID = req.user.facultyID;
+    const requestDate = new Date().toISOString();
+
+    // First check for existing pending requests
+    const [existingRequests] = await db.query(
+      `SELECT COUNT(*) as count FROM validation_request 
+       WHERE advisoryID = ? AND facultyID = ? AND statusID = 0`,
+      [advisoryID, facultyID]
+    );
+
+    if (existingRequests[0].count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "You already have a pending validation request for this advisory class"
+      });
+    }
+
+    // Verify faculty's advisory assignment
+    const [advisory] = await db.query(
+      'SELECT advisoryID FROM advisory WHERE advisoryID = ? AND facultyID = ?',
+      [advisoryID, facultyID]
+    );
+
+    if (advisory.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized for this advisory class"
+      });
+    }
+
+    await db.query('START TRANSACTION');
+
+    // Create a single validation request for the advisory class
+    await db.query(
+      `INSERT INTO validation_request 
+       (facultyID, advisoryID, statusID, requestDate) 
+       VALUES (?, ?, 0, ?)`,
+      [facultyID, advisoryID, requestDate]
+    );
+
+    await db.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: "Validation request created successfully",
+      requestDate: requestDate
+    });
+
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error("Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create validation request"
+    });
+  }
+});
+
+// Add this route before your existing validation route
+router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
+  const db = await connectToDatabase();
+  
+  try {
+    const { advisoryID } = req.params;
+    const facultyID = req.user.facultyID; // Assuming facultyID is in the token
+
+    // Get the most recent validation request and its status
+    const [request] = await db.query(
+      `SELECT requestID, requestDate, statusID,
+        CASE 
+          WHEN statusID = 0 THEN 'pending'
+          WHEN statusID = 1 THEN 'approved'
+          WHEN statusID = 2 THEN 'rejected'
+        END as status
+       FROM validation_request 
+       WHERE advisoryID = ? 
+       AND facultyID = ? 
+       ORDER BY requestDate DESC 
+       LIMIT 1`,
+      [advisoryID, facultyID]
+    );
+
+    if (request.length > 0) {
+      res.json({
+        hasPendingRequest: request[0].statusID === 0,
+        status: request[0].status,
+        lastRequestDate: request[0].requestDate,
+        requestID: request[0].requestID
+      });
+    } else {
+      res.json({
+        hasPendingRequest: false,
+        status: null,
+        lastRequestDate: null,
+        requestID: null
+      });
+    }
+
+  } catch (error) {
+    console.error("Error checking pending requests:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to check pending requests"
+    });
+  }
+});
+
+router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
+  const db = await connectToDatabase();
+  
+  try {
+    const { advisoryID } = req.params;
+    const facultyID = req.user.facultyID;
+
+    const [request] = await db.query(
+      `SELECT requestID, requestDate, statusID,
+        CASE 
+          WHEN statusID = 0 THEN 'pending'
+          WHEN statusID = 1 THEN 'approved'
+          WHEN statusID = 2 THEN 'rejected'
+        END as status
+       FROM validation_request 
+       WHERE advisoryID = ? 
+       AND facultyID = ? 
+       ORDER BY requestDate DESC 
+       LIMIT 1`,
+      [advisoryID, facultyID]
+    );
+
+    res.json({
+      success: true,
+      hasPendingRequest: request.length > 0 && request[0].statusID === 0,
+      status: request.length > 0 ? request[0].status : null,
+      lastRequestDate: request.length > 0 ? request[0].requestDate : null
+    });
+
+  } catch (error) {
+    console.error("Error checking pending requests:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to check pending requests"
+    });
+  }
+});
+
+// Add this route to get faculty class advisory data
+router.get("/faculty-class-advisory", authenticateToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const facultyID = req.user.id;
+
+    // Get current active school year
+    const [currentYear] = await db.query(
+      'SELECT school_yearID FROM schoolyear WHERE status = "1" LIMIT 1'
+    );
+    
+    if (currentYear.length === 0) {
+      return res.status(404).json({ 
+        message: "No active school year found" 
+      });
+    }
+
+    const currentSchoolYearID = currentYear[0].school_yearID;
+
+    // Get faculty details
+    const [faculty] = await db.query(
+      'SELECT FirstName, LastName, MiddleName FROM faculty WHERE FacultyID = ?',
+      [facultyID]
+    );
+    
+    if (faculty.length === 0) {
+      return res.status(404).json({ 
+        message: "Faculty not found" 
+      });
+    }
+
+    // Get advisory class details
+    const [advisoryClasses] = await db.query(
+      `SELECT a.advisoryID, c.Grade, c.Section 
+       FROM advisory a
+       JOIN classes c ON a.classID = c.ClassID
+       JOIN class_year cy ON a.advisoryID = cy.advisoryID
+       WHERE a.facultyID = ? AND cy.yearID = ?`,
+      [facultyID, currentSchoolYearID]
+    );
+
+    if (advisoryClasses.length === 0) {
+      return res.json({
+        message: "No advisory class assigned",
+        advisorName: `${faculty[0].LastName}, ${faculty[0].FirstName}`
+      });
+    }
+
+    const { advisoryID, Grade, Section } = advisoryClasses[0];
+    
+    // Get students in advisory class
+    const [students] = await db.query(
+      `SELECT s.StudentID, s.FirstName, s.MiddleName, s.LastName
+       FROM students s
+       JOIN student_classes sc ON s.StudentID = sc.StudentID
+       WHERE sc.advisoryID = ? AND sc.school_yearID = ?
+       ORDER BY s.LastName, s.FirstName`,
+      [advisoryID, currentSchoolYearID]
+    );
+
+    res.status(200).json({
+      grade: Grade.toString(),
+      section: Section,
+      advisorName: `${faculty[0].LastName}, ${faculty[0].FirstName}${
+        faculty[0].MiddleName ? ` ${faculty[0].MiddleName.charAt(0)}.` : ''
+      }`,
+      advisoryID: advisoryID,
+      students: students.map(s => ({
+        StudentID: s.StudentID.toString(),
+        FirstName: s.FirstName || '',
+        MiddleName: s.MiddleName || '',
+        LastName: s.LastName || ''
+      }))
+    });
+
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).json({ 
+      error: "Internal Server Error",
+      message: error.message 
+    });
+  }
+});
 
 export default router;

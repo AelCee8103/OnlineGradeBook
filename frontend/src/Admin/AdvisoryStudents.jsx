@@ -120,22 +120,25 @@ const AdvisoryStudents = () => {
 
           {advisoryInfo ? (
             <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
-              <p>
-                <strong>Grade:</strong> {advisoryInfo.Grade}
-              </p>
-              <p>
-                <strong>Section:</strong> {advisoryInfo.Section}
-              </p>
-              <p>
-                <strong>Class Advisor:</strong> {advisoryInfo.facultyName}
-              </p>
-              <p>
-                <strong>School Year:</strong> {advisoryInfo.SchoolYear}
-              </p>
-              <p>
-                <strong>Number of Students:</strong> {students.length}
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="font-semibold">Grade & Section:</p>
+                <p>{advisoryInfo.Grade} - {advisoryInfo.Section}</p>
+              </div>
+              <div>
+                <p className="font-semibold">Class Advisor:</p>
+                <p>{advisoryInfo.facultyName}</p>
+              </div>
+              <div>
+                <p className="font-semibold">School Year:</p>
+                <p>{advisoryInfo.SchoolYear}</p>
+              </div>
+              <div>
+                <p className="font-semibold">Number of Students:</p>
+                <p>{students.length}</p>
+              </div>
             </div>
+          </div>
           ) : (
             <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
               <p className="text-red-500">
