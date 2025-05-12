@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import NavbarFaculty from "../Components/NavbarFaculty";
+import NavbarFaculty from "../components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
 import axios from "axios";
 import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { Dialog } from "@headlessui/react";
 import { useSocket } from '../context/SocketContext'; // Use the socket from context
-import NotificationDropdown from "../Components/NotificationDropdown";
+
 
 // Add this helper function at the top of the file, outside the component
 const getStoredValidationStatus = (advisoryID) => {
