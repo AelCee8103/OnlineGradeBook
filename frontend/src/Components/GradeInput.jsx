@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { validateGradeInput } from "../Components/utils/gradeValidation";
+import { validateGradeInput } from "../utils/gradeValidation";
 
 const GradeInput = ({ initialValue, onSave, disabled }) => {
   const [value, setValue] = useState(initialValue || "");
