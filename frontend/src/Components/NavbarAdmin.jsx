@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { faUser, faBars } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"; 
-import NotificationDropdown from "../components/NotificationDropdown"; // Adjust the import path as necessary
+import NotificationDropdown from "./NotificationDropdown";
 import { useSocket } from "../context/SocketContext";
 
 const NavbarAdmin = ({ toggleSidebar }) => {

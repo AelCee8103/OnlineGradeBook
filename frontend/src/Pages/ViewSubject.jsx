@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import NavbarFaculty from "../components/NavbarFaculty";
+import NavbarFaculty from "../Components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel.jsx";
 import axios from "axios";
 import { FiEye, FiBook } from "react-icons/fi"; // Added missing import
