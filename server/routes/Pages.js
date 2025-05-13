@@ -1989,4 +1989,40 @@ router.post('/admin/process-validation', authenticateToken, async (req, res) => 
   }
 });
 
+// Add this with your other routes
+router.put('/admin-manage-students/archive/:studentId', authenticateToken, async (req, res) => {
+  const { studentId } = req.params;
+  let db;
+
+  try {
+    db = await connectToDatabase();
+    
+    // Update student status to archived (0)
+    const [result] = await db.query(
+      'UPDATE students SET Status = 0 WHERE StudentID = ?',
+      [studentId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Student not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Student archived successfully',
+      studentId 
+    });
+
+  } catch (error) {
+    console.error('Error archiving student:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to archive student' 
+    });
+  }
+});
+
 export default router;
