@@ -1,18 +1,18 @@
 // notification.js - Utility functions for handling notifications
-import React from 'react';
-// Import the JSX version of the notification function
-import { showValidationStatusNotification as jsxShowNotification } from './notification.jsx';
+// Importing from the JSX version to ensure consistent implementation
+import { showValidationStatusNotification as jsxNotification } from './notification.jsx';
 
 /**
  * Show a styled toast notification for validation status changes
+ * This is a wrapper around the JSX version for backwards compatibility
  * @param {object} toast - The toast instance from react-hot-toast
  * @param {string} status - The validation status ('approved', 'rejected', 'pending')
  * @param {string} message - Optional custom message
  * @param {string} id - Optional toast ID for replacing existing toasts
  */
 export const showValidationStatusNotification = (toast, status, message, id = undefined) => {
-  // Forward the call to the JSX version for all notification logic
-  return jsxShowNotification(toast, status, message, id);
+  // Simply forward the call to the JSX implementation
+  return jsxNotification(toast, status, message, id);
 };
 
 /**

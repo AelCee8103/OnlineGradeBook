@@ -311,7 +311,11 @@ const AssignSubject = () => {
                   </thead>
                   <tbody>
                     {assignedSubjects.map((assignment, index) => (
-                      <tr key={`${assignment.advisoryID}-${assignment.SubjectCode}`} className="border-b hover:bg-gray-50">
+                      <tr key={
+                        assignment.advisoryID && assignment.SubjectCode
+                          ? `${assignment.advisoryID}-${assignment.SubjectCode}`
+                          : `row-${index}`
+                      } className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2">{index + 1}</td>
                         <td className="px-4 py-2 font-medium">{assignment.SubjectCode}</td>
                         <td className="px-4 py-2">{assignment.subjectID}</td>

@@ -1941,4 +1941,52 @@ router.get("/faculty-class-advisory", authenticateToken, async (req, res) => {
   }
 });
 
+// POST: Admin processes a validation request (approve/reject)
+router.post('/admin/process-validation', authenticateToken, async (req, res) => {
+  const { requestID, action } = req.body; // action: 'approve' or 'reject'
+  const db = await connectToDatabase();
+
+  try {
+    // 1. Get the request details before deleting
+    const [rows] = await db.query(
+      `SELECT facultyID, advisoryID FROM validation_request WHERE requestID = ?`,
+      [requestID]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "Request not found" });
+    }
+    const { facultyID, advisoryID } = rows[0];
+
+    // 2. Delete the validation request
+    await db.query(
+      `DELETE FROM validation_request WHERE requestID = ?`,
+      [requestID]
+    );
+
+    // 3. Create a notification for the faculty
+    const status = action === 'approve' ? 'Approved' : 'Rejected';
+    const message = `Your grade validation request for advisory ${advisoryID} was ${status.toLowerCase()}.`;
+    await db.query(
+      `INSERT INTO notifications (facultyID, type, message, status) VALUES (?, ?, ?, ?)`,
+      [facultyID, 'validation', message, status]
+    );
+
+    // 4. Emit a real-time notification to the faculty via Socket.IO
+    if (req.app.get('io')) {
+      req.app.get('io').to(String(facultyID)).emit('facultyNotification', {
+        type: 'validation',
+        status,
+        message,
+        advisoryID,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    res.json({ success: true, message: `Request ${status.toLowerCase()}` });
+  } catch (error) {
+    console.error("Error processing validation:", error);
+    res.status(500).json({ success: false, message: "Failed to process request" });
+  }
+});
+
 export default router;
