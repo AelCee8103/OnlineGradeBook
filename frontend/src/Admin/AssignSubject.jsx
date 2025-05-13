@@ -145,7 +145,6 @@ const AssignSubject = () => {
       
         // Validate required fields
         if (
-          !newAssignedSubject.SubjectCode || 
           !newAssignedSubject.subjectID || 
           !newAssignedSubject.FacultyID || 
           !newAssignedSubject.advisoryID || 
@@ -154,7 +153,20 @@ const AssignSubject = () => {
           toast.error("Please fill all required fields");
           return;
         }
-      
+
+         // 🔍 Check for duplicates
+      const alreadyAssigned = assignedSubjects.some(assignment =>
+        assignment.subjectID === newAssignedSubject.subjectID &&
+        assignment.advisoryID === newAssignedSubject.advisoryID &&
+        assignment.school_yearID === newAssignedSubject.school_yearID &&
+        (!editingAssignment || assignment.SubjectCode !== editingAssignment.SubjectCode)
+      );
+
+      if (alreadyAssigned) {
+        toast.error("This subject is already assigned to this advisory class for the selected school year.");
+        return;
+      }
+          
         try {
           const token = localStorage.getItem("token");
           if (!token) {
@@ -168,7 +180,6 @@ const AssignSubject = () => {
           };
       
           const payload = {
-            SubjectCode: newAssignedSubject.SubjectCode,
             subjectID: newAssignedSubject.subjectID,
             FacultyID: newAssignedSubject.FacultyID,
             advisoryID: newAssignedSubject.advisoryID,
@@ -199,7 +210,6 @@ const AssignSubject = () => {
           // Close modal and reset form
           document.getElementById("assign_subject_modal").close();
           setNewAssignedSubject({
-            SubjectCode: "",
             subjectID: "",
             FacultyID: "",
             advisoryID: "",
@@ -235,7 +245,6 @@ const AssignSubject = () => {
   const handleEditAssignment = (assignment) => {
     setEditingAssignment(assignment);
     setNewAssignedSubject({
-      SubjectCode: assignment.SubjectCode,
       subjectID: assignment.subjectID,
       FacultyID: assignment.FacultyID,
       advisoryID: assignment.advisoryID,
@@ -275,7 +284,7 @@ const AssignSubject = () => {
               onClick={() => {
                 setEditingAssignment(null);
                 setNewAssignedSubject({ 
-                  SubjectCode: "",
+            
                   subjectID: "", 
                   FacultyID: "",
                   ClassID: "",
@@ -302,7 +311,11 @@ const AssignSubject = () => {
                   </thead>
                   <tbody>
                     {assignedSubjects.map((assignment, index) => (
-                      <tr key={`${assignment.advisoryID}-${assignment.SubjectCode}`} className="border-b hover:bg-gray-50">
+                      <tr key={
+                        assignment.advisoryID && assignment.SubjectCode
+                          ? `${assignment.advisoryID}-${assignment.SubjectCode}`
+                          : `row-${index}`
+                      } className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2">{index + 1}</td>
                         <td className="px-4 py-2 font-medium">{assignment.SubjectCode}</td>
                         <td className="px-4 py-2">{assignment.subjectID}</td>
@@ -334,19 +347,8 @@ const AssignSubject = () => {
           </h3>
           <form onSubmit={handleAssignSubject} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Subject Code */}
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject Code</label>
-                <input 
-                  type="text" 
-                  name="SubjectCode"
-                  value={newAssignedSubject.SubjectCode}
-                  onChange={handleAssignedSubjectChange}
-                  placeholder="Enter Subject Code" 
-                  className="input input-bordered w-full" 
-                  required
-                />
-              </div>
+           
+             
 
               {/* Advisory Class */}
               <div>

@@ -2,20 +2,22 @@
 
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import NavbarFaculty from "../components/NavbarFaculty";
+import NavbarFaculty from "../Components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
+import NotificationDropdown from "../Components/NotificationDropdown";
+import { Toaster, toast } from "react-hot-toast";
+import { io } from "socket.io-client";
 import axios from "axios";
-import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { Dialog } from "@headlessui/react";
 
 const ClassAdvisory = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [advisoryData, setAdvisoryData] = useState({
     grade: "",
     section: "",
     advisorName: "Not Assigned",
-    schoolYear: "", // Add this
+    schoolYear: "",
+    advisoryID: null
   });
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,83 +26,144 @@ const ClassAdvisory = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [studentModalOpen, setStudentModalOpen] = useState(false);
   const [selectedStudentInfo, setSelectedStudentInfo] = useState(null);
+  const [lastRequestDate, setLastRequestDate] = useState(null);
+  const [socket, setSocket] = useState(null);
   const studentsPerPage = 5;
   const navigate = useNavigate();
 
-  const fetchAdvisoryData = async () => {
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
-      if (!token) return navigate("/faculty-login");
-
-      const { data } = await axios.get(
-        "http://localhost:3000/auth/faculty-class-advisory",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 10000,
-        }
-      );
-
-      if (data.message === "No advisory class assigned") {
-        setAdvisoryData({
-          grade: "",
-          section: "",
-          advisorName: data.advisorName || "Not Assigned",
-          schoolYear: "", // Add this
-        });
-        setStudents([]);
-        setError("No advisory class assigned to you");
-        return;
-      }
-
-      if (!data.grade || !data.section)
-        throw new Error("Incomplete advisory data received");
-
-      setAdvisoryData({
-        grade: data.grade,
-        section: data.section,
-        advisorName: data.advisorName,
-        // Remove schoolYear: data.schoolYear,
-      });
-      setStudents(data.students || []);
-    } catch (err) {
-      const msg =
-        err.response?.data?.message || err.message.includes("timeout")
-          ? "Request timed out. Please try again."
-          : "Failed to load advisory data";
-
-      setError(msg);
-      if (err.response?.status === 401) navigate("/faculty-login");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Initialize socket and authenticate as faculty
   useEffect(() => {
-    fetchAdvisoryData();
+    const newSocket = io('http://localhost:3000', {
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
+      autoConnect: true
+    });
+    setSocket(newSocket);
+    const facultyID = localStorage.getItem('facultyID');
+    const facultyName = localStorage.getItem('facultyName');
+    newSocket.on('connect', () => {
+      newSocket.emit('authenticate', {
+        userType: 'faculty',
+        userID: facultyID,
+        facultyName
+      });
+    });
+    return () => newSocket.close();
   }, []);
+
+  // Listen for notifications from admin (validation approved/rejected)
+  useEffect(() => {
+    if (!socket) return;
+    const handleValidationResponse = (data) => {
+      toast.success(data.message || `Your grade validation request has been ${data.status}`);
+      setLastRequestDate(new Date().toISOString());
+    };
+    socket.on('validationResponseReceived', handleValidationResponse);
+    socket.on('facultyNotification', handleValidationResponse);
+    return () => {
+      socket.off('validationResponseReceived', handleValidationResponse);
+      socket.off('facultyNotification', handleValidationResponse);
+    };
+  }, [socket]);
+
+  // Fetch advisory data
+  useEffect(() => {
+    const fetchAdvisoryData = async () => {
+      try {
+        setLoading(true);
+        const token = localStorage.getItem("token");
+        if (!token) return navigate("/faculty-login");
+        const { data } = await axios.get(
+          "http://localhost:3000/auth/faculty-class-advisory",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (data.message === "No advisory class assigned") {
+          setAdvisoryData({
+            grade: "",
+            section: "",
+            advisorName: data.advisorName || "Not Assigned",
+            advisoryID: null
+          });
+          setStudents([]);
+          setError("No advisory class assigned to you");
+          return;
+        }
+        setAdvisoryData({
+          grade: data.grade,
+          section: data.section,
+          advisorName: data.advisorName,
+          advisoryID: data.advisoryID
+        });
+        setStudents(data.students || []);
+        setError(null);
+      } catch (err) {
+        setError("Failed to load advisory data");
+        if (err.response?.status === 401) navigate("/faculty-login");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAdvisoryData();
+  }, [navigate]);
 
   const fetchStudentDetails = async (studentId) => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(
         `http://localhost:3000/Pages/students/${studentId}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
-
       setSelectedStudentInfo({
         ...response.data,
         grade: advisoryData.grade,
         section: advisoryData.section,
-        // Remove schoolYear reference
       });
       setStudentModalOpen(true);
     } catch (error) {
-      console.error("Error fetching student details:", error);
-      alert("Failed to fetch student details");
+      toast.error("Failed to fetch student details");
     }
+  };
+
+  const handleValidateGrades = async () => {
+    try {
+      setIsValidating(true);
+      const token = localStorage.getItem("token");
+      const facultyID = localStorage.getItem("facultyID");
+      const facultyName = localStorage.getItem("facultyName");
+      const response = await axios.post(
+        "http://localhost:3000/Pages/faculty/validate-grades",
+        { advisoryID: advisoryData.advisoryID },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (response.data.success) {
+        socket.emit('validationRequest', {
+          requestID: response.data.requestID,
+          facultyID,
+          facultyName,
+          grade: advisoryData.grade,
+          section: advisoryData.section,
+          advisoryID: advisoryData.advisoryID,
+          schoolYear: advisoryData.schoolYear,
+          timestamp: new Date().toISOString()
+        });
+        setLastRequestDate(new Date().toISOString());
+        toast.success("Validation request sent to admin.");
+      }
+    } catch (error) {
+      toast.error("Failed to submit grades for validation");
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const filteredStudents = students.filter(
@@ -109,7 +172,6 @@ const ClassAdvisory = () => {
       student.LastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.FirstName.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
   const currentStudents = filteredStudents.slice(
     (currentPage - 1) * studentsPerPage,
     currentPage * studentsPerPage
@@ -132,7 +194,6 @@ const ClassAdvisory = () => {
       </div>
     );
   }
-
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-screen text-red-500">
@@ -141,7 +202,7 @@ const ClassAdvisory = () => {
           onClick={
             error === "No advisory class assigned to you"
               ? () => navigate("/faculty-dashboard")
-              : fetchAdvisoryData
+              : () => window.location.reload()
           }
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"
         >
@@ -155,17 +216,25 @@ const ClassAdvisory = () => {
 
   return (
     <div className="flex h-screen bg-gray-100">
+      <Toaster
+        position="top-center"
+        reverseOrder={false}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+          },
+        }}
+      />
       <FacultySidePanel
         isSidebarOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
       />
-
       <div className="flex-1 flex flex-col overflow-auto">
         <NavbarFaculty toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-
         <main className="p-6 sm:p-8 space-y-6">
           <h1 className="text-2xl font-bold text-gray-800">Class Advisory</h1>
-
           <div className="bg-white rounded-xl shadow p-6 border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -187,15 +256,34 @@ const ClassAdvisory = () => {
                 </p>
               </div>
             </div>
+            {lastRequestDate && (
+              <div className="mt-4">
+                <p className="text-sm text-gray-500">Last Validation Request</p>
+                <p className="text-lg font-semibold">
+                  {formatDate(lastRequestDate)}
+                </p>
+              </div>
+            )}
+            <div className="mt-4 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <div></div>
+                <button
+                  onClick={handleValidateGrades}
+                  disabled={isValidating}
+                  className={`px-4 py-2 rounded-md transition ${
+                    isValidating
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-green-700 hover:bg-green-800 text-white"
+                  }`}
+                >
+                  {isValidating ? "Submitting..." : "Validate Grades"}
+                </button>
+              </div>
+            </div>
           </div>
-
           <div className="bg-white rounded-xl shadow border border-gray-200">
             <div className="flex items-center justify-between p-4 border-b">
               <div className="relative w-full max-w-md">
-                <FontAwesomeIcon
-                  icon={faMagnifyingGlass}
-                  className="absolute top-1/2 left-3 -translate-y-1/2 text-gray-400"
-                />
                 <input
                   type="text"
                   placeholder="Search by ID or name"
@@ -204,11 +292,7 @@ const ClassAdvisory = () => {
                   className="w-full pl-10 pr-4 py-2 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                 />
               </div>
-              <button className="ml-4 bg-green-700 text-white px-4 py-2 rounded-md hover:bg-green-800 transition">
-                Validate
-              </button>
             </div>
-
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -241,25 +325,19 @@ const ClassAdvisory = () => {
                             student.MiddleName
                           )}
                         </td>
-                        <td className="text-sm px-6 py-2">
-                          {student.StudentID}
-                        </td>
+                        <td className="text-sm px-6 py-2">{student.StudentID}</td>
                         <td className="px-6 py-2 flex justify-center gap-2">
                           <button
-                            onClick={() =>
-                              fetchStudentDetails(student.StudentID)
-                            }
+                            onClick={() => fetchStudentDetails(student.StudentID)}
                             className="bg-blue-500 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded-md"
                           >
                             View
                           </button>
                           <button
                             onClick={() =>
-                              navigate(
-                                `/faculty/students/${student.StudentID}/grades`
-                              )
+                              navigate(`/faculty/students/${student.StudentID}/grades`)
                             }
-                            className="bg-green-700 hover:bg-green-800 text-white text-sm px-3 py-1 rounded-md"
+                            className="bg-green-500 hover:bg-green-700 text-white text-sm px-3 py-1 rounded-md"
                           >
                             Grades
                           </button>
@@ -268,102 +346,46 @@ const ClassAdvisory = () => {
                     ))
                   ) : (
                     <tr>
-                      <td
-                        colSpan="4"
-                        className="text-center px-6 py-4 text-sm text-gray-500"
-                      >
-                        {searchTerm
-                          ? "No matching students found."
-                          : "No students in this advisory class."}
+                      <td colSpan="4" className="text-center py-4 text-gray-500">
+                        No students found
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+              {currentStudents.length > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className={`px-4 py-2 text-sm rounded-md border ${
+                      currentPage === 1
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white hover:bg-gray-100"
+                    }`}
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-700">
+                    Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className={`px-4 py-2 text-sm rounded-md border ${
+                      currentPage === totalPages
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white hover:bg-gray-100"
+                    }`}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
-
-            {filteredStudents.length > 0 && (
-              <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className={`px-4 py-2 text-sm rounded-md border ${
-                    currentPage === 1
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-white hover:bg-gray-100"
-                  }`}
-                >
-                  Previous
-                </button>
-                <span className="text-sm text-gray-700">
-                  Page <strong>{currentPage}</strong> of{" "}
-                  <strong>{totalPages}</strong>
-                </span>
-                <button
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPages, p + 1))
-                  }
-                  disabled={currentPage === totalPages}
-                  className={`px-4 py-2 text-sm rounded-md border ${
-                    currentPage === totalPages
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "bg-white hover:bg-gray-100"
-                  }`}
-                >
-                  Next
-                </button>
-              </div>
-            )}
           </div>
         </main>
       </div>
-
-      <Dialog
-        open={studentModalOpen}
-        onClose={() => setStudentModalOpen(false)}
-      >
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
-          <Dialog.Panel className="bg-white rounded-xl w-full max-w-md p-6">
-            <Dialog.Title className="text-lg font-semibold mb-4">
-              Student Information
-            </Dialog.Title>
-
-            {selectedStudentInfo && (
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="space-y-2">
-                  <div>
-                    <p className="text-sm text-gray-500">Student ID</p>
-                    <p className="font-medium">
-                      {selectedStudentInfo.StudentID}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Full Name</p>
-                    <p className="font-medium">
-                      {`${selectedStudentInfo.FirstName} ${selectedStudentInfo.MiddleName} ${selectedStudentInfo.LastName}`}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">Grade & Section</p>
-                    <p className="font-medium">
-                      {`Grade ${selectedStudentInfo.grade} - ${selectedStudentInfo.section}`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setStudentModalOpen(false)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-              >
-                Close
-              </button>
-            </div>
-          </Dialog.Panel>
-        </div>
-      </Dialog>
     </div>
   );
 };

@@ -8,8 +8,6 @@ import { useEffect, useState } from "react";
 import AdminSidePanel from "../Components/AdminSidePanel";
 import NavbarAdmin from "../Components/NavbarAdmin";
 
-
-
 const ManageFaculty = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
@@ -30,24 +28,16 @@ const ManageFaculty = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const facultyPerPage = 5;
 
-
   const fetchUser = async () => {
     try {
-      const token = localStorage.getItem("token");
-      await axios.get("http://localhost:3000/auth/admin-manage-faculty", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
+      // Only call the correct endpoint for faculty data
       const response = await axios.get("http://localhost:3000/Pages/admin-manage-faculty");
       setFaculty(response.data);
     } catch (error) {
       console.error("Error fetching data:", error);
-      if (error.response && error.response.status === 401) {
-        navigate("/admin-login"); // Redirect only on unauthorized error
-      }
+      // Optionally show a toast or handle error
     }
   };
-
 
   useEffect(() => {
     fetchUser();
