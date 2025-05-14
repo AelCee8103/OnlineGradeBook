@@ -661,19 +661,17 @@ const ManageStudents = () => {
                       <td className="px-4 py-2">{data.FirstName}</td>
                       <td className="px-4 py-2">{data.MiddleName}</td>
                       <td className="px-4 py-2">
-                        {/* Open the modal using document.getElementById('ID').showModal() method */}
                         <button
-                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-                          onClick={() => handleEditClick(data)}
-                        >
-                          Edit
-                        </button>
-                        {/* Add the Archive button */}
-                        <button
-                          className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm ml-2"
+                          className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm"
                           onClick={() => handleArchive(data)}
                         >
                           Archive
+                        </button>
+                        <button
+                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm ml-2"
+                          onClick={() => handleEditClick(data)}
+                        >
+                          Edit
                         </button>
                         <dialog
                           id="edit_modal"
