@@ -23,6 +23,7 @@ const ManageFaculty = () => {
     Department: "",
     Password: "",
   });
+  const [archiving, setArchiving] = useState(false); // <-- Archiving state
 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -167,6 +168,46 @@ const ManageFaculty = () => {
     } catch (error) {
       console.error("Error updating faculty:", error);
       toast.error("Failed to update faculty. Please try again.");
+    }
+  };
+
+  const handleArchive = async (faculty) => {
+    console.log("Archiving faculty:", faculty);
+    const isConfirmed = window.confirm(
+      `Are you sure you want to archive ${faculty.FirstName} ${faculty.LastName}?`
+    );
+
+    if (isConfirmed) {
+      try {
+        setArchiving(true);
+        const token = localStorage.getItem("token");
+        const response = await axios.put(
+          `http://localhost:3000/Pages/admin-manage-faculty/archive/${faculty.FacultyID}`,
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (response.data.success) {
+          setFaculty((prev) =>
+            prev.filter((f) => f.FacultyID !== faculty.FacultyID)
+          );
+          toast.success(
+            `${faculty.FirstName} ${faculty.LastName} has been archived`
+          );
+        }
+      } catch (error) {
+        console.error("Error archiving faculty:", error);
+        toast.error(
+          error.response?.data?.message || "Failed to archive faculty"
+        );
+      } finally {
+        setArchiving(false);
+      }
     }
   };
 
@@ -458,8 +499,12 @@ const ManageFaculty = () => {
                         </td>
                         <td className="px-4 py-2">{faculty.Email || "-"}</td>
                         <td className="px-4 py-2">
-                          <button className=" bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm mr-4">
-                            Archive
+                          <button
+                            className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm mr-4"
+                            onClick={() => handleArchive(faculty)}
+                            disabled={archiving}
+                          >
+                            {archiving ? "Archiving..." : "Archive"}
                           </button>
                           <button
                             className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"

@@ -104,11 +104,12 @@ router.get("/admin-assign-subject", async (req, res) => {
 router.get('/admin-manage-faculty', async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const sql = 'SELECT * FROM faculty';
+    // Only get faculty with status = 1 (active) or where status is NULL (for backward compatibility)
+    const sql = 'SELECT * FROM faculty WHERE status = 1 OR status IS NULL';
     const [result] = await db.query(sql);
     res.status(200).json(result);
   } catch (err) {
-    console.error('Error fetching students:', err);
+    console.error('Error fetching faculty:', err);
     res.status(500).json({ message: 'Server Error' });
   }
 });
@@ -1989,7 +1990,7 @@ router.post('/admin/process-validation', authenticateToken, async (req, res) => 
   }
 });
 
-// Add this with your other routes
+// Archive a student (set status to 0)
 router.put('/admin-manage-students/archive/:studentId', authenticateToken, async (req, res) => {
   const { studentId } = req.params;
   let db;
@@ -2022,6 +2023,31 @@ router.put('/admin-manage-students/archive/:studentId', authenticateToken, async
       success: false, 
       message: 'Failed to archive student' 
     });
+  }
+});
+
+// Archive a faculty (set status to 0)
+router.put('/admin-manage-faculty/archive/:facultyId', authenticateToken, async (req, res) => {
+  let db;
+  try {
+    db = await connectToDatabase();
+    const { facultyId } = req.params;
+    console.log('facultyId param:', facultyId, typeof facultyId);
+
+    const [result] = await db.query(
+      'UPDATE faculty SET status = 0 WHERE FacultyID = ?',
+      [facultyId]
+    );
+    console.log('Update result:', result);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Faculty not found' });
+    }
+
+    res.json({ success: true, message: 'Faculty archived successfully' });
+  } catch (error) {
+    console.error('Error archiving faculty:', error);
+    res.status(500).json({ success: false, message: 'Failed to archive faculty' });
   }
 });
 
