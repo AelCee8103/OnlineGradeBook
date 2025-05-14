@@ -2051,4 +2051,31 @@ router.put('/admin-manage-faculty/archive/:facultyId', authenticateToken, async 
   }
 });
 
+
+// Get archived students
+router.get('/admin-archive-students', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const [students] = await db.query(
+      'SELECT StudentID, LastName, FirstName, MiddleName FROM students WHERE Status = 0'
+    );
+    res.json({ success: true, students });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch archived students' });
+  }
+});
+
+// Get archived faculty
+router.get('/admin-archive-faculty', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const [faculty] = await db.query(
+      'SELECT FacultyID, LastName, FirstName, MiddleName, Email FROM faculty WHERE status = 0'
+    );
+    res.json({ success: true, faculty });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch archived faculty' });
+  }
+});
+
 export default router;
