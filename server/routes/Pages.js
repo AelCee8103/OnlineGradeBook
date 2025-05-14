@@ -531,7 +531,7 @@ router.get("/admin-manage-subject", async (req, res) => {
 
 router.post("/admin-assign-subject", async (req, res) => {
   try {
-    const {subjectID, FacultyID, school_yearID, advisoryID } = req.body;
+    const { subjectID, FacultyID, school_yearID, advisoryID, SubjectCode } = req.body;
 
     // Validate all required fields
     if (!subjectID || !FacultyID || !school_yearID || !advisoryID) {
@@ -540,49 +540,104 @@ router.post("/admin-assign-subject", async (req, res) => {
 
     const db = await connectToDatabase();
 
-    // Check for duplicate assignment
-    const [duplicateCheck] = await db.query(
-      `SELECT * FROM assignsubject 
-       WHERE subjectID = ? AND FacultyID = ? AND yearID = ? AND advisoryID = ?`,
-      [subjectID, FacultyID, school_yearID, advisoryID]
+    // 1. Check if this faculty is already assigned to any class for this year
+    const [facultyAssignment] = await db.query(
+      `SELECT a.advisoryID, c.Grade, c.Section
+       FROM advisory a
+       JOIN class_year cy ON a.advisoryID = cy.advisoryID
+       JOIN classes c ON a.classID = c.ClassID
+       WHERE a.facultyID = ? AND cy.yearID = ?`,
+      [FacultyID, school_yearID]
     );
-
-    if (duplicateCheck.length > 0) {
-      return res.status(409).json({ 
-        error: "This subject is already assigned to the selected faculty and advisory for the school year" 
+    if (facultyAssignment.length > 0) {
+      const assigned = facultyAssignment[0];
+      return res.status(409).json({
+        error: `This faculty has already been assigned to Grade ${assigned.Grade}-${assigned.Section}.`
       });
     }
 
-    // Insert new assignment - Let MySQL auto-increment handle the SubjectCode
-    const [result] = await db.query(
-      `INSERT INTO assignsubject 
-       (subjectID, FacultyID, yearID, advisoryID)
-       VALUES (?, ?, ?, ?)`,
-      [subjectID, FacultyID, school_yearID, advisoryID]
+    // 2. Check if this advisory/class is already assigned to another faculty for this year
+    const [classAssignment] = await db.query(
+      `SELECT a.advisoryID, a.facultyID, f.FirstName, f.LastName, c.Grade, c.Section
+       FROM advisory a
+       JOIN class_year cy ON a.advisoryID = cy.advisoryID
+       JOIN faculty f ON a.facultyID = f.FacultyID
+       JOIN classes c ON a.classID = c.ClassID
+       WHERE a.advisoryID = ? AND cy.yearID = ?`,
+      [advisoryID, school_yearID]
     );
+    if (classAssignment.length > 0) {
+      const assigned = classAssignment[0];
+      return res.status(409).json({
+        error: `This class (Grade ${assigned.Grade}-${assigned.Section}) has already been assigned to another faculty (${assigned.FirstName} ${assigned.LastName}).`
+      });
+    }
+
+    // 3. Check for duplicate assignment (by SubjectCode if provided, else by other fields)
+    let duplicateCheck;
+    if (SubjectCode) {
+      [duplicateCheck] = await db.query(
+        `SELECT * FROM assignsubject WHERE SubjectCode = ?`,
+        [SubjectCode]
+      );
+      if (duplicateCheck.length > 0) {
+        return res.status(409).json({
+          error: "This SubjectCode is already used. Please use a unique SubjectCode."
+        });
+      }
+    } else {
+      [duplicateCheck] = await db.query(
+        `SELECT * FROM assignsubject 
+         WHERE subjectID = ? AND FacultyID = ? AND yearID = ? AND advisoryID = ?`,
+        [subjectID, FacultyID, school_yearID, advisoryID]
+      );
+      if (duplicateCheck.length > 0) {
+        return res.status(409).json({
+          error: "This subject is already assigned to the selected faculty and advisory for the school year"
+        });
+      }
+    }
+
+    // Insert new assignment
+    let result;
+    if (SubjectCode) {
+      [result] = await db.query(
+        `INSERT INTO assignsubject 
+         (SubjectCode, subjectID, FacultyID, yearID, advisoryID)
+         VALUES (?, ?, ?, ?, ?)`,
+        [SubjectCode, subjectID, FacultyID, school_yearID, advisoryID]
+      );
+    } else {
+      [result] = await db.query(
+        `INSERT INTO assignsubject 
+         (subjectID, FacultyID, yearID, advisoryID)
+         VALUES (?, ?, ?, ?)`,
+        [subjectID, FacultyID, school_yearID, advisoryID]
+      );
+    }
 
     if (!result.insertId) {
       throw new Error("Failed to create assignment");
     }
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: "Assignment created successfully",
-      SubjectCode: result.insertId 
+      SubjectCode: SubjectCode || result.insertId
     });
 
   } catch (error) {
     console.error("Error creating assignment:", error);
 
     if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Reference error - one of the referenced IDs doesn't exist",
         details: error.sqlMessage
       });
     }
 
-    res.status(500).json({ 
+    res.status(500).json({
       error: "Failed to create assignment",
-      details: error.message 
+      details: error.message
     });
   }
 });
@@ -644,12 +699,14 @@ router.post("/admin-dashboard", async (req, res) => {
       return res.status(400).json({ exists: true, message: "School Year already exists." });
     }
 
-    // Insert the new school year with status = 1
-    const insertSql = "INSERT INTO schoolyear (school_yearID, year, status) VALUES (?, ?, 1)";
+    
+
+    // Insert the new school year with status = 0 (inactive by default)
+    const insertSql = "INSERT INTO schoolyear (school_yearID, year, status) VALUES (?, ?, 0)";
     const [result] = await db.query(insertSql, [SchoolYear, year]);
 
     if (result.affectedRows > 0) {
-      return res.status(201).json({ success: true, message: "School Year added successfully with active status!" });
+      return res.status(201).json({ success: true, message: "School Year added successfully with inactive status!" });
     }
 
     res.status(500).json({ error: "Failed to insert school year." });
@@ -658,6 +715,7 @@ router.post("/admin-dashboard", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
 
 
 
@@ -1603,171 +1661,242 @@ router.post('/admin-manage-students/bulk', authenticateToken, async (req, res) =
 
 //Validation requests
 
-router.post('/faculty/submit-validation', authenticateToken, async (req, res) => {
+// Completely revamped validation request endpoint
+router.post('/faculty/validate-grades', authenticateToken, async (req, res) => {
   const { advisoryID } = req.body;
-  const facultyID = req.facultyID; // From auth token
-
+  const facultyID = req.user.id || req.user.facultyID;
+  
   try {
     const db = await connectToDatabase();
     
-    // Get all students in this advisory class
-    const [students] = await db.query(
-      `SELECT StudentID FROM student_classes WHERE advisoryID = ?`,
-      [advisoryID]
+    // 1. FIRST: Get the active school year
+    const [activeSchoolYears] = await db.query(
+      `SELECT school_yearID, year FROM schoolyear WHERE status = 1 LIMIT 1`
     );
-
-    // Start transaction
-    await db.query('START TRANSACTION');
-
-    // Create validation request for each student
-    for (const student of students) {
-      await db.query(
-        `INSERT INTO validation_request 
-        (studentID, facultyID, advisoryID, statusID) 
-        VALUES (?, ?, ?, 0) 
-        ON DUPLICATE KEY UPDATE statusID = 0`,
-        [student.StudentID, facultyID, advisoryID]
-      );
+    
+    if (activeSchoolYears.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No active school year found. Please contact an administrator."
+      });
     }
-
-    await db.query('COMMIT');
-    res.json({ success: true, message: "Validation request submitted" });
-
+    
+    const activeSchoolYear = activeSchoolYears[0];
+    console.log(`Active school year: ${activeSchoolYear.year} (ID: ${activeSchoolYear.school_yearID})`);
+    
+    // 2. Delete any existing requests that might be duplicates
+    // This helps clean up any potential data issues
+    await db.query(
+      `DELETE FROM validation_request 
+       WHERE facultyID = ? AND advisoryID = ? AND statusID = 0`,
+      [facultyID, advisoryID]
+    );
+    
+    // 3. Check if there are any existing approved requests for this combination
+    // to avoid unnecessary re-validations
+    const [existingApproved] = await db.query(
+      `SELECT requestID FROM validation_request 
+       WHERE facultyID = ? AND advisoryID = ? AND statusID = 1 AND schoolYearID = ?`,
+      [facultyID, advisoryID, activeSchoolYear.school_yearID]
+    );
+    
+    if (existingApproved.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: "Grades for this class are already validated for the current school year."
+      });
+    }
+    
+    // 4. Create a new request with the active school year ID
+    const [result] = await db.query(
+      `INSERT INTO validation_request (advisoryID, facultyID, statusID, requestDate, schoolYearID) 
+       VALUES (?, ?, 0, NOW(), ?)`,
+      [advisoryID, facultyID, activeSchoolYear.school_yearID]
+    );
+    
+    // 5. Log success and return response with school year info
+    console.log(`Created validation request: ID=${result.insertId}, facultyID=${facultyID}, advisoryID=${advisoryID}, schoolYear=${activeSchoolYear.year}`);
+    
+    res.status(201).json({
+      success: true,
+      message: "Validation request submitted successfully",
+      requestID: result.insertId,
+      schoolYear: activeSchoolYear.year,
+      schoolYearID: activeSchoolYear.school_yearID
+    });
+    
   } catch (error) {
-    await db.query('ROLLBACK');
-    console.error("Error submitting validation:", error);
-    res.status(500).json({ success: false, message: "Failed to submit validation" });
+    console.error("Error processing validation request:", error);
+    
+    // Handle duplicate entry errors specifically
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({
+        success: false,
+        message: "A validation request for this class is already pending"
+      });
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: "Server error while processing validation request",
+      error: error.message
+    });
   }
 });
 
 
+// Fixed endpoint to get all pending validation requests
 router.get('/admin/validation-requests', authenticateToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
     
+    // Get the active school year first
+    const [activeSchoolYears] = await db.query(
+      `SELECT school_yearID, year FROM schoolyear WHERE status = 1 LIMIT 1`
+    );
+    
+    if (activeSchoolYears.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No active school year found"
+      });
+    }
+    
+    const activeSchoolYear = activeSchoolYears[0];
+    console.log(`Fetching validation requests for active school year: ${activeSchoolYear.year}`);
+    
+    // Get pending validation requests for the active school year only
     const [requests] = await db.query(`
       SELECT 
         vr.requestID,
         vr.advisoryID,
         vr.facultyID,
         vr.requestDate,
-        CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
+        vr.schoolYearID,
+        f.FirstName,
+        f.LastName,
         c.Grade,
         c.Section,
-        sy.year AS schoolYear
+        sy.year as schoolYear
       FROM validation_request vr
       JOIN faculty f ON vr.facultyID = f.FacultyID
       JOIN advisory a ON vr.advisoryID = a.advisoryID
       JOIN classes c ON a.classID = c.ClassID
-      JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      WHERE vr.statusID = 0
+      JOIN schoolyear sy ON vr.schoolYearID = sy.school_yearID
+      WHERE vr.statusID = 0 AND vr.schoolYearID = ?
       ORDER BY vr.requestDate DESC
-    `);
-
-    res.json({ 
-      success: true, 
-      requests: requests.map(req => ({
-        ...req,
-        requestDate: new Date(req.requestDate).toLocaleString()
-      }))
+    `, [activeSchoolYear.school_yearID]);
+    
+    console.log(`Found ${requests.length} pending validation requests for school year ${activeSchoolYear.year}`);
+    
+    // Format data for frontend
+    const formattedRequests = requests.map(req => ({
+      requestID: req.requestID,
+      facultyID: req.facultyID,
+      advisoryID: req.advisoryID,
+      facultyName: `${req.FirstName || ''}, ${req.LastName || ''}`,
+      Grade: req.Grade,
+      Section: req.Section,
+      schoolYear: req.schoolYear,
+      requestDate: new Date(req.requestDate).toLocaleString()
+    }));
+    
+    res.status(200).json({
+      success: true,
+      requests: formattedRequests,
+      activeSchoolYear: activeSchoolYear.year
     });
-
+    
   } catch (error) {
     console.error("Error fetching validation requests:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to fetch requests",
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch validation requests",
+      error: error.message
     });
   }
 });
 
-router.post('/admin/process-validation', async (req, res) => {
+router.post('/admin/process-validation', authenticateToken, async (req, res) => {
   const { requestID, action } = req.body; // action: 'approve' or 'reject'
 
   try {
     const db = await connectToDatabase();
-    const statusID = action === 'approve' ? 1 : 2;
-
-    await db.query(
-      `UPDATE validation_request SET statusID = ? WHERE requestID = ?`,
-      [statusID, requestID]
+    
+    // Get request details first, including schoolYearID
+    const [request] = await db.query(
+      `SELECT vr.facultyID, vr.advisoryID, vr.schoolYearID, sy.year as schoolYear
+       FROM validation_request vr
+       JOIN schoolyear sy ON vr.schoolYearID = sy.school_yearID
+       WHERE requestID = ?`,
+      [requestID]
     );
-
-    res.json({ 
+    
+    if (request.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "Validation request not found" 
+      });
+    }
+    
+    // Set appropriate status based on action
+    const newStatusID = action === 'approve' ? 1 : 2; // 1 for approved, 2 for rejected
+    
+    // Update request status
+    await db.query(
+      `UPDATE validation_request 
+       SET statusID = ?, processedAt = NOW(), processedBy = ? 
+       WHERE requestID = ?`,
+      [newStatusID, req.user.id, requestID]
+    );
+    
+    res.status(200).json({ 
       success: true, 
-      message: `Request ${action === 'approve' ? 'approved' : 'rejected'}` 
+      message: `Request ${action}d successfully`,
+      schoolYear: request[0].schoolYear,
+      facultyID: request[0].facultyID,
+      advisoryID: request[0].advisoryID
     });
-
+    
   } catch (error) {
     console.error("Error processing validation:", error);
-    res.status(500).json({ success: false, message: "Failed to process request" });
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to process validation request" 
+    });
   }
 });
 
 // Simplified validation request route
 router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
+  const { advisoryID } = req.body;
+  const facultyID = req.user.facultyID;
   const db = await connectToDatabase();
-  
-  try {
-    const { advisoryID } = req.body;
-    const facultyID = req.user.facultyID;
-    const requestDate = new Date().toISOString();
 
-    // First check for existing pending requests
-    const [existingRequests] = await db.query(
-      `SELECT COUNT(*) as count FROM validation_request 
-       WHERE advisoryID = ? AND facultyID = ? AND statusID = 0`,
-      [advisoryID, facultyID]
-    );
-
-    if (existingRequests[0].count > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "You already have a pending validation request for this advisory class"
-      });
-    }
-
-    // Verify faculty's advisory assignment
-    const [advisory] = await db.query(
-      'SELECT advisoryID FROM advisory WHERE advisoryID = ? AND facultyID = ?',
-      [advisoryID, facultyID]
-    );
-
-    if (advisory.length === 0) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized for this advisory class"
-      });
-    }
-
-    await db.query('START TRANSACTION');
-
-    // Create a single validation request for the advisory class
-    await db.query(
-      `INSERT INTO validation_request 
-       (facultyID, advisoryID, statusID, requestDate) 
-       VALUES (?, ?, 0, ?)`,
-      [facultyID, advisoryID, requestDate]
-    );
-
-    await db.query('COMMIT');
-
-    res.json({
-      success: true,
-      message: "Validation request created successfully",
-      requestDate: requestDate
-    });
-
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error("Error:", error);
-    res.status(500).json({
+  // Prevent duplicate pending requests
+  const [existing] = await db.query(
+    `SELECT requestID FROM validation_request WHERE facultyID = ? AND advisoryID = ? AND statusID = 0`,
+    [facultyID, advisoryID]
+  );
+  if (existing.length > 0) {
+    return res.status(409).json({
       success: false,
-      message: "Failed to create validation request"
+      message: "A validation request is already pending for this advisory."
     });
   }
+
+  // Insert new request
+  const [result] = await db.query(
+    `INSERT INTO validation_request (advisoryID, facultyID, statusID, requestDate)
+     VALUES (?, ?, 0, NOW())`,
+    [advisoryID, facultyID]
+  );
+
+  res.status(201).json({
+    success: true,
+    message: "Validation request submitted successfully.",
+    requestID: result.insertId
+  });
 });
 
 // Add this route before your existing validation route
@@ -1988,5 +2117,97 @@ router.post('/admin/process-validation', authenticateToken, async (req, res) => 
     res.status(500).json({ success: false, message: "Failed to process request" });
   }
 });
+
+// Make sure this route is added if not already there:
+
+router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
+  const { advisoryID } = req.params;
+  const facultyID = req.user.id || req.user.facultyID;
+  
+  try {
+    const db = await connectToDatabase();
+
+    const [request] = await db.query(
+      `SELECT requestID, requestDate, statusID,
+        CASE 
+          WHEN statusID = 0 THEN 'pending'
+          WHEN statusID = 1 THEN 'approved'
+          WHEN statusID = 2 THEN 'rejected'
+        END as status
+       FROM validation_request 
+       WHERE advisoryID = ? 
+       AND facultyID = ? 
+       ORDER BY requestDate DESC 
+       LIMIT 1`,
+      [advisoryID, facultyID]
+    );
+
+    res.json({
+      success: true,
+      hasPendingRequest: request.length > 0 && request[0].statusID === 0,
+      status: request.length > 0 ? request[0].status : null,
+      lastRequestDate: request.length > 0 ? request[0].requestDate : null
+    });
+
+  } catch (error) {
+    console.error("Error checking pending requests:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to check pending requests"
+    });
+  }
+});
+
+
+
+// Prevent duplicate validation requests for the same faculty/advisory with pending status
+router.post('/faculty/validate-grades', authenticateToken, async (req, res) => {
+  const { advisoryID } = req.body;
+  const facultyID = req.user.id || FacultyID; // Support both token structures
+  let db;
+  try {
+    db = await connectToDatabase();
+
+    // 1. Check for existing pending request for this faculty/advisory
+    // statusID: 0 = Pending (adjust if your DB uses a different value)
+    const [existing] = await db.query(
+      `SELECT requestID, statusID FROM validation_request 
+       WHERE facultyID = ? AND advisoryID = ? AND statusID = 0
+       ORDER BY requestDate DESC LIMIT 1`,
+      [facultyID, advisoryID]
+    );
+
+    if (existing.length > 0) {
+      // There is already a pending request
+      return res.status(409).json({
+        success: false,
+        message: "A validation request is already pending for this advisory. Please wait for it to be processed before submitting another.",
+        requestID: existing[0].requestID
+      });
+    }
+
+    // 2. If no pending request, create a new one
+    const [result] = await db.query(
+      `INSERT INTO validation_request (advisoryID, facultyID, statusID, requestDate)
+       VALUES (?, ?, 0, NOW())`,
+      [advisoryID, facultyID]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Validation request submitted successfully.",
+      requestID: result.insertId
+    });
+  } catch (error) {
+    console.error("Error submitting validation request:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit validation request.",
+      error: error.message
+    });
+  }
+});
+
+
 
 export default router;

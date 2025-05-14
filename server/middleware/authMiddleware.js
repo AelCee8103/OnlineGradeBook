@@ -11,14 +11,6 @@ export const authenticateToken = (req, res, next) => {
     });
   }
 
-  // Verify token structure
-  if (token.split('.').length !== 3) {
-    return res.status(403).json({ 
-      success: false,
-      message: "Invalid token format." 
-    });
-  }
-
   jwt.verify(token, process.env.JWT_SECRET || process.env.JWT_KEY, (err, decoded) => {
     if (err) {
       return res.status(403).json({ 
@@ -31,9 +23,11 @@ export const authenticateToken = (req, res, next) => {
 
     // Standardize the user object
     req.user = {
+      id: decoded.FacultyID || decoded.facultyID || decoded.AdminID || decoded.adminID,
       facultyID: decoded.FacultyID || decoded.facultyID,
-      role: decoded.role || 'faculty'
+      role: decoded.role || (decoded.FacultyID || decoded.facultyID ? 'faculty' : 'admin')
     };
+    
     next();
   });
 };

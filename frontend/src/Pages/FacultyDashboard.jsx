@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import NavbarFaculty from "../components/NavbarFaculty";
+import NavbarFaculty from "../Components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
 import StatCard from "../Components/StatCard";
 import axios from "axios";

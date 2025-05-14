@@ -123,56 +123,93 @@ io.on('connection', (socket) => {
     }
   });
   // Handle validation requests
-  socket.on('validationRequest', async (data) => {
-    try {
-      console.log('Validation request received:', data);
-      
-      // Make sure faculty details are included
-      const facultyID = data.facultyID || socket.userID;
-      const facultyName = data.facultyName || connectedUsers.get(facultyID)?.name || 'Unknown Faculty';
-      const timestamp = new Date().toISOString();
-      
-      // Enhanced data with all necessary fields
-      const enhancedData = {
-        ...data,
-        facultyID,
-        facultyName,
-        timestamp,
-        forAdmin: true,  // Flag for admin-specific notification
-        forFaculty: false // Not for faculty
-      };
-      
-      // Find all admin sockets
-      const adminUsers = Array.from(connectedUsers.entries())
-        .filter(([_, user]) => user.userType === 'admin');
-
-      console.log('Connected admins:', adminUsers);
-
-      // Emit to all connected admins
-      for (const [adminId, adminInfo] of adminUsers) {
-        console.log(`Sending notification to admin ${adminId}`);
-        io.to(adminInfo.socket).emit('newValidationRequest', enhancedData);
-      }
-      
-      // Send a confirmation back to the requesting faculty
-      if (socket.userType === 'faculty') {
-        socket.emit('requestSubmitted', {
-          success: true,
-          message: 'Your validation request has been submitted successfully.',
-          timestamp,
-          forAdmin: false,
-          forFaculty: true,
-          requestID: data.requestID,
-          advisoryID: data.advisoryID
-        });
-      }
-    } catch (error) {
-      console.error('Error handling validation request:', error);
-      socket.emit('error', { 
-        message: 'Failed to process validation request',
+  // Modified validation request handler in index.js
+socket.on('validationRequest', async (data) => {
+  try {
+    console.log('Validation request received:', data);
+    
+    // Make sure faculty details are included
+    const facultyID = data.facultyID || socket.userID;
+    const facultyName = data.facultyName || connectedUsers.get(facultyID)?.name || 'Unknown Faculty';
+    const requestID = data.requestID;
+    const advisoryID = data.advisoryID;
+    
+    // Get active school year - this is crucial
+    const db = await connectToDatabase();
+    const [activeSchoolYear] = await db.query(
+      `SELECT school_yearID, year FROM schoolyear WHERE status = 1 LIMIT 1`
+    );
+    
+    if (activeSchoolYear.length === 0) {
+      socket.emit('error', {
+        message: 'No active school year found',
         timestamp: new Date().toISOString()
-      });    }
-  });
+      });
+      return;
+    }
+    
+    // Create a unique key that includes the school year to prevent duplicates
+    const requestKey = `${advisoryID}_${facultyID}_${activeSchoolYear[0].school_yearID}`;
+    
+    // Check if this is a duplicate request
+    if (global.recentValidationRequests && global.recentValidationRequests[requestKey]) {
+      console.log(`Ignoring duplicate validation request: ${requestKey}`);
+      return;
+    }
+    
+    // Store this request to prevent duplicates
+    if (!global.recentValidationRequests) {
+      global.recentValidationRequests = {};
+    }
+    
+    global.recentValidationRequests[requestKey] = {
+      timestamp: new Date().toISOString(),
+      requestID
+    };
+    
+    // Clear this entry after 5 minutes
+    setTimeout(() => {
+      if (global.recentValidationRequests && global.recentValidationRequests[requestKey]) {
+        delete global.recentValidationRequests[requestKey];
+      }
+    }, 5 * 60 * 1000);
+    
+    // Enhance the data with school year information
+    const enhancedData = {
+      ...data,
+      facultyID,
+      facultyName,
+      timestamp: new Date().toISOString(),
+      schoolYearID: activeSchoolYear[0].school_yearID,
+      schoolYear: activeSchoolYear[0].year
+    };
+    
+    // Find all admin users
+    const adminUsers = Array.from(connectedUsers.entries())
+      .filter(([_, user]) => user.userType === 'admin');
+    
+    console.log(`Emitting validation request to ${adminUsers.length} connected admins`);
+    
+    // Send to each admin
+    for (const [adminId, adminInfo] of adminUsers) {
+      io.to(adminInfo.socket).emit('newValidationRequest', enhancedData);
+    }
+    
+    // Send confirmation to requesting faculty
+    socket.emit('requestConfirmation', {
+      success: true,
+      message: 'Your validation request has been submitted successfully.',
+      schoolYear: activeSchoolYear[0].year
+    });
+    
+  } catch (error) {
+    console.error('Error handling validation request:', error);
+    socket.emit('error', { 
+      message: 'Failed to process validation request',
+      error: error.message
+    });
+  }
+});
     // Handle validation responses
   socket.on('validationResponse', (data) => {
     try {

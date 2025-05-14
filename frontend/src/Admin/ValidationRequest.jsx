@@ -100,38 +100,47 @@ const ValidationRequest = () => {
     if (!socket) return;
 
     // Handler for new validation requests
-    const handleNewValidationRequest = (data) => {
-      console.log('Received new validation request:', data);
-      
-      // Force UI update with new data
-      setRequests(prev => {
-        // Prevent duplicates
-        if (prev.some(r => r.requestID === data.requestID)) return prev;
-        
-        const newRequest = {
-          requestID: data.requestID,
-          facultyID: data.facultyID,
-          facultyName: data.facultyName,
-          Grade: data.grade,
-          Section: data.section,
-          schoolYear: data.schoolYear,
-          advisoryID: data.advisoryID,
-          requestDate: data.timestamp ? new Date(data.timestamp).toLocaleString() : new Date().toLocaleString()
-        };
-        
-        console.log('Adding new validation request to state:', newRequest);
-        
-        // Add new request at the beginning of the array and create a new array reference
-        const updatedRequests = [newRequest, ...prev];
-        
-        // Store in localStorage for persistence between page refreshes
-        localStorage.setItem('validationRequests', JSON.stringify(updatedRequests));
-        
-        return updatedRequests;
-      });
-      
-      toast.info(`New validation request from ${data.facultyName}`);
-    };
+    // Inside the handleNewValidationRequest function (in useEffect)
+const handleNewValidationRequest = (data) => {
+  console.log('Received validation request:', data);
+  
+  // Check for duplicate by requestID
+  if (requests.some(r => r.requestID === data.requestID)) {
+    console.log('Duplicate request detected, not adding:', data.requestID);
+    return;
+  }
+  
+  // Also check for duplicates by facultyID + advisoryID combination (for the same school year)
+  if (requests.some(r => 
+    r.facultyID === data.facultyID && 
+    r.advisoryID === data.advisoryID && 
+    r.schoolYear === data.schoolYear
+  )) {
+    console.log('Duplicate faculty/advisory request detected');
+    return;
+  }
+  
+  // Create the new request object
+  const newRequest = {
+    requestID: data.requestID,
+    facultyID: data.facultyID,
+    facultyName: data.facultyName,
+    Grade: data.grade,
+    Section: data.section,
+    advisoryID: data.advisoryID,
+    schoolYear: data.schoolYear,
+    requestDate: new Date().toLocaleString()
+  };
+  
+  // Update state with new request
+  setRequests(prev => {
+    const updatedRequests = [newRequest, ...prev];
+    localStorage.setItem('validationRequests', JSON.stringify(updatedRequests));
+    return updatedRequests;
+  });
+  
+  toast.info(`New validation request from ${data.facultyName}`);
+};
     
   // Handler for when another admin processes a request
     const handleRequestProcessed = (data) => {
@@ -283,7 +292,7 @@ const ValidationRequest = () => {
         // Reset processing state
         setRequests(prev => prev.map(req => 
           req.requestID === requestID ? { ...req, processing: false } : req
-        ));
+       ));
       }
     } catch (error) {
       console.error("Error processing request:", error);
