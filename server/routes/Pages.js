@@ -2078,4 +2078,41 @@ router.get('/admin-archive-faculty', async (req, res) => {
   }
 });
 
+
+// Restore archived student
+router.put('/admin-archive-students/restore/:studentId', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { studentId } = req.params;
+    const [result] = await db.query(
+      'UPDATE students SET Status = 1 WHERE StudentID = ?',
+      [studentId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+    res.json({ success: true, message: 'Student restored successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to restore student' });
+  }
+});
+
+// Restore archived faculty
+router.put('/admin-archive-faculty/restore/:facultyId', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { facultyId } = req.params;
+    const [result] = await db.query(
+      'UPDATE faculty SET status = 1 WHERE FacultyID = ?',
+      [facultyId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Faculty not found' });
+    }
+    res.json({ success: true, message: 'Faculty restored successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to restore faculty' });
+  }
+});
+
 export default router;
