@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import NavbarFaculty from "../components/NavbarFaculty";
+import NavbarFaculty from "../Components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
 import axios from "axios";
 import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";

@@ -1,11 +1,9 @@
-import React, { useEffect, useState, useCallback } from "react";
-import NavbarAdmin from "../Components/NavbarAdmin";
-import AdminSidePanel from "../Components/AdminSidePanel";
-import axios from "axios";
-import { useNavigate } from "react-router-dom";
-// Removed toast imports - using notifications dropdown instead
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import AdminSidePanel from '../Components/AdminSidePanel';
+import NavbarAdmin from '../Components/NavbarAdmin';
 import { useSocket } from '../context/SocketContext';
-import { axiosInstance, useAxios } from '../utils/axiosConfig';
+import { useAxios } from '../utils/axiosConfig';
 
 const ValidationRequest = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -16,18 +14,17 @@ const ValidationRequest = () => {
   const socket = useSocket();
   // Use our axios instance with authentication interceptors
   const http = useAxios();
-
-    const fetchRequests = useCallback(async () => {
+  
+  const fetchRequests = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
-      if (!token) {        alert("Authentication token missing. Please login again.");
+      if (!token) {
+        alert("Authentication token missing. Please login again.");
         navigate("/admin-login");
         return;
       }
 
-      const response = await http.get(
-        "/Pages/admin/validation-requests"
-      );
+      const response = await http.get("/Pages/admin/validation-requests");
 
       if (response.data.success) {
         setRequests(response.data.requests);
@@ -42,7 +39,8 @@ const ValidationRequest = () => {
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, http]);
+  
   useEffect(() => {
     // Ensure we always fetch requests even if socket initialization fails
     fetchRequests();
@@ -97,13 +95,14 @@ const ValidationRequest = () => {
       // Make sure we're not stuck in loading state
       setLoading(false);
     }
-        // Add a fallback timeout to ensure we exit the loading state
-      const fallbackTimer = setTimeout(() => {
-        if (loading) {
-          console.warn("Timeout waiting for socket response, exiting loading state");
-          setLoading(false);
-        }
-      }, 5000); // 5 second timeout
+    
+    // Add a fallback timeout to ensure we exit the loading state
+    const fallbackTimer = setTimeout(() => {
+      if (loading) {
+        console.warn("Timeout waiting for socket response, exiting loading state");
+        setLoading(false);
+      }
+    }, 5000); // 5 second timeout
     
     // The cleanup function for this useEffect
     return () => {
@@ -117,98 +116,43 @@ const ValidationRequest = () => {
         socket.off("socketError");
       }
     };
-  }, [socket, fetchRequests]);
+  }, [socket, fetchRequests, loading]);
 
   // Process validation request (approve/reject)
-const handleProcessRequest = async (requestID, action, facultyID, advisoryID, grade, section, facultyName) => {
-  try {
-    const token = localStorage.getItem("token");
-    
-    if (!token) {
-      console.error("No token found - user may be logged out");
-      alert("Authentication error. Please log in again.");
-      navigate('/admin-login');
-      return;
-    }
-      const response = await http.post(
-      "/Pages/admin/process-validation",
-      { 
-        requestID, 
-        action,
-        grade,
-        section 
-      }
-    );    if (response.data.success) {
-      // Generate appropriate message based on action
-      let message = action === 'approve' ? 
-        'Your grade validation request has been approved. Please visit the office to finalize your validation status.' :
-        'Your grade validation request has been rejected. Please visit the office to discuss your validation status.';
-      
-      // Only need to inform the server that the request was processed
-      console.log(`${action === 'approve' ? 'Approved' : 'Rejected'} request ID: ${requestID}`);
-      
-      // Update local state optimistically
-      setRequests(prev => 
-        prev.filter(req => req.requestID !== requestID)
-      );
-      
-      // If socket exists, emit event to refresh data on other clients
-      if (socket && socket.connected) {
-        try {
-          socket.emit("requestProcessed", {
+  const handleProcessRequest = async (requestID, action, facultyID, advisoryID, grade, section, facultyName) => {
+    try {
+      const response = await http.post('/Pages/admin/process-validation', {
+        requestID,
+        action
+      });
+
+      if (response.data.success) {
+        // Update local state to reflect the change immediately
+        setRequests(prev => prev.filter(req => req.requestID !== requestID));
+        
+        // If socket exists, emit event for real-time update to other admins
+        if (socket) {
+          socket.emit('validationResponse', {
             requestID,
             action,
-            processed: true
+            facultyID,
+            advisoryID,
+            grade,
+            section,
+            facultyName
           });
-        } catch (socketError) {
-          console.warn("Socket error when emitting requestProcessed:", socketError);
-          // Non-critical error, continue without the socket notification
         }
+      } else {
+        throw new Error(response.data.message);
       }
-  }} catch (error) {
-    console.error("Error processing request:", error);
-    
-    // Check if it's an authentication error
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.error("Authentication failed - redirecting to login");
-      alert("Your session has expired. Please log in again.");
-      
-      // Clear all authentication data
-      localStorage.removeItem("token");
-      localStorage.removeItem("adminID");
-      localStorage.removeItem("adminName");
-      
-      // Use setTimeout to avoid navigation during the error handling
-      setTimeout(() => {
-        navigate('/admin-login');
-      }, 100);
-      return;
+    } catch (error) {
+      console.error('Error processing validation request:', error);
+      alert(error.message || 'Failed to process validation request');
     }
-    
-    // Handle network errors
-    if (error.message && error.message.includes('Network Error')) {
-      alert("Network connection issue. Please check your internet connection and try again.");
-      return;
-    }
-    
-    // Handle server errors
-    if (error.response && error.response.status >= 500) {
-      alert("Server error. The system is currently unavailable. Please try again later.");
-      return;
-    }
-    
-    // Handle other types of errors
-    alert("Failed to process validation request. Please try again.");
-    
-    // Re-fetch to ensure UI matches server state after a short delay
-    setTimeout(() => {
-      fetchRequests();
-    }, 500);
-  }
-};
+  };
 
   const filteredRequests = requests.filter((request) =>
-    request.facultyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    request.facultyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     `Grade ${request.Grade} - ${request.Section}`.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -251,43 +195,46 @@ const handleProcessRequest = async (requestID, action, facultyID, advisoryID, gr
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredRequests.map((request) => (
-                      <tr key={`${request.requestID}-${request.facultyID}`}>
-                        <td className="px-6 py-4 whitespace-nowrap">{request.facultyName}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">Grade {request.Grade} - {request.Section}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{request.schoolYear}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{request.requestDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap space-x-2">
-                          <button                            onClick={() => handleProcessRequest(
-                              request.requestID, 
-                              'approve', 
-                              request.facultyID, 
-                              request.advisoryID,
-                              request.grade,
-                              request.section,
-                              request.facultyName
-                            )}
-                            className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Approve
-                          </button>
-                          <button                            onClick={() => handleProcessRequest(
-                              request.requestID, 
-                              'reject',
-                              request.facultyID, 
-                              request.advisoryID,
-                              request.grade,
-                              request.section,
-                              request.facultyName
-                            )}
-                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
-                          >
-                            Reject
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {filteredRequests.length === 0 && (
+                    {filteredRequests.length > 0 ? (
+                      filteredRequests.map((request) => (
+                        <tr key={`${request.requestID}-${request.facultyID}`}>
+                          <td className="px-6 py-4 whitespace-nowrap">{request.facultyName}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">Grade {request.Grade} - {request.Section}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{request.schoolYear}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{request.requestDate}</td>
+                          <td className="px-6 py-4 whitespace-nowrap space-x-2">
+                            <button
+                              onClick={() => handleProcessRequest(
+                                request.requestID, 
+                                'approve', 
+                                request.facultyID, 
+                                request.advisoryID,
+                                request.grade,
+                                request.section,
+                                request.facultyName
+                              )}
+                              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => handleProcessRequest(
+                                request.requestID, 
+                                'reject',
+                                request.facultyID, 
+                                request.advisoryID,
+                                request.grade,
+                                request.section,
+                                request.facultyName
+                              )}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Reject
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
                       <tr>
                         <td colSpan="5" className="px-6 py-4 text-center text-gray-500">
                           No validation requests found

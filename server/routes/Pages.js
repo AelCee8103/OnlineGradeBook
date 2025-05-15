@@ -1416,92 +1416,117 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
   }
 });
 
+// Improve the admin/process-validation endpoint
 router.post('/admin/process-validation', authenticateToken, async (req, res) => {
-  // Verify this is an admin request
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Only admin users can process validation requests'
-    });
-  }
-
-  const { requestID, action } = req.body;
-  const io = req.app.get('socketio');
-  const db = await connectToDatabase();
-
   try {
-    // First verify the request exists and is pending
-    const [request] = await db.query(
-      'SELECT * FROM validation_request WHERE requestID = ? AND statusID = 0',
-      [requestID]
-    );
-
-    if (request.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Request not found or already processed' 
+    // Verify this is an admin request first
+    if (!req.user || (!req.user.adminID && req.user.role !== 'admin')) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Only administrators can process validation requests."
       });
     }
-
-    const statusID = action === 'approve' ? 1 : 2;
     
-    // Update in database
-    await db.query(
-      'UPDATE validation_request SET statusID = ? WHERE requestID = ?',
-      [statusID, requestID]
+    const { requestID, action } = req.body;
+    const adminID = req.user.adminID || req.user.id;
+    
+    if (!requestID || !action || !adminID) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required information: requestID, action, or administrator identity"
+      });
+    }
+    
+    if (action !== 'approve' && action !== 'reject') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid action. Must be 'approve' or 'reject'."
+      });
+    }
+    
+    const db = await connectToDatabase();
+    
+    // Check if the request exists
+    const [request] = await db.query(
+      `SELECT vr.*, f.FacultyID, f.FirstName, f.LastName
+       FROM validation_request vr
+       JOIN faculty f ON vr.facultyID = f.FacultyID
+       WHERE vr.requestID = ?`,
+      [requestID]
     );
-
-    // Get updated request details
-    const [updatedRequest] = await db.query(`
-      SELECT vr.facultyID, vr.advisoryID,
-        CONCAT(f.FirstName, ' ', f.LastName) as facultyName,
-        c.Grade, c.Section
-      FROM validation_request vr
-      JOIN faculty f ON vr.facultyID = f.FacultyID
-      JOIN advisory a ON vr.advisoryID = a.advisoryID
-      JOIN classes c ON a.classID = c.ClassID
-      WHERE vr.requestID = ?
-    `, [requestID]);    if (updatedRequest.length > 0) {
-      const reqData = updatedRequest[0];
+    
+    if (request.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Validation request not found"
+      });
+    }
+    
+    // Check if the request is already processed
+    if (request[0].statusID !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: `This request has already been ${request[0].statusID === 1 ? 'approved' : 'rejected'}`
+      });
+    }
+    
+    // Set status based on action (1 = approve, 2 = reject)
+    const newStatusID = action === 'approve' ? 1 : 2;
+    
+    // Update the validation request
+    await db.query(
+      `UPDATE validation_request 
+       SET statusID = ?, processedBy = ?, processedDate = NOW() 
+       WHERE requestID = ?`,
+      [newStatusID, adminID, requestID]
+    );
+    
+    // Faculty info for notification
+    const facultyID = request[0].facultyID;
+    const facultyName = `${request[0].LastName}, ${request[0].FirstName}`;
+    
+    // Get the io instance from the request
+    const io = req.app.get('socketio');
+    
+    // If socket.io is available, send real-time notification to faculty
+    if (io) {
+      io.to(`faculty_${facultyID}`).emit('validationResponseReceived', {
+        requestID,
+        status: action,
+        message: action === 'approve' 
+          ? 'Your grade validation request has been approved.'
+          : 'Your grade validation request has been rejected.',
+        timestamp: new Date().toISOString()
+      });
       
-      // Send a UI refresh event to admins instead of a notification
-      // This will update their request list without creating a notification
+      // Also notify all admins about the action
       io.to('admins').emit('requestProcessed', {
         requestID,
         action,
-        timestamp: new Date().toISOString()
-      });// Notify faculty with a proper detailed message
-      io.to(`faculty_${reqData.facultyID}`).emit('validationResponseReceived', {
-        status: action === 'approve' ? 'approved' : 'rejected',
-        requestID,
-        advisoryID: reqData.advisoryID,
-        grade: reqData.Grade,
-        section: reqData.Section,
-        message: action === 'approve' 
-          ? 'Your grade validation request has been approved. Please visit the office to finalize your validation status.'
-          : 'Your grade validation request has been rejected. Please visit the office to discuss your validation status.',
+        facultyID,
+        facultyName,
+        processedBy: adminID,
         timestamp: new Date().toISOString()
       });
     }
-
-    res.json({ 
-      success: true, 
-      message: `Request ${action === 'approve' ? 'approved' : 'rejected'}` 
+    
+    res.status(200).json({
+      success: true,
+      message: `Request ${action}d successfully`,
+      facultyID,
+      facultyName
     });
+    
   } catch (error) {
     console.error("Error processing validation:", error);
-    
-    // Check if it's a token/auth error
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        success: false, 
-        message: "Authentication failed. Please log in again." 
-      });
-    }
-    
-    res.status(500).json({ success: false, message: "Failed to process request" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to process validation request",
+      error: error.message
+    });
   }
 });
+
 
 // Simplified validation request route
 router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {

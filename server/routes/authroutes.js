@@ -148,36 +148,80 @@ router.post('/admin-register', async (req, res) => {
 
 
 // Admin Login
-router.post('/admin-login', async (req, res) => {
+router.post('/admin-login', verifyAdminToken,async (req, res) => {
   const { AdminID, Password } = req.body;
+  
   try {
     const db = await connectToDatabase();
-
-    const [rows] = await db.query('SELECT * FROM admin WHERE AdminID = ?', [AdminID]);
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "Admin does not exist" });
-    }    const isMatch = await bcrypt.compare(Password, rows[0].Password);
-    if (!isMatch) {
-      return res.status(404).json({ message: "Incorrect password" });
+    
+    // Validate input
+    if (!AdminID || !Password) {
+      return res.status(400).json({
+        success: false,
+        message: "AdminID and Password are required"
+      });
     }
 
-    // Create an admin name from the database record
+    // Query for admin user
+    const [rows] = await db.query('SELECT * FROM admin WHERE AdminID = ?', [AdminID]);
+    
+    if (rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid admin credentials"
+      });
+    }
+
+    // Check password
+    const isMatch = await bcrypt.compare(Password, rows[0].Password);
+    
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid admin credentials"
+      });
+    }
+
+    // Create admin name
     const adminName = `${rows[0].FirstName || ''} ${rows[0].LastName || ''}`.trim() || 'Admin';
 
-    const token = jwt.sign({ 
+    // Create token with standardized payload structure
+    const tokenPayload = {
       AdminID: rows[0].AdminID,
       role: 'admin',
-      name: adminName
-    }, process.env.JWT_KEY, { expiresIn: '3h' });
+      name: adminName,
+      timestamp: Date.now()
+    };
     
-    return res.status(201).json({ 
+    // Use the correct secret key from env
+    const secretKey = process.env.JWT_SECRET || process.env.JWT_KEY;
+    
+    if (!secretKey) {
+      console.error("JWT secret key is not defined");
+      return res.status(500).json({
+        success: false,
+        message: "Server configuration error"
+      });
+    }
+    
+    const token = jwt.sign(tokenPayload, secretKey, { expiresIn: '12h' });
+    
+    // Log the token payload for debugging
+    console.log("Generated token payload:", JSON.stringify(tokenPayload, null, 2));
+    
+    return res.status(200).json({ 
+      success: true,
       token: token,
-      adminName: adminName
+      adminName: adminName,
+      adminID: rows[0].AdminID
     });
-
   } catch (err) {
-    console.error("Database Error:", err.message);
-    return res.status(500).json({ error: err.message });
+    console.error("Admin login error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during login",
+      error: err.message
+    });
   }
 });
 
