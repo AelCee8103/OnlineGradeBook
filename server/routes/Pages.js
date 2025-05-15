@@ -590,64 +590,43 @@ router.put("/admin-manage-subject/:id", async (req, res) => {
 
 router.post("/admin-assign-subject", async (req, res) => {
   try {
-    const {subjectID, FacultyID, school_yearID, advisoryID } = req.body;
-
-    // Validate all required fields
-    if (!subjectID || !FacultyID || !school_yearID || !advisoryID) {
-      return res.status(400).json({ error: "All fields are required" });
-    }
-
     const db = await connectToDatabase();
+    const { subjectID, FacultyID, advisoryID, school_yearID } = req.body;
 
-    // Check for duplicate assignment
-    const [duplicateCheck] = await db.query(
+    // First check if this subject is already assigned to this advisory in current year
+    const [existingAssignment] = await db.query(
       `SELECT * FROM assignsubject 
-       WHERE subjectID = ? AND FacultyID = ? AND yearID = ? AND advisoryID = ?`,
-      [subjectID, FacultyID, school_yearID, advisoryID]
+       WHERE subjectID = ? 
+       AND advisoryID = ? 
+       AND yearID = ?`,
+      [subjectID, advisoryID, school_yearID]
     );
 
-    if (duplicateCheck.length > 0) {
-      return res.status(409).json({ 
-        error: "This subject is already assigned to the selected faculty and advisory for the school year" 
+    // If there's an existing assignment, return error
+    if (existingAssignment.length > 0) {
+      return res.status(409).json({
+        error: "This subject is already assigned to this advisory class for the current school year"
       });
     }
 
-    // Insert new assignment - Let MySQL auto-increment handle the SubjectCode
+    // If no duplicate found, proceed with insert
     const [result] = await db.query(
-      `INSERT INTO assignsubject 
-       (subjectID, FacultyID, yearID, advisoryID)
+      `INSERT INTO assignsubject (subjectID, FacultyID, advisoryID, yearID) 
        VALUES (?, ?, ?, ?)`,
-      [subjectID, FacultyID, school_yearID, advisoryID]
+      [subjectID, FacultyID, advisoryID, school_yearID]
     );
 
-    if (!result.insertId) {
-      throw new Error("Failed to create assignment");
-    }
-
-    res.status(201).json({ 
-      message: "Assignment created successfully",
-      SubjectCode: result.insertId 
+    res.status(201).json({
+      success: true,
+      message: "Subject assigned successfully",
+      assignmentId: result.insertId
     });
 
   } catch (error) {
-    console.error("Error creating assignment:", error);
-
-    if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-      return res.status(400).json({ 
-        error: "Reference error - one of the referenced IDs doesn't exist",
-        details: error.sqlMessage
-      });
-    }
-
-    res.status(500).json({ 
-      error: "Failed to create assignment",
-      details: error.message 
-    });
+    console.error("Error assigning subject:", error);
+    res.status(500).json({ error: "Failed to assign subject" });
   }
 });
-
-
-
 
 
 

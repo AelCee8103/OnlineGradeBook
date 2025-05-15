@@ -175,19 +175,24 @@ const AssignSubject = () => {
       return;
     }
 
-    // 🔍 Check for duplicates
+    // Get current school year first
+    const currentYear = schoolYears.find((year) => year.status === 1);
+    if (!currentYear) {
+      toast.error("No active school year found");
+      return;
+    }
+
+    // 🔍 Check for duplicates using subjectID
     const alreadyAssigned = assignedSubjects.some(
       (assignment) =>
-        assignment.subjectID === newAssignedSubject.subjectID &&
         assignment.advisoryID === newAssignedSubject.advisoryID &&
-        assignment.school_yearID === newAssignedSubject.school_yearID &&
-        (!editingAssignment ||
-          assignment.SubjectCode !== editingAssignment.SubjectCode)
+        assignment.subjectID === newAssignedSubject.subjectID && // Changed from SubjectCode
+        assignment.yearID === currentYear.school_yearID
     );
 
     if (alreadyAssigned) {
       toast.error(
-        "This subject is already assigned to this advisory class for the selected school year."
+        "This subject is already assigned to this advisory class for the current school year"
       );
       return;
     }
