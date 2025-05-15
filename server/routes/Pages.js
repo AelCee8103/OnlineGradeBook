@@ -1216,72 +1216,74 @@ router.get('/faculty/student-info/:studentId', authenticateToken, async (req, re
 
 
 // Get advisory class details and students
-router.get('/admin-view-students/:advisoryID', async (req, res) => {
+
+
+router.get('/admin-view-students/:advisoryID', authenticateToken, async (req, res) => {
+  const db = await connectToDatabase();
+  const { advisoryID } = req.params;
+
   try {
-    console.log(`Fetching data for advisoryID: ${req.params.advisoryID}`); // Debug log
-    
-    const db = await connectToDatabase();
-    const { advisoryID } = req.params;
-    
-    // 1. First verify the advisory exists
-    const [advisoryCheck] = await db.query(
-      'SELECT 1 FROM advisory WHERE advisoryID = ?', 
-      [advisoryID]
+    // Step 1: Get active school year
+    const [schoolYearRows] = await db.query(
+      "SELECT school_yearID, year FROM schoolyear WHERE status = 1"
     );
-    
-    if (!advisoryCheck || advisoryCheck.length === 0) {
-      console.log(`No advisory found with ID: ${advisoryID}`);
-      return res.status(404).json({ 
-        error: 'Advisory not found',
-        advisoryID: advisoryID
-      });
+
+    if (!schoolYearRows.length) {
+      return res.status(404).json({ success: false, error: "No active school year found" });
     }
 
-    // 2. Get advisory details
-    const [advisoryInfo] = await db.query(`
+    const currentYearID = schoolYearRows[0].school_yearID;
+    const schoolYear = schoolYearRows[0].year;
+
+    // Step 2: Verify advisory exists in current year
+    const [advisoryInfoRows] = await db.query(`
       SELECT 
         c.Grade,
         c.Section,
-        CONCAT(f.FirstName, ' ', COALESCE(f.MiddleName, ''), ' ', f.LastName) AS facultyName,
-        sy.year AS SchoolYear
+        CONCAT(f.FirstName, ' ', COALESCE(f.MiddleName, ''), ' ', f.LastName) AS facultyName
       FROM advisory a
+      JOIN class_year cy ON cy.advisoryID = a.advisoryID
       JOIN classes c ON a.classID = c.ClassID
       JOIN faculty f ON a.facultyID = f.FacultyID
-      JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      WHERE a.advisoryID = ?
-    `, [advisoryID]);
+      WHERE a.advisoryID = ? AND cy.yearID = ?
+    `, [advisoryID, currentYearID]);
 
-    // 3. Get students
+    if (!advisoryInfoRows.length) {
+      return res.status(404).json({ success: false, error: "Advisory not found for current school year" });
+    }
+
+    const advisoryInfo = advisoryInfoRows[0];
+
+    // Step 3: Get students assigned to this advisory in current year
     const [students] = await db.query(`
-      SELECT 
-        s.StudentID,
-        s.FirstName,
-        COALESCE(s.MiddleName, '') AS MiddleName,
-        s.LastName
+      SELECT s.StudentID, s.FirstName, COALESCE(s.MiddleName, '') AS MiddleName, s.LastName
       FROM students s
       JOIN student_classes sc ON s.StudentID = sc.StudentID
-      WHERE sc.advisoryID = ?
+      WHERE sc.advisoryID = ? AND sc.school_yearID = ? AND s.Status = 1
       ORDER BY s.LastName, s.FirstName
-    `, [advisoryID]);
+    `, [advisoryID, currentYearID]);
 
-    console.log(`Found ${students.length} students for advisory ${advisoryID}`); // Debug log
-    
+    // Step 4: Return correct response structure
     res.status(200).json({
       success: true,
-      advisoryInfo: advisoryInfo[0] || null,
-      students: students || [],
+      advisoryInfo: {
+        ...advisoryInfo,
+        SchoolYear: schoolYear
+      },
+      students: students,
       studentCount: students.length
     });
 
   } catch (error) {
-    console.error('Database error:', error);
-    res.status(500).json({ 
-      error: 'Database error',
-      details: error.message 
+    console.error('Error fetching advisory students:', error);
+    res.status(500).json({
+      success: false,
+      error: "Server error",
+      details: error.message
     });
   }
 });
+
 
 
 
