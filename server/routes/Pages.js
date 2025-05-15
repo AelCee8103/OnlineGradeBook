@@ -1661,211 +1661,224 @@ router.post('/admin-manage-students/bulk', authenticateToken, async (req, res) =
 
 //Validation requests
 
-// Completely revamped validation request endpoint
-router.post('/faculty/validate-grades', authenticateToken, async (req, res) => {
-  const { advisoryID } = req.body;
-  const facultyID = req.user.id || req.user.facultyID;
+// Simplified validation request route
+router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
+  const db = await connectToDatabase();
   
   try {
-    const db = await connectToDatabase();
-    
-    // 1. FIRST: Get the active school year
-    const [activeSchoolYears] = await db.query(
-      `SELECT school_yearID, year FROM schoolyear WHERE status = 1 LIMIT 1`
+    const { advisoryID } = req.body;
+    const facultyID = req.user.facultyID;
+    const requestDate = new Date().toISOString();
+
+    // First check for existing pending requests
+    const [existingRequests] = await db.query(
+      `SELECT COUNT(*) as count FROM validation_request 
+       WHERE advisoryID = ? AND facultyID = ? AND statusID = 0`,
+      [advisoryID, facultyID]
     );
-    
-    if (activeSchoolYears.length === 0) {
+
+    if (existingRequests[0].count > 0) {
       return res.status(400).json({
         success: false,
-        message: "No active school year found. Please contact an administrator."
+        message: "You already have a pending validation request for this advisory class"
       });
     }
-    
-    const activeSchoolYear = activeSchoolYears[0];
-    console.log(`Active school year: ${activeSchoolYear.year} (ID: ${activeSchoolYear.school_yearID})`);
-    
-    // 2. Delete any existing requests that might be duplicates
-    // This helps clean up any potential data issues
+
+    // Verify faculty's advisory assignment
+    const [advisory] = await db.query(
+      'SELECT advisoryID FROM advisory WHERE advisoryID = ? AND facultyID = ?',
+      [advisoryID, facultyID]
+    );
+
+    if (advisory.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized for this advisory class"
+      });
+    }
+
+    await db.query('START TRANSACTION');
+
+    // Create a single validation request for the advisory class
     await db.query(
-      `DELETE FROM validation_request 
-       WHERE facultyID = ? AND advisoryID = ? AND statusID = 0`,
-      [facultyID, advisoryID]
+      `INSERT INTO validation_request 
+       (facultyID, advisoryID, statusID, requestDate) 
+       VALUES (?, ?, 0, ?)`,
+      [facultyID, advisoryID, requestDate]
     );
-    
-    // 3. Check if there are any existing approved requests for this combination
-    // to avoid unnecessary re-validations
-    const [existingApproved] = await db.query(
-      `SELECT requestID FROM validation_request 
-       WHERE facultyID = ? AND advisoryID = ? AND statusID = 1 AND schoolYearID = ?`,
-      [facultyID, advisoryID, activeSchoolYear.school_yearID]
-    );
-    
-    if (existingApproved.length > 0) {
-      return res.status(409).json({
-        success: false,
-        message: "Grades for this class are already validated for the current school year."
-      });
-    }
-    
-    // 4. Create a new request with the active school year ID
-    const [result] = await db.query(
-      `INSERT INTO validation_request (advisoryID, facultyID, statusID, requestDate, schoolYearID) 
-       VALUES (?, ?, 0, NOW(), ?)`,
-      [advisoryID, facultyID, activeSchoolYear.school_yearID]
-    );
-    
-    // 5. Log success and return response with school year info
-    console.log(`Created validation request: ID=${result.insertId}, facultyID=${facultyID}, advisoryID=${advisoryID}, schoolYear=${activeSchoolYear.year}`);
-    
-    res.status(201).json({
+
+    await db.query('COMMIT');
+
+    res.json({
       success: true,
-      message: "Validation request submitted successfully",
-      requestID: result.insertId,
-      schoolYear: activeSchoolYear.year,
-      schoolYearID: activeSchoolYear.school_yearID
+      message: "Validation request created successfully",
+      requestDate: requestDate
     });
-    
+
   } catch (error) {
-    console.error("Error processing validation request:", error);
-    
-    // Handle duplicate entry errors specifically
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(409).json({
-        success: false,
-        message: "A validation request for this class is already pending"
-      });
-    }
-    
+    await db.query('ROLLBACK');
+    console.error("Error:", error);
     res.status(500).json({
       success: false,
-      message: "Server error while processing validation request",
-      error: error.message
+      message: "Failed to create validation request"
     });
   }
 });
 
 
-// Fixed endpoint to get all pending validation requests
 router.get('/admin/validation-requests', authenticateToken, async (req, res) => {
   try {
     const db = await connectToDatabase();
     
-    // Get the active school year first
-    const [activeSchoolYears] = await db.query(
-      `SELECT school_yearID, year FROM schoolyear WHERE status = 1 LIMIT 1`
-    );
-    
-    if (activeSchoolYears.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "No active school year found"
-      });
-    }
-    
-    const activeSchoolYear = activeSchoolYears[0];
-    console.log(`Fetching validation requests for active school year: ${activeSchoolYear.year}`);
-    
-    // Get pending validation requests for the active school year only
     const [requests] = await db.query(`
       SELECT 
         vr.requestID,
         vr.advisoryID,
         vr.facultyID,
         vr.requestDate,
-        vr.schoolYearID,
-        f.FirstName,
-        f.LastName,
+        CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
         c.Grade,
         c.Section,
-        sy.year as schoolYear
+        sy.year AS schoolYear
       FROM validation_request vr
       JOIN faculty f ON vr.facultyID = f.FacultyID
       JOIN advisory a ON vr.advisoryID = a.advisoryID
       JOIN classes c ON a.classID = c.ClassID
-      JOIN schoolyear sy ON vr.schoolYearID = sy.school_yearID
-      WHERE vr.statusID = 0 AND vr.schoolYearID = ?
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE vr.statusID = 0
       ORDER BY vr.requestDate DESC
-    `, [activeSchoolYear.school_yearID]);
+    `);
+
+    res.json({ 
+      success: true, 
+      requests: requests.map(req => ({
+        ...req,
+        requestDate: new Date(req.requestDate).toLocaleString()
+      }))
+    });
+
+  } catch (error) {
+    console.error("Error fetching validation requests:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch requests",
+      error: error.message 
+    });
+  }
+});
+
+// Improve the admin/process-validation endpoint
+router.post('/admin/process-validation', authenticateToken, async (req, res) => {
+  try {
+    // Verify this is an admin request first
+    if (!req.user || (!req.user.adminID && req.user.role !== 'admin')) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Only administrators can process validation requests."
+      });
+    }
     
-    console.log(`Found ${requests.length} pending validation requests for school year ${activeSchoolYear.year}`);
+    const { requestID, action } = req.body;
+    const adminID = req.user.adminID || req.user.id;
     
-    // Format data for frontend
-    const formattedRequests = requests.map(req => ({
-      requestID: req.requestID,
-      facultyID: req.facultyID,
-      advisoryID: req.advisoryID,
-      facultyName: `${req.FirstName || ''}, ${req.LastName || ''}`,
-      Grade: req.Grade,
-      Section: req.Section,
-      schoolYear: req.schoolYear,
-      requestDate: new Date(req.requestDate).toLocaleString()
-    }));
+    if (!requestID || !action || !adminID) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required information: requestID, action, or administrator identity"
+      });
+    }
+    
+    if (action !== 'approve' && action !== 'reject') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid action. Must be 'approve' or 'reject'."
+      });
+    }
+    
+    const db = await connectToDatabase();
+    
+    // Check if the request exists
+    const [request] = await db.query(
+      `SELECT vr.*, f.FacultyID, f.FirstName, f.LastName
+       FROM validation_request vr
+       JOIN faculty f ON vr.facultyID = f.FacultyID
+       WHERE vr.requestID = ?`,
+      [requestID]
+    );
+    
+    if (request.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Validation request not found"
+      });
+    }
+    
+    // Check if the request is already processed
+    if (request[0].statusID !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: `This request has already been ${request[0].statusID === 1 ? 'approved' : 'rejected'}`
+      });
+    }
+    
+    // Set status based on action (1 = approve, 2 = reject)
+    const newStatusID = action === 'approve' ? 1 : 2;
+    
+    // Update the validation request
+    await db.query(
+      `UPDATE validation_request 
+       SET statusID = ?, processedBy = ?, processedDate = NOW() 
+       WHERE requestID = ?`,
+      [newStatusID, adminID, requestID]
+    );
+    
+    // Faculty info for notification
+    const facultyID = request[0].facultyID;
+    const facultyName = `${request[0].LastName}, ${request[0].FirstName}`;
+    
+    // Get the io instance from the request
+    const io = req.app.get('socketio');
+    
+    // If socket.io is available, send real-time notification to faculty
+    if (io) {
+      io.to(`faculty_${facultyID}`).emit('validationResponseReceived', {
+        requestID,
+        status: action,
+        message: action === 'approve' 
+          ? 'Your grade validation request has been approved.'
+          : 'Your grade validation request has been rejected.',
+        timestamp: new Date().toISOString()
+      });
+      
+      // Also notify all admins about the action
+      io.to('admins').emit('requestProcessed', {
+        requestID,
+        action,
+        facultyID,
+        facultyName,
+        processedBy: adminID,
+        timestamp: new Date().toISOString()
+      });
+    }
     
     res.status(200).json({
       success: true,
-      requests: formattedRequests,
-      activeSchoolYear: activeSchoolYear.year
+      message: `Request ${action}d successfully`,
+      facultyID,
+      facultyName
     });
     
   } catch (error) {
-    console.error("Error fetching validation requests:", error);
+    console.error("Error processing validation:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch validation requests",
+      message: "Failed to process validation request",
       error: error.message
     });
   }
 });
 
-router.post('/admin/process-validation', authenticateToken, async (req, res) => {
-  const { requestID, action } = req.body; // action: 'approve' or 'reject'
-
-  try {
-    const db = await connectToDatabase();
-    
-    // Get request details first, including schoolYearID
-    const [request] = await db.query(
-      `SELECT vr.facultyID, vr.advisoryID, vr.schoolYearID, sy.year as schoolYear
-       FROM validation_request vr
-       JOIN schoolyear sy ON vr.schoolYearID = sy.school_yearID
-       WHERE requestID = ?`,
-      [requestID]
-    );
-    
-    if (request.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: "Validation request not found" 
-      });
-    }
-    
-    // Set appropriate status based on action
-    const newStatusID = action === 'approve' ? 1 : 2; // 1 for approved, 2 for rejected
-    
-    // Update request status
-    await db.query(
-      `UPDATE validation_request 
-       SET statusID = ?, processedAt = NOW(), processedBy = ? 
-       WHERE requestID = ?`,
-      [newStatusID, req.user.id, requestID]
-    );
-    
-    res.status(200).json({ 
-      success: true, 
-      message: `Request ${action}d successfully`,
-      schoolYear: request[0].schoolYear,
-      facultyID: request[0].facultyID,
-      advisoryID: request[0].advisoryID
-    });
-    
-  } catch (error) {
-    console.error("Error processing validation:", error);
-    res.status(500).json({ 
-      success: false, 
-      message: "Failed to process validation request" 
-    });
-  }
-});
 
 // Simplified validation request route
 router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
@@ -2070,53 +2083,7 @@ router.get("/faculty-class-advisory", authenticateToken, async (req, res) => {
   }
 });
 
-// POST: Admin processes a validation request (approve/reject)
-router.post('/admin/process-validation', authenticateToken, async (req, res) => {
-  const { requestID, action } = req.body; // action: 'approve' or 'reject'
-  const db = await connectToDatabase();
 
-  try {
-    // 1. Get the request details before deleting
-    const [rows] = await db.query(
-      `SELECT facultyID, advisoryID FROM validation_request WHERE requestID = ?`,
-      [requestID]
-    );
-    if (!rows.length) {
-      return res.status(404).json({ success: false, message: "Request not found" });
-    }
-    const { facultyID, advisoryID } = rows[0];
-
-    // 2. Delete the validation request
-    await db.query(
-      `DELETE FROM validation_request WHERE requestID = ?`,
-      [requestID]
-    );
-
-    // 3. Create a notification for the faculty
-    const status = action === 'approve' ? 'Approved' : 'Rejected';
-    const message = `Your grade validation request for advisory ${advisoryID} was ${status.toLowerCase()}.`;
-    await db.query(
-      `INSERT INTO notifications (facultyID, type, message, status) VALUES (?, ?, ?, ?)`,
-      [facultyID, 'validation', message, status]
-    );
-
-    // 4. Emit a real-time notification to the faculty via Socket.IO
-    if (req.app.get('io')) {
-      req.app.get('io').to(String(facultyID)).emit('facultyNotification', {
-        type: 'validation',
-        status,
-        message,
-        advisoryID,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    res.json({ success: true, message: `Request ${status.toLowerCase()}` });
-  } catch (error) {
-    console.error("Error processing validation:", error);
-    res.status(500).json({ success: false, message: "Failed to process request" });
-  }
-});
 
 // Make sure this route is added if not already there:
 

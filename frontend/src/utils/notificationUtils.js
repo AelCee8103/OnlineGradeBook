@@ -1,154 +1,208 @@
-/**
- * Save notifications to localStorage with proper structure
- * @param {Array} notifications - List of notification objects
- * @param {number} maxStoredNotifications - Maximum number of notifications to store (default: 50)
- */
-export const saveNotifications = (notifications, maxStoredNotifications = 50) => {
-  // Limit the number of stored notifications to prevent localStorage overflow
-  const limitedNotifications = notifications.slice(0, maxStoredNotifications);
-  localStorage.setItem('notifications', JSON.stringify(limitedNotifications));
-};
+import axios from 'axios';
+import toast from 'react-hot-toast';
 
-/**
- * Get stored notifications from localStorage
- * @returns {Array} Array of notification objects
- */
-export const getStoredNotifications = () => {
+// Add the missing getStoredNotifications function
+export const getStoredNotifications = (userType) => {
   try {
-    const stored = localStorage.getItem('notifications');
-    return stored ? JSON.parse(stored) : [];
+    const storedNotifications = localStorage.getItem('notifications');
+    if (!storedNotifications) return [];
+    
+    const allNotifications = JSON.parse(storedNotifications);
+    
+    // Filter notifications by userType if specified
+    if (userType) {
+      return allNotifications.filter(notification => 
+        !notification.userType || notification.userType === userType
+      );
+    }
+    
+    return allNotifications;
   } catch (error) {
-    console.error('Error parsing stored notifications:', error);
+    console.error('Error retrieving stored notifications:', error);
     return [];
   }
 };
 
-/**
- * Get notifications filtered by user type
- * @param {string} userType - 'admin' or 'faculty'
- * @returns {Array} Filtered notifications for the specified user type
- */
-export const getUserTypeNotifications = (userType) => {
-  const allNotifications = getStoredNotifications();
-  
-  if (userType === 'admin') {
-    return allNotifications.filter(notification => notification.forAdmin === true);
-  } else if (userType === 'faculty') {
-    return allNotifications.filter(notification => notification.forFaculty === true);
-  }
-  
-  return [];
-};
-
-/**
- * Clear all notifications for a specific user type
- * @param {string} userType - 'admin' or 'faculty' 
- */
-export const clearUserTypeNotifications = (userType) => {
-  const allNotifications = getStoredNotifications();
-  
-  // Keep only notifications for other user types
-  const remainingNotifications = allNotifications.filter(notification => {
-    if (userType === 'admin') {
-      return !notification.forAdmin;
-    } else if (userType === 'faculty') {
-      return !notification.forFaculty;
-    }
-    return true;
-  });
-  
-  saveNotifications(remainingNotifications);
-};
-
-/**
- * Get the count of unread notifications for a specific user type
- * @param {string} userType - 'admin' or 'faculty' 
- * @returns {number} Count of unread notifications
- */
-export const getUnreadNotificationCount = (userType) => {
+// Add a function to store notifications
+export const storeNotifications = (notifications) => {
   try {
-    const notifications = getUserTypeNotifications(userType);
-    return notifications.filter(notification => !notification.read).length;
+    localStorage.setItem('notifications', JSON.stringify(notifications));
+    return true;
   } catch (error) {
-    console.error('Error counting unread notifications:', error);
-    return 0;
+    console.error('Error storing notifications:', error);
+    return false;
   }
 };
 
-/**
- * Mark all notifications as read for a specific user type
- * @param {string} userType - 'admin' or 'faculty'
- */
-export const markAllNotificationsAsRead = (userType) => {
-  const allNotifications = getStoredNotifications();
-  
-  // Update read status for the specified user type
-  const updatedNotifications = allNotifications.map(notification => {
-    if ((userType === 'admin' && notification.forAdmin) || 
-        (userType === 'faculty' && notification.forFaculty)) {
-      return { ...notification, read: true };
+// Create axios instance with base URL
+export const axiosInstance = axios.create({
+  baseURL: 'http://localhost:3000'
+});
+
+// Create a custom hook that returns an axios instance with auth interceptors
+export const useAxios = () => {
+  const instance = axios.create({
+    baseURL: 'http://localhost:3000',
+    timeout: 10000,
+    headers: {
+      'Content-Type': 'application/json'
     }
-    return notification;
   });
   
-  saveNotifications(updatedNotifications);
+  // Request interceptor
+  instance.interceptors.request.use(config => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  }, error => {
+    return Promise.reject(error);
+  });
+  
+  // Response interceptor for handling common errors
+  instance.interceptors.response.use(
+    response => response,
+    error => {
+      // Handle authentication errors
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        const userType = localStorage.getItem('adminID') ? 'admin' : 'faculty';
+        toast.error(`Your session has expired. Please log in again.`);
+        
+        // Clear auth data
+        localStorage.removeItem('token');
+        localStorage.removeItem('adminID');
+        localStorage.removeItem('adminName');
+        localStorage.removeItem('facultyID');
+        localStorage.removeItem('facultyName');
+        
+        // Redirect based on user type
+        setTimeout(() => {
+          window.location.href = userType === 'admin' ? '/admin-login' : '/faculty-login';
+        }, 1000);
+      }
+      
+      // Handle network errors
+      if (error.code === 'ERR_NETWORK') {
+        toast.error('Network error. Please check your connection.');
+      }
+      
+      return Promise.reject(error);
+    }
+  );
+  
+  return instance;
 };
 
-/**
- * Add a new notification and persist it to localStorage
- * @param {Object} notification - The notification object to add
- * @param {string} userType - 'admin' or 'faculty'
- * @returns {Array} Updated array of notifications
- */
-export const addNotification = (notification, userType) => {
-  const allNotifications = getStoredNotifications();
+// Setup global interceptors for default axios instance
+export const setupGlobalInterceptors = () => {
+  // Request interceptor
+  axios.interceptors.request.use(config => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  }, error => {
+    return Promise.reject(error);
+  });
   
-  // Add the new notification to the front of the array
-  const updatedNotifications = [notification, ...allNotifications];
-  saveNotifications(updatedNotifications);
-  
-  // Return only notifications for the current user type
-  return getUserTypeNotifications(userType);
+  // Response interceptor
+  axios.interceptors.response.use(
+    response => response,
+    error => {
+      if (error.response && error.response.status === 401) {
+        console.log('Unauthorized request - redirecting to login');
+        
+        // Clear auth data
+        localStorage.removeItem('token');
+        localStorage.removeItem('adminID');
+        localStorage.removeItem('facultyID');
+        
+        // Let component-specific error handlers deal with redirection
+      }
+      return Promise.reject(error);
+    }
+  );
 };
 
-/**
- * Create a confirmation notification for the admin after they approve/reject validation
- * @param {Object} data - The approval/rejection data
- * @returns {Object} A notification object
- */
-export const createAdminConfirmationNotification = (data) => {
-  const action = data.status === 'approved' ? 'approved' : 'rejected';
+export const saveNotifications = (notifications, userType) => {
+  localStorage.setItem(`notifications_${userType}`, JSON.stringify(notifications));
+};
+
+// Remove duplicate status update notifications for the same request ID
+export const removeDuplicateStatusNotifications = (notifications) => {
+  const processedRequestIds = new Set();
+  const result = [];
+  
+  // Sort by timestamp (newest first)
+  const sorted = [...notifications].sort((a, b) => 
+    new Date(b.timestamp) - new Date(a.timestamp)
+  );
+  
+  // Keep only the latest status update for each request
+  sorted.forEach(notification => {
+    if (notification.type !== 'status_update' || 
+        !notification.requestID || 
+        !processedRequestIds.has(notification.requestID)) {
+      
+      result.push(notification);
+      
+      if (notification.type === 'status_update' && notification.requestID) {
+        processedRequestIds.add(notification.requestID);
+      }
+    }
+  });
+  
+  return result;
+};
+
+// Remove duplicate faculty validation response notifications for the same request ID
+export const removeDuplicateFacultyNotifications = (notifications) => {
+  const processedRequestIds = new Set();
+  const result = [];
+  
+  // Sort by timestamp (newest first)
+  const sorted = [...notifications].sort((a, b) => 
+    new Date(b.timestamp) - new Date(a.timestamp)
+  );
+  
+  // Keep only the latest notification for each request
+  sorted.forEach(notification => {
+    if (notification.type !== 'validation_response' || 
+        !notification.requestID || 
+        !processedRequestIds.has(notification.requestID)) {
+      
+      result.push(notification);
+      
+      if (notification.type === 'validation_response' && notification.requestID) {
+        processedRequestIds.add(notification.requestID);
+      }
+    }
+  });
+  
+  return result;
+};
+
+// Add a debugging utility to help diagnose notification issues
+export const debugNotifications = () => {
+  const adminNotifications = localStorage.getItem('notifications_admin');
+  const facultyNotifications = localStorage.getItem('notifications_faculty');
+  const oldNotifications = localStorage.getItem('notifications');
   
   return {
-    id: Date.now(),
-    message: `You have ${action} grade validation request from faculty ${data.facultyName || data.facultyID}. Notification has been sent.`,
-    timestamp: new Date().toISOString(),
-    type: 'action_confirmation',
-    status: data.status,
-    forAdmin: true,
-    forFaculty: false,
-    advisoryID: data.advisoryID,
-    facultyID: data.facultyID,
-    read: false
+    adminCount: adminNotifications ? JSON.parse(adminNotifications).length : 0,
+    facultyCount: facultyNotifications ? JSON.parse(facultyNotifications).length : 0,
+    adminNotifications: adminNotifications ? JSON.parse(adminNotifications) : [],
+    facultyNotifications: facultyNotifications ? JSON.parse(facultyNotifications) : [],
+    oldNotifications: oldNotifications ? JSON.parse(oldNotifications) : [],
+    hasOldFormat: !!oldNotifications
   };
 };
 
-/**
- * Check for validation response notifications on login
- * @param {string} userType - 'admin' or 'faculty'
- * @param {string} userID - The ID of the current user
- * @returns {boolean} True if there are unread validation responses
- */
-export const hasUnreadValidationResponses = (userType, userID) => {
-  const notifications = getUserTypeNotifications(userType);
-  
-  if (userType === 'faculty') {
-    return notifications.some(n => 
-      n.type === 'validation_response' && 
-      !n.read && 
-      n.facultyID === userID
-    );
-  }
-  
-  return false;
+// Utility to clear all notifications (useful for debugging)
+export const clearAllNotifications = () => {
+  localStorage.removeItem('notifications');
+  localStorage.removeItem('notifications_admin');
+  localStorage.removeItem('notifications_faculty');
 };

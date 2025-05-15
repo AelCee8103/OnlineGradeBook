@@ -1,332 +1,342 @@
-import { useState, useEffect } from "react";
-import { faBell, faCheck, faTrash } from "@fortawesome/free-solid-svg-icons";
+import { useState, useEffect, useRef } from "react";
+import { faBell, faCheckCircle, faTimesCircle, faTrash, faEllipsisV } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useSocket } from '../context/SocketContext';
 import { format } from 'date-fns';
-import { 
-  saveNotifications, 
-  getStoredNotifications, 
-  getUserTypeNotifications,
-  clearUserTypeNotifications,
-  markAllNotificationsAsRead,
-  getUnreadNotificationCount,
-  addNotification,
-  createAdminConfirmationNotification
-} from '../utils/notificationUtils';
-import { getCurrentUserType, getCurrentUserId } from '../utils/userUtils';
+import { saveNotifications, getStoredNotifications, removeDuplicateStatusNotifications, removeDuplicateFacultyNotifications } from '../utils/notificationUtils';
 
-const NotificationDropdown = ({ userType: providedUserType }) => {
-  // If userType is not provided, determine it from localStorage
-  const userType = providedUserType || getCurrentUserType();
-  
+const NotificationDropdown = ({ userType }) => {
+  // Initialize with stored notifications that match the current userType or have no userType defined
   const [notifications, setNotifications] = useState(() => {
-    // Get only the notifications for this user type using the utility function
-    return getUserTypeNotifications(userType);
+    const storedNotifications = getStoredNotifications(userType);
+    // Filter to ensure we only display notifications for this user type
+    return storedNotifications.filter(n => !n.userType || n.userType === userType);
   });
-  const [unreadCount, setUnreadCount] = useState(0);
-  const socket = useSocket();
   
-  // Filter notifications based on user type
-  const filterNotificationsByUserType = (notifications, type) => {
-    if (!notifications || !type) return [];
-    
-    return notifications.filter(notification => {
-      // Admin notifications
-      if (type === 'admin') {
-        return notification.forAdmin === true;
-      }
-      // Faculty notifications
-      else if (type === 'faculty') {
-        return notification.forFaculty === true;
-      }
-      return false;
-    });
-  };
-
-  // Calculate initial unread count
+  const [isOpen, setIsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(() => 
+    notifications.filter(n => !n.read).length
+  );
+  const socket = useSocket();
+  const dropdownRef = useRef(null);
+  // Clean up any duplicate status update notifications on component mount
   useEffect(() => {
-    const unreadNotifications = notifications.filter(n => !n.read).length;
-    setUnreadCount(unreadNotifications);
-  }, [notifications]);
-
-  useEffect(() => {
-    if (!socket) {
-      console.log('No socket connection');
-      return;
-    }
-
-    // Get user-specific IDs from localStorage
-    const facultyID = localStorage.getItem('facultyID');
-    const adminID = localStorage.getItem('adminID');
-
-    // Handler for new validation requests (Admin side)
-    const handleNewRequest = (data) => {
-      console.log('New validation request received:', data);
-      
-      // Only process if user is an admin
-      if (userType !== 'admin') return;
-      
-      const newNotification = {
-        id: Date.now(),
-        message: `Faculty ${data.facultyName} requested grade validation for Grade ${data.grade} - ${data.section}`,
-        timestamp: new Date().toISOString(),
-        type: 'validation_request',
-        facultyID: data.facultyID,
-        advisoryID: data.advisoryID,
-        forAdmin: true,
-        forFaculty: false,
-        read: false
-      };
-
-      // Add to local state and persist to localStorage
-      const updatedNotifications = addNotification(newNotification, userType);
-      setNotifications(updatedNotifications);
-      setUnreadCount(prev => prev + 1);
-    };
-
-    const handleValidationResponse = (data) => {
-      console.log('Validation response received:', data);
-      
-      // Create a notification object for faculty
-      const notification = {
-        id: `validation-${data.requestID || Date.now()}`,
-        type: 'validation',
-        message: data.message || `Your grade validation request has been ${data.status}`,
-        status: data.status,
-        timestamp: new Date().toISOString(),
-        forFaculty: true,
-        read: false,
-      };
-      setNotifications(prev => {
-        const updated = addNotification(notification, 'faculty');
-        return updated;
-      });
-      setUnreadCount(prev => prev + 1);
-    };
-
-    const handleFacultyNotification = (data) => {
-      console.log('Faculty notification received:', data);
-      
-      // Create a notification object for faculty
-      const notification = {
-        id: `faculty-${data.requestID || Date.now()}`,
-        type: 'faculty',
-        message: data.message || `Your grade validation request has been ${data.status}`,
-        status: data.status,
-        timestamp: new Date().toISOString(),
-        forFaculty: true,
-        read: false,
-      };
-      setNotifications(prev => {
-        const updated = addNotification(notification, 'faculty');
-        return updated;
-      });
-      setUnreadCount(prev => prev + 1);
-    };
-    
-    // Handler for processing validation requests (Admin side)
-    const handleValidationProcessed = (data) => {
-      if (userType !== 'admin') return;
-      
-      // For the admin who processed the request, create a confirmation notification
-      if (adminID === data.adminID) {
-        const confirmationNotification = createAdminConfirmationNotification(data);
-        const updatedNotifications = addNotification(confirmationNotification, userType);
-        setNotifications(updatedNotifications);
-        setUnreadCount(prev => prev + 1);
-      }
-      // For other admins, notify them that another admin processed the request
-      else {
-        const newNotification = {
-          id: Date.now(),
-          message: `Admin ${data.adminName || 'Another admin'} ${data.status}ed validation request from ${data.facultyName || 'faculty'}`,
-          timestamp: new Date().toISOString(),
-          type: 'request_processed',
-          status: data.status,
-          forAdmin: true,
-          forFaculty: false,
-          advisoryID: data.advisoryID,
-          read: false
-        };
-        
-        const updatedNotifications = addNotification(newNotification, userType);
-        setNotifications(updatedNotifications);
-        setUnreadCount(prev => prev + 1);
-      }
-    };
-
-    console.log('Setting up socket listeners for userType:', userType);
-
-    // Set up event listeners based on user type
     if (userType === 'admin') {
-      socket.on('newValidationRequest', handleNewRequest);
-      socket.on('validationStatusUpdate', handleValidationProcessed);
-      socket.on('requestProcessed', handleValidationProcessed);
-      console.log('Admin socket listeners set up');
-    } else if (userType === 'faculty') {
-      socket.on('validationResponseReceived', handleValidationResponse);
-      socket.on('validationStatusUpdate', handleFacultyNotification);
-      socket.on('facultyNotification', handleFacultyNotification);
-      console.log('Faculty socket listener set up');
+      // Find unique request IDs
+      const requestIds = notifications
+        .filter(n => n.type === 'status_update' && n.requestID)
+        .map(n => n.requestID);
+      
+      const uniqueRequestIds = [...new Set(requestIds)];
+      
+      if (requestIds.length > uniqueRequestIds.length) {
+        // We have duplicates, clean them up
+        const cleanedNotifications = removeDuplicateStatusNotifications(notifications);
+        
+        // Update with cleaned notifications
+        setNotifications(cleanedNotifications);
+      }
     }
+  }, [userType, notifications]);
+  
+  // Migrate old notifications if they exist
+  useEffect(() => {
+    // Check if there are old notifications without user types
+    const oldNotifications = localStorage.getItem('notifications');
+    if (oldNotifications) {
+      try {
+        const parsedNotifications = JSON.parse(oldNotifications);
+        if (Array.isArray(parsedNotifications) && parsedNotifications.length > 0) {
+          // Attempt to sort notifications by user type
+          const adminNotifications = [];
+          const facultyNotifications = [];
+          
+          parsedNotifications.forEach(notification => {
+            // Try to determine user type from the notification content
+            if (notification.type === 'validation_response' || 
+                (notification.message && notification.message.includes('Your grade validation'))) {
+              // Faculty notification
+              facultyNotifications.push({...notification, userType: 'faculty'});
+            } else if (notification.type === 'new_request' || notification.type === 'status_update' ||
+                      (notification.message && 
+                       (notification.message.includes('Faculty') || 
+                        notification.message.includes('Validation request')))) {
+              // Admin notification
+              adminNotifications.push({...notification, userType: 'admin'});
+            }
+          });
+          
+          // Store the migrated notifications
+          if (adminNotifications.length > 0) {
+            saveNotifications(adminNotifications, 'admin');
+          }
+          if (facultyNotifications.length > 0) {
+            saveNotifications(facultyNotifications, 'faculty');
+          }
+          
+          // Update current component state if appropriate
+          if (userType === 'admin' && adminNotifications.length > 0) {
+            setNotifications(prev => [...adminNotifications, ...prev]);
+          } else if (userType === 'faculty' && facultyNotifications.length > 0) {
+            setNotifications(prev => [...facultyNotifications, ...prev]);
+          }
+          
+          // Delete old notifications
+          localStorage.removeItem('notifications');
+        }
+      } catch (error) {
+        console.error('Error migrating notifications:', error);
+        localStorage.removeItem('notifications');
+      }
+    }
+  }, [userType]);
 
-    // Cleanup
-    return () => {
-      if (userType === 'admin') {
-        socket.off('newValidationRequest');
-        socket.off('validationStatusUpdate');
-        socket.off('requestProcessed');
-      } else if (userType === 'faculty') {
-        socket.off('validationResponseReceived', handleValidationResponse);
-        socket.off('validationStatusUpdate', handleFacultyNotification);
-        socket.off('facultyNotification', handleFacultyNotification);
+  // Clean up any old notifications without userType on component mount
+  useEffect(() => {
+    // Clear out the old notifications storage that didn't differentiate by user type
+    localStorage.removeItem('notifications');
+  }, []);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
       }
     };
-  }, [socket, userType]);
 
-  const markAsRead = (notificationId) => {
-    setNotifications(prev => {
-      const updated = prev.map(notification => 
-        notification.id === notificationId 
-          ? { ...notification, read: true }
-          : notification
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);  // Persist notifications to localStorage whenever they change
+  useEffect(() => {
+    // Clean up any duplicate notifications before saving
+    if (userType === 'admin') {
+      const cleanedNotifications = removeDuplicateStatusNotifications(notifications);
+      saveNotifications(cleanedNotifications, userType);
+      setUnreadCount(cleanedNotifications.filter(n => !n.read).length);
+    } else if (userType === 'faculty') {
+      const cleanedNotifications = removeDuplicateFacultyNotifications(notifications);
+      saveNotifications(cleanedNotifications, userType);
+      setUnreadCount(cleanedNotifications.filter(n => !n.read).length);
+    } else {
+      saveNotifications(notifications, userType);
+      setUnreadCount(notifications.filter(n => !n.read).length);
+    }
+  }, [notifications, userType]);
+
+  // Faculty: Listen for validationResponseReceived
+  useEffect(() => {
+    if (!socket || userType !== 'faculty') return;
+      const handleValidationResponse = (data) => {
+      // Check if we already have a notification for this request
+      const existingNotificationIndex = notifications.findIndex(
+        n => n.requestID === data.requestID && n.type === 'validation_response'
       );
       
-      // Update local storage with read status
-      const allStoredNotifications = getStoredNotifications();
-      const otherTypeNotifications = allStoredNotifications.filter(notification => {
-        if (userType === 'admin') {
-          return !notification.forAdmin;
-        } else if (userType === 'faculty') {
-          return !notification.forFaculty;
-        }
-        return true;
-      });
+      let message = '';
+      if (data.status === 'approved') {
+        message = 'Your grade validation request has been approved. Please visit the office to finalize your validation status.';
+      } else if (data.status === 'rejected') {
+        message = 'Your grade validation request has been rejected. Please visit the office to discuss your validation status.';
+      } else {
+        message = `Grade validation request has been ${data.status}`;
+      }
       
-      saveNotifications([...updated, ...otherTypeNotifications]);
-      return updated;
-    });
-    setUnreadCount(prev => Math.max(0, prev - 1));
+      if (existingNotificationIndex !== -1) {
+        // Update existing notification instead of adding a new one
+        setNotifications(prev => {
+          const updated = [...prev];
+          updated[existingNotificationIndex] = {
+            ...updated[existingNotificationIndex],
+            message: message,
+            timestamp: data.timestamp || new Date().toISOString(),
+            status: data.status,
+            read: false
+          };
+          return updated;
+        });
+      } else {
+        // Add new notification
+        const newNotification = {
+          id: Date.now(),
+          message: message,
+          timestamp: data.timestamp || new Date().toISOString(),
+          type: 'validation_response',
+          status: data.status,
+          requestID: data.requestID,
+          userType: 'faculty',
+          read: false
+        };
+        setNotifications(prev => [newNotification, ...prev]);
+      }
+    };
+    
+    socket.on('validationResponseReceived', handleValidationResponse);
+    return () => {
+      socket.off('validationResponseReceived', handleValidationResponse);
+    };
+  }, [socket, userType]);
+  // Admin: Listen for newValidationRequest ONLY (not validation status updates)
+  useEffect(() => {
+    if (!socket || userType !== 'admin') return;
+    
+    const handleNewValidationRequest = (data) => {      
+      const newNotification = {
+        id: Date.now(),
+        message: `Faculty ${data.facultyName} has requested grade validation for Grade ${data.grade} - ${data.section}`,
+        timestamp: new Date().toISOString(),
+        type: 'new_request',
+        facultyName: data.facultyName,
+        requestDetails: data,
+        userType: 'admin',
+        read: false
+      };
+      setNotifications(prev => [newNotification, ...prev]);
+    };
+    
+    // No longer listen for 'validationStatusUpdate' - admins should not get notifications 
+    // for their own approvals/rejections
+    
+    socket.on('newValidationRequest', handleNewValidationRequest);
+    
+    return () => {
+      socket.off('newValidationRequest', handleNewValidationRequest);
+    };
+  }, [socket, userType]);
+  const markAsRead = (notificationId) => {
+    setNotifications((prev) =>
+      prev.map((notif) =>
+        notif.id === notificationId ? { ...notif, read: true, userType } : notif
+      )
+    );
   };
 
-  const clearAllNotifications = () => {
-    // Only clear notifications for the current user type
+  const markAllAsRead = () => {
+    setNotifications((prev) =>
+      prev.map((notif) => ({ ...notif, read: true, userType }))
+    );
+  };
+
+  const clearAll = () => {
     setNotifications([]);
-    
-    // Get all notifications and filter out current type
-    const allStoredNotifications = getStoredNotifications();
-    const remainingNotifications = allStoredNotifications.filter(notification => {
-      if (userType === 'admin') {
-        return !notification.forAdmin;
-      } else if (userType === 'faculty') {
-        return !notification.forFaculty;
+    // Clear the specific user type's notifications
+    localStorage.removeItem(`notifications_${userType}`);
+  };
+  
+  const handleActionClick = (notification) => {
+    if (userType === 'admin' && notification.type === 'new_request' && notification.requestDetails) {
+      // Navigate to validation requests page or open detailed modal
+      // This could trigger a route change via React Router or dispatch an action
+      if (socket) {
+        socket.emit('adminViewedRequest', { requestID: notification.requestDetails.requestID });
       }
-      return true;
-    });
-    
-    saveNotifications(remainingNotifications);
-    setUnreadCount(0);
+      markAsRead(notification.id);
+    }
   };
 
   return (
-    <div className="dropdown dropdown-end">
-      <div tabIndex={0} role="button" className="btn btn-ghost btn-circle">
-        <div className="indicator">
-          <FontAwesomeIcon icon={faBell} className="h-5 w-5" />
-          {unreadCount > 0 && (
-            <span className="badge badge-sm badge-error indicator-item">
-              {unreadCount}
-            </span>
-          )}
-        </div>
-      </div>
-      <div
-        tabIndex={0}
-        className="dropdown-content z-[1] mt-3 card card-compact w-96 bg-base-100 shadow-lg border border-gray-100"
+    <div className="relative z-50" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="relative p-2 text-gray-600 hover:text-gray-800"
+        aria-label="Notifications"
       >
-        <div className="card-body">
-          <div className="flex justify-between items-center">
-            <span className="font-semibold text-lg">Notifications</span>
-            <div className="flex gap-3">
-              {unreadCount > 0 && (
-                <button 
-                  onClick={() => {
-                    markAllNotificationsAsRead(userType);
-                    setNotifications(prev => prev.map(n => ({...n, read: true})));
-                    setUnreadCount(0);
-                  }}
-                  className="text-xs text-gray-600 hover:text-gray-800 px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200"
-                >
-                  Mark all read
-                </button>
-              )}
-              {notifications.length > 0 && (
-                <button 
-                  onClick={clearAllNotifications}
-                  className="text-xs text-red-600 hover:text-red-800 px-2 py-1 rounded-full bg-red-50 hover:bg-red-100"
-                >
-                  Clear all
-                </button>
+        <FontAwesomeIcon icon={faBell} className="text-xl" />
+        {unreadCount > 0 && (
+          <span className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+            {unreadCount}
+          </span>
+        )}
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-80 md:w-96 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
+            <div className="p-3 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="font-semibold text-gray-700">Notifications</h3>
+              <div className="flex gap-2">
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-xs md:text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    Mark all as read
+                  </button>
+                )}
+                {notifications.length > 0 && (
+                  <button
+                    onClick={clearAll}
+                    className="text-xs md:text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+            </div>            <div className="max-h-96 overflow-y-auto">
+              {notifications.length > 0 ? (
+                notifications
+                  .filter(notification => notification.userType === undefined || notification.userType === userType)
+                  .map(notification => (
+                  <div
+                    key={notification.id}
+                    className={`p-4 border-b ${
+                      notification.read ? 'bg-gray-50' : 'bg-white'
+                    } hover:bg-gray-100 transition-colors duration-150`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div 
+                        className={`w-2 h-2 mt-2 rounded-full flex-shrink-0 ${
+                          !notification.read ? 'bg-blue-500' : 'bg-gray-300'
+                        } ${
+                          notification.status === 'approved' ? 'bg-green-500' : 
+                          notification.status === 'rejected' ? 'bg-red-500' : ''
+                        }`}
+                      ></div>
+                      <div className="flex-1">
+                        <div 
+                          className="text-sm text-gray-800"
+                          onClick={() => markAsRead(notification.id)}
+                        >
+                          {notification.message}
+                        </div>
+                        <div className="mt-1 flex justify-between items-center">
+                          <span className="text-xs text-gray-500">
+                            {format(new Date(notification.timestamp), 'MMM d, yyyy h:mm a')}
+                          </span>
+                          {userType === 'admin' && notification.type === 'new_request' && !notification.read && (
+                            <button 
+                              onClick={() => handleActionClick(notification)}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              View Details
+                            </button>
+                          )}
+                        </div>
+                      </div>                      <button
+                        onClick={() => markAsRead(notification.id)}
+                        className="text-gray-400 hover:text-gray-600"
+                        title={notification.read ? "Already read" : "Mark as read"}
+                      >
+                        {notification.status === 'approved' ? (
+                          <FontAwesomeIcon icon={faCheckCircle} className="text-sm text-green-500" />
+                        ) : notification.status === 'rejected' ? (
+                          <FontAwesomeIcon icon={faTimesCircle} className="text-sm text-red-500" />
+                        ) : (
+                          <FontAwesomeIcon icon={notification.read ? faCheckCircle : faTimesCircle} className="text-sm text-gray-500" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 px-4 text-center text-gray-500">
+                  No notifications
+                </div>
               )}
             </div>
           </div>
-          <div className="divider my-1"></div>
-          <div className="space-y-3 max-h-[400px] overflow-y-auto">
-            {notifications.length > 0 ? (
-              notifications.map((notification) => (
-                <div 
-                  key={notification.id} 
-                  className={`${
-                    notification.read ? 'opacity-75' : 'shadow-sm'
-                  } flex items-start gap-3 p-3 rounded-lg ${
-                    // Use status-specific colors
-                    notification.type === 'validation_response'
-                      ? notification.status === 'approved'
-                        ? 'bg-green-50 border-l-4 border-green-500'
-                        : 'bg-red-50 border-l-4 border-red-500'
-                      : notification.type === 'validation_request'
-                        ? 'bg-yellow-50 border-l-4 border-yellow-500'
-                        : notification.type === 'action_confirmation'
-                        ? 'bg-blue-50 border-l-4 border-blue-500'
-                        : 'bg-blue-50 border-l-4 border-blue-500'
-                  } transition-all`}
-                >
-                  <div className="flex flex-col flex-1">
-                    <div className="flex justify-between items-start">
-                      <p className="font-medium text-gray-800">{notification.message}</p>
-                      {!notification.read && (
-                        <button 
-                          onClick={() => markAsRead(notification.id)}
-                          className="ml-2 text-blue-600 hover:text-blue-800"
-                          title="Mark as read"
-                        >
-                          <FontAwesomeIcon icon={faCheck} className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex justify-between items-center mt-1">
-                      <p className="text-sm text-gray-500">
-                        {format(new Date(notification.timestamp), 'MMM d, yyyy h:mm a')}
-                      </p>
-                      {/* Add role indicator for clarity */}
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        notification.forAdmin ? 'bg-purple-100 text-purple-800' : 'bg-teal-100 text-teal-800'
-                      }`}>
-                        {notification.forAdmin ? 'Admin' : 'Faculty'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-10 text-gray-500">
-                <FontAwesomeIcon icon={faBell} className="h-10 w-10 mx-auto text-gray-300 mb-2" />
-                <p>No notifications</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 };
