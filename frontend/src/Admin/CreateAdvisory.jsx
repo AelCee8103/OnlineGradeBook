@@ -497,9 +497,10 @@ const CreateAdvisory = () => {
                               : "N/A"}
                           </td>
                           <td className="px-4 py-2">
+                            {" "}
                             {facultyInfo.FirstName
-                              ? `${facultyInfo.FacultyID} - ${facultyInfo.LastName}, ${facultyInfo.FirstName}`
-                              : "N/A"}
+                              ? `${facultyInfo.LastName}, ${facultyInfo.FirstName}`
+                              : "N/A"}{" "}
                           </td>
                           <td className="px-4 py-2">
                             <button
