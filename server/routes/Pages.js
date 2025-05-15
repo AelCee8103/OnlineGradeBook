@@ -384,6 +384,34 @@ router.get('/admin-advisory-classes', async (req, res) => {
   }
 });
 
+// Update faculty assigned to advisory class
+router.put('/admin-advisory-classes/:advisoryID', async (req, res) => {
+  const { advisoryID } = req.params;
+  const { facultyID } = req.body;
+  if (!facultyID) {
+    return res.status(400).json({ error: "Faculty ID is required" });
+  }
+  try {
+    const db = await connectToDatabase();
+    const [result] = await db.query(
+      "UPDATE advisory SET facultyID = ? WHERE advisoryID = ?",
+      [facultyID, advisoryID]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Advisory not found" });
+    }
+    res.json({ success: true, message: "Advisory class updated successfully" });
+  } catch (error) {
+    // Enhanced duplicate faculty validation
+    if (error.code === 'ER_DUP_ENTRY' && error.sqlMessage && error.sqlMessage.includes('facultyID')) {
+      return res.status(400).json({
+        error: `This faculty is already assigned as an advisor to another class.`
+      });
+    }
+    console.error("Error updating advisory:", error);
+    res.status(500).json({ error: "Failed to update advisory" });
+  }
+});
 // PUT update class
 router.put('/admin-advisory-classes/:id', async (req, res) => {
   const { id } = req.params;
@@ -659,7 +687,6 @@ router.post("/admin-dashboard", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 
 
 
