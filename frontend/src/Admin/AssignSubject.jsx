@@ -344,10 +344,9 @@ const AssignSubject = () => {
                   <tr className="bg-gray-100">
                     <th className="px-4 py-2">Subject Code</th>
                     <th className="px-4 py-2">Subject</th>
-                    <th className="px-4 py-2">Class</th>
+                    <th className="px-4 py-2">Advisory</th>
                     <th className="px-4 py-2">Faculty</th>
                     <th className="px-4 py-2">School Year ID</th>
-                    <th className="px-4 py-2">Advisory ID</th>
                     <th className="px-4 py-2">Actions</th>
                   </tr>
                 </thead>
@@ -364,15 +363,16 @@ const AssignSubject = () => {
                         {assignment.subjectName || "-"}
                       </td>
                       <td className="px-4 py-2">
-                        {assignment.advisoryID || "-"}
+                        {`Grade ${assignment.grade} - ${assignment.section}` ||
+                          "-"}
                       </td>
                       <td className="px-4 py-2">
-                        {assignment.FacultyID || "-"}
+                        {assignment.facultyName || // Try facultyName first
+                         (assignment.facultyLastName  // Fallback to constructed name
+                           ? `${assignment.facultyLastName}, ${assignment.facultyFirstName}`
+                           : "-")}
                       </td>
                       <td className="px-4 py-2">{assignment.yearID || "-"}</td>
-                      <td className="px-4 py-2">
-                        {assignment.advisoryID || "-"}
-                      </td>
                       <td className="px-4 py-2 flex space-x-2">
                         <button
                           onClick={() => handleEditAssignment(assignment)}
