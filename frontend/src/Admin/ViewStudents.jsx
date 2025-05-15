@@ -20,45 +20,46 @@ const ViewStudents = () => {
   useEffect(() => {
     const fetchAdvisoryData = async () => {
       try {
-        console.log(`Fetching data for advisory: ${advisoryID}`); // Debug
-        
         const token = localStorage.getItem("token");
         if (!token) {
           navigate("/admin-login");
           return;
         }
-        
+
+        // Fetch current school year (status = 1)
+        const syRes = await axios.get(
+          "http://localhost:3000/Pages/schoolyear",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const currentSY = (syRes.data || []).find((sy) => sy.status === 1);
+
+        // Fetch advisory and students
         const response = await axios.get(
           `http://localhost:3000/Pages/admin-view-students/${advisoryID}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
-        
-        console.log("API Response:", response.data); // Debug
-        
+
         if (!response.data.success) {
           throw new Error(response.data.error || "Invalid response format");
         }
-        
-        if (!response.data.advisoryInfo) {
-          console.warn("Advisory info missing in response");
-        }
-        
-        setAdvisoryInfo(response.data.advisoryInfo || {
-          Grade: 'N/A',
-          Section: 'N/A',
-          facultyName: 'Not assigned',
-          SchoolYear: 'N/A'
+
+        // Only show students with Status === 1 (not archived)
+        const activeStudents = response.data.students || [];
+
+        setAdvisoryInfo({
+          ...response.data.advisoryInfo,
+          SchoolYear: currentSY ? currentSY.year : "N/A",
         });
-        
-        setStudents(response.data.students || []);
-        setFilteredStudents(response.data.students || []);
+
+        setStudents(activeStudents);
+        setFilteredStudents(activeStudents);
+        console.log("Fetched students from backend:", response.data.students);
+        console.log("Filtered active students (Status === 1):", activeStudents);
+
         setIsLoading(false);
-        
       } catch (error) {
-        console.error("API Error:", error.response?.data || error.message);
-        
         let errorMsg = "Failed to load data";
         if (error.response) {
           errorMsg = error.response.data?.error || errorMsg;
@@ -68,27 +69,25 @@ const ViewStudents = () => {
         } else {
           errorMsg += `: ${error.message}`;
         }
-        
         setError(errorMsg);
         setIsLoading(false);
-        
-        // Show advisory ID in error for debugging
         setAdvisoryInfo({
-          Grade: 'Error',
+          Grade: "Error",
           Section: advisoryID,
-          facultyName: 'Check console',
-          SchoolYear: 'N/A'
+          facultyName: "Check console",
+          SchoolYear: "N/A",
         });
       }
     };
 
     fetchAdvisoryData();
-  }, [advisoryID]);
+  }, [advisoryID, navigate]);
 
   useEffect(() => {
     const query = searchQuery.toLowerCase();
     const filtered = students.filter((student) => {
-      const fullName = `${student.FirstName} ${student.MiddleName} ${student.LastName}`.toLowerCase();
+      const fullName =
+        `${student.FirstName} ${student.MiddleName} ${student.LastName}`.toLowerCase();
       return (
         student.StudentID.toString().includes(query) || fullName.includes(query)
       );
@@ -167,7 +166,9 @@ const ViewStudents = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <p className="font-semibold">Grade & Section:</p>
-                  <p>{advisoryInfo.Grade} - {advisoryInfo.Section}</p>
+                  <p>
+                    {advisoryInfo.Grade} - {advisoryInfo.Section}
+                  </p>
                 </div>
                 <div>
                   <p className="font-semibold">Class Advisor:</p>
@@ -185,7 +186,9 @@ const ViewStudents = () => {
             </div>
           ) : (
             <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
-              <p className="text-red-500">Advisory class information not found</p>
+              <p className="text-red-500">
+                Advisory class information not found
+              </p>
             </div>
           )}
 
@@ -215,13 +218,17 @@ const ViewStudents = () => {
                 <tbody>
                   {currentRecords.length > 0 ? (
                     currentRecords.map((student, index) => (
-                      <tr key={student.StudentID} className="border-b hover:bg-gray-50">
+                      <tr
+                        key={student.StudentID}
+                        className="border-b hover:bg-gray-50"
+                      >
                         <td className="px-10 py-2">
                           {indexOfFirstRecord + index + 1}
                         </td>
                         <td className="px-10 py-2">{student.StudentID}</td>
                         <td className="px-10 py-2">
-                          {student.LastName}, {student.FirstName} {student.MiddleName}
+                          {student.LastName}, {student.FirstName}{" "}
+                          {student.MiddleName}
                         </td>
                       </tr>
                     ))

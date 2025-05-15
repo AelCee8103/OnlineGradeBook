@@ -43,6 +43,9 @@ const ManageStudents = () => {
   const [uploadErrors, setUploadErrors] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
 
+  // Add this with other state declarations at the top
+  const [archiving, setArchiving] = useState(false);
+
   // Pagination logic
   const indexOfLastStudent = currentPage * studentsPerPage;
   const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
@@ -354,6 +357,46 @@ const ManageStudents = () => {
     }
   };
 
+  // New function to handle archiving a student
+  const handleArchive = async (student) => {
+    const isConfirmed = window.confirm(
+      `Are you sure you want to archive ${student.FirstName} ${student.LastName}?`
+    );
+
+    if (isConfirmed) {
+      try {
+        setArchiving(true);
+        const token = localStorage.getItem("token");
+        const response = await axios.put(
+          `http://localhost:3000/Pages/admin-manage-students/archive/${student.StudentID}`,
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (response.data.success) {
+          setStudents((prev) =>
+            prev.filter((s) => s.StudentID !== student.StudentID)
+          );
+          toast.success(
+            `${student.FirstName} ${student.LastName} has been archived`
+          );
+        }
+      } catch (error) {
+        console.error("Error archiving student:", error);
+        toast.error(
+          error.response?.data?.message || "Failed to archive student"
+        );
+      } finally {
+        setArchiving(false);
+      }
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
       {/* Sidebar */}
@@ -618,9 +661,14 @@ const ManageStudents = () => {
                       <td className="px-4 py-2">{data.FirstName}</td>
                       <td className="px-4 py-2">{data.MiddleName}</td>
                       <td className="px-4 py-2">
-                        {/* Open the modal using document.getElementById('ID').showModal() method */}
                         <button
-                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                          className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm"
+                          onClick={() => handleArchive(data)}
+                        >
+                          Archive
+                        </button>
+                        <button
+                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm ml-2"
                           onClick={() => handleEditClick(data)}
                         >
                           Edit

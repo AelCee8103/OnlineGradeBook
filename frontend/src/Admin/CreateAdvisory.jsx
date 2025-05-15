@@ -3,10 +3,10 @@ import NavbarAdmin from "../Components/NavbarAdmin";
 import AdminSidePanel from "../Components/AdminSidePanel";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const CreateAdvisory = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -23,13 +23,13 @@ const CreateAdvisory = () => {
   const [formData, setFormData] = useState({
     advisoryID: "",
     classID: "",
-    facultyID: ""
+    facultyID: "",
   });
 
   const [createFormData, setCreateFormData] = useState({
     classID: "",
     facultyID: "",
-    schoolYearID: ""
+    schoolYearID: "",
   });
 
   const fetchAdvisoryClasses = async () => {
@@ -54,15 +54,19 @@ const CreateAdvisory = () => {
     setFetching(true);
     setError(null);
     try {
-      const [advisoryData, classesRes, facultiesRes, yearsRes] = await Promise.all([
-        fetchAdvisoryClasses(),
-        axios.get("http://localhost:3000/Pages/admin-advisory-classes", 
-          { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get("http://localhost:3000/Pages/admin-manage-faculty", 
-          { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get("http://localhost:3000/Pages/schoolyear", 
-          { headers: { Authorization: `Bearer ${token}` } })
-      ]);
+      const [advisoryData, classesRes, facultiesRes, yearsRes] =
+        await Promise.all([
+          fetchAdvisoryClasses(),
+          axios.get("http://localhost:3000/Pages/admin-advisory-classes", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get("http://localhost:3000/Pages/admin-manage-faculty", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          axios.get("http://localhost:3000/Pages/schoolyear", {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
 
       setClasses(classesRes.data || []);
       setFaculties(facultiesRes.data || []);
@@ -88,12 +92,32 @@ const CreateAdvisory = () => {
     setCreateFormData({ ...createFormData, [e.target.name]: e.target.value });
   };
 
+  // In your component, before the return statement:
+
+  // Get all facultyIDs currently assigned as advisors
+  const assignedFacultyIDs = advisoryClasses.map((a) => a.facultyID);
+
+  // For create modal: only show faculty not assigned as advisor
+  const availableFacultyForCreate = faculties.filter(
+    (f) => !assignedFacultyIDs.includes(f.FacultyID)
+  );
+
+  // For edit modal: show faculty not assigned as advisor, plus the current one
+  const availableFacultyForEdit = faculties.filter(
+    (f) =>
+      !assignedFacultyIDs.includes(f.FacultyID) ||
+      f.FacultyID === formData.facultyID // allow current advisor
+  );
+
+  // In handleEdit:
+  const [originalFacultyID, setOriginalFacultyID] = useState("");
   const handleEdit = (advisory) => {
     setFormData({
       advisoryID: advisory.advisoryID,
       classID: advisory.classID,
-      facultyID: advisory.facultyID
+      facultyID: advisory.facultyID,
     });
+    setOriginalFacultyID(advisory.facultyID); // store original
     document.getElementById("edit_modal").showModal();
   };
 
@@ -102,17 +126,18 @@ const CreateAdvisory = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.put(
+      await axios.put(
         `http://localhost:3000/Pages/admin-advisory-classes/${formData.advisoryID}`,
-        formData,
+        { facultyID: formData.facultyID }, // Only send facultyID
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
       toast.success("Advisory class updated successfully");
       await fetchAdvisoryClasses();
       document.getElementById("edit_modal").close();
     } catch (error) {
-      toast.error(error.response?.data?.error || "Failed to update advisory class");
+      toast.error(
+        error.response?.data?.error || "Failed to update advisory class"
+      );
     } finally {
       setLoading(false);
     }
@@ -120,69 +145,74 @@ const CreateAdvisory = () => {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-  
+
     const { classID, facultyID, schoolYearID } = createFormData;
-  
+
     if (!classID || !facultyID || !schoolYearID) {
       toast.warning("Please fill in all required fields.");
       return;
     }
-  
-    const classAlreadyAssigned = advisoryClasses.some(advisory =>
-      advisory.classID === classID &&
-      advisory.schoolYearID === schoolYearID &&
-      advisory.facultyID
+
+    const classAlreadyAssigned = advisoryClasses.some(
+      (advisory) =>
+        advisory.classID === classID &&
+        advisory.schoolYearID === schoolYearID &&
+        advisory.facultyID
     );
-  
+
     if (classAlreadyAssigned) {
-      toast.warning("This section already has an assigned faculty for the selected school year.");
+      toast.warning(
+        "This section already has an assigned faculty for the selected school year."
+      );
       return;
     }
-  
-    const facultyAlreadyAssigned = advisoryClasses.some(advisory =>
-      advisory.facultyID === facultyID &&
-      advisory.schoolYearID === schoolYearID
+
+    const facultyAlreadyAssigned = advisoryClasses.some(
+      (advisory) =>
+        advisory.facultyID === facultyID &&
+        advisory.schoolYearID === schoolYearID
     );
-  
+
     if (facultyAlreadyAssigned) {
-      toast.warning("This faculty is already assigned to another section in the selected school year.");
+      toast.warning(
+        "This faculty is already assigned to another section in the selected school year."
+      );
       return;
     }
-  
+
     setLoading(true);
     try {
       const response = await axios.post(
-        'http://localhost:3000/Pages/admin-create-advisory', 
+        "http://localhost:3000/Pages/admin-create-advisory",
         createFormData,
-        { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        }
       );
-  
+
       toast.success("Advisory class successfully created!");
-      
+
       // Reset form and close modal immediately
       setCreateFormData({
         classID: "",
         facultyID: "",
-        schoolYearID: ""
+        schoolYearID: "",
       });
       document.getElementById("create_modal").close();
-      
+
       // Refresh data and navigate
       await fetchAdvisoryClasses();
       navigate("/admin-create-advisory"); // Navigate to the same page to refresh
-  
     } catch (error) {
       console.error("Server error:", error);
-      const message = error.response?.data?.error || "Server error occurred. Please try again later.";
+      const message =
+        error.response?.data?.error ||
+        "Server error occurred. Please try again later.";
       toast.error(message);
     } finally {
       setLoading(false);
     }
   };
-  
-  
-  
-  
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
@@ -194,44 +224,64 @@ const CreateAdvisory = () => {
 
   const filteredAdvisoryClasses = advisoryClasses.filter((advisory) => {
     if (!advisory) return false;
-    const classInfo = classes.find(c => c.ClassID === advisory.classID) || {};
-    const facultyInfo = faculties.find(f => f.FacultyID === advisory.facultyID) || {};
-    
+    const classInfo = classes.find((c) => c.ClassID === advisory.classID) || {};
+    const facultyInfo =
+      faculties.find((f) => f.FacultyID === advisory.facultyID) || {};
+
     return (
       (advisory.advisoryID?.toString() || "").includes(searchTerm) ||
       (advisory.classID?.toString() || "").includes(searchTerm) ||
       (classInfo.Grade?.toString() || "").includes(searchTerm) ||
-      (classInfo.Section || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (facultyInfo.FirstName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (facultyInfo.LastName || "").toLowerCase().includes(searchTerm.toLowerCase())
+      (classInfo.Section || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (facultyInfo.FirstName || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      (facultyInfo.LastName || "")
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase())
     );
   });
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
-      <AdminSidePanel isSidebarOpen={isSidebarOpen} toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-      {isSidebarOpen && <div className="fixed inset-0 bg-black opacity-50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
+      <AdminSidePanel
+        isSidebarOpen={isSidebarOpen}
+        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+      />
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        ></div>
+      )}
       <div className="flex-1 flex flex-col overflow-auto">
         <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
         <ToastContainer position="top-right" autoClose={3000} />
         <div className="p-8">
           <h1 className="text-3xl font-bold mb-6">Advisory Classes</h1>
-          
+
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
             <div className="flex items-center mb-4">
               <div className="relative flex-grow">
-                <input 
-                  type="text" 
-                  placeholder="Search advisory classes..." 
-                  onChange={handleSearchChange} 
-                  value={searchTerm} 
-                  className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10" 
+                <input
+                  type="text"
+                  placeholder="Search advisory classes..."
+                  onChange={handleSearchChange}
+                  value={searchTerm}
+                  className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10"
                 />
-                <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-3 text-gray-400" />
+                <FontAwesomeIcon
+                  icon={faMagnifyingGlass}
+                  className="absolute left-3 top-3 text-gray-400"
+                />
               </div>
-              <button 
+              <button
                 className="btn bg-blue-700 text-white hover:bg-blue-800 ml-4"
-                onClick={() => document.getElementById('create_modal').showModal()}
+                onClick={() =>
+                  document.getElementById("create_modal").showModal()
+                }
                 disabled={loading}
               >
                 {loading ? "Loading..." : "Create Advisory Class"}
@@ -241,7 +291,9 @@ const CreateAdvisory = () => {
             {/* Create Modal */}
             <dialog id="create_modal" className="modal">
               <div className="modal-box max-w-md">
-                <h3 className="font-bold text-lg mb-5">Create Advisory Class</h3>
+                <h3 className="font-bold text-lg mb-5">
+                  Create Advisory Class
+                </h3>
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div>
                     <label className="label">
@@ -255,7 +307,7 @@ const CreateAdvisory = () => {
                       required
                     >
                       <option value="">Select Class</option>
-                      {classes.map(cls => (
+                      {classes.map((cls) => (
                         <option key={cls.ClassID} value={cls.ClassID}>
                           Grade {cls.Grade} - {cls.Section}
                         </option>
@@ -274,9 +326,13 @@ const CreateAdvisory = () => {
                       required
                     >
                       <option value="">Select Faculty</option>
-                      {faculties.map(faculty => (
-                        <option key={faculty.FacultyID} value={faculty.FacultyID}>
-                          {faculty.FacultyID} - {faculty.LastName}, {faculty.FirstName}
+                      {availableFacultyForCreate.map((faculty) => (
+                        <option
+                          key={faculty.FacultyID}
+                          value={faculty.FacultyID}
+                        >
+                          {faculty.FacultyID} - {faculty.LastName},{" "}
+                          {faculty.FirstName}
                         </option>
                       ))}
                     </select>
@@ -293,26 +349,31 @@ const CreateAdvisory = () => {
                       required
                     >
                       <option value="">Select School Year</option>
-                      {schoolYears.map(year => (
-                        <option key={year.school_yearID} value={year.school_yearID}>
+                      {schoolYears.map((year) => (
+                        <option
+                          key={year.school_yearID}
+                          value={year.school_yearID}
+                        >
                           {year.school_yearID} - {year.SchoolYear}
                         </option>
                       ))}
                     </select>
                   </div>
-                  
+
                   <div className="modal-action">
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="btn bg-blue-700 text-white"
                       disabled={loading}
                     >
                       {loading ? "Creating..." : "Create"}
                     </button>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className="btn"
-                      onClick={() => document.getElementById('create_modal').close()}
+                      onClick={() =>
+                        document.getElementById("create_modal").close()
+                      }
                     >
                       Close
                     </button>
@@ -333,12 +394,12 @@ const CreateAdvisory = () => {
                     <label className="label">
                       <span className="label-text">Advisory ID</span>
                     </label>
-                    <input 
-                      type="text" 
-                      name="advisoryID" 
-                      value={formData.advisoryID} 
-                      className="input input-bordered w-full" 
-                      disabled 
+                    <input
+                      type="text"
+                      name="advisoryID"
+                      value={formData.advisoryID}
+                      className="input input-bordered w-full"
+                      disabled
                     />
                   </div>
                   <div>
@@ -353,25 +414,35 @@ const CreateAdvisory = () => {
                       required
                     >
                       <option value="">Select Faculty</option>
-                      {faculties.map(faculty => (
-                        <option key={faculty.FacultyID} value={faculty.FacultyID}>
-                          {faculty.FacultyID} - {faculty.LastName}, {faculty.FirstName}
+                      {availableFacultyForEdit.map((faculty) => (
+                        <option
+                          key={faculty.FacultyID}
+                          value={faculty.FacultyID}
+                        >
+                          {faculty.FacultyID} - {faculty.LastName},{" "}
+                          {faculty.FirstName}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="modal-action">
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="btn bg-green-700 text-white"
-                      disabled={loading}
+                      disabled={
+                        loading ||
+                        !formData.facultyID ||
+                        formData.facultyID === originalFacultyID // disables if unchanged
+                      }
                     >
                       {loading ? "Updating..." : "Update"}
                     </button>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className="btn"
-                      onClick={() => document.getElementById('edit_modal').close()}
+                      onClick={() =>
+                        document.getElementById("edit_modal").close()
+                      }
                     >
                       Close
                     </button>
@@ -409,27 +480,39 @@ const CreateAdvisory = () => {
                     </tr>
                   ) : filteredAdvisoryClasses.length > 0 ? (
                     filteredAdvisoryClasses.map((advisory) => {
-                      const classInfo = classes.find(c => c.ClassID === advisory.classID) || {};
-                      const facultyInfo = faculties.find(f => f.FacultyID === advisory.facultyID) || {};
-                      
+                      const classInfo =
+                        classes.find((c) => c.ClassID === advisory.classID) ||
+                        {};
+                      const facultyInfo =
+                        faculties.find(
+                          (f) => f.FacultyID === advisory.facultyID
+                        ) || {};
+
                       return (
                         <tr key={advisory.advisoryID} className="border-b">
                           <td className="px-4 py-2">{advisory.advisoryID}</td>
                           <td className="px-4 py-2">
-                            {classInfo.Grade ? `Grade ${classInfo.Grade} - ${classInfo.Section}` : 'N/A'}
+                            {classInfo.Grade
+                              ? `Grade ${classInfo.Grade} - ${classInfo.Section}`
+                              : "N/A"}
                           </td>
                           <td className="px-4 py-2">
-                            {facultyInfo.FirstName ? `${facultyInfo.FacultyID} - ${facultyInfo.LastName}, ${facultyInfo.FirstName}` : 'N/A'}
+                            {" "}
+                            {facultyInfo.FirstName
+                              ? `${facultyInfo.LastName}, ${facultyInfo.FirstName}`
+                              : "N/A"}{" "}
                           </td>
                           <td className="px-4 py-2">
-                            <button 
-                              onClick={() => handleViewStudents(advisory.advisoryID)} 
+                            <button
+                              onClick={() =>
+                                handleViewStudents(advisory.advisoryID)
+                              }
                               className="bg-green-600 text-white px-3 py-1 mr-2 rounded hover:bg-green-700 text-sm"
                             >
                               View Students
                             </button>
-                            <button 
-                              onClick={() => handleEdit(advisory)} 
+                            <button
+                              onClick={() => handleEdit(advisory)}
                               className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
                             >
                               Edit
