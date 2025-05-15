@@ -653,7 +653,7 @@ router.post("/admin-assign-subject", async (req, res) => {
     }
 
     // Insert new assignment
-    let result;
+    
     if (SubjectCode) {
       [result] = await db.query(
         `INSERT INTO assignsubject 
@@ -2444,6 +2444,8 @@ router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
       success: false,
       message: "Failed to create validation request"
     });
+  }
+});
 
 router.get('/faculty/student/:studentID/grades/:subjectCode', authenticateToken, async (req, res) => {
   const { studentID, subjectCode } = req.params;
@@ -2784,14 +2786,16 @@ router.post('/faculty/validate-grades', authenticateToken, async (req, res) => {
       message: "Validation request submitted successfully.",
       requestID: result.insertId
     });
-  } catch (error) {
+   } catch (error) {
     console.error("Error submitting validation request:", error);
     return res.status(500).json({
       success: false,
       message: "Failed to submit validation request.",
       error: error.message
     });
-=======
+  }
+});
+
 // Archive a faculty (set Status = 0)
 router.put('/admin-manage-faculty/archive/:facultyID', async (req, res) => {
   const db = await connectToDatabase();
