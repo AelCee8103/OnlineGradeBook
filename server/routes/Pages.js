@@ -2555,4 +2555,42 @@ router.put('/admin-archive-faculty/restore/:facultyId', async (req, res) => {
   }
 });
 
+// Archive a student (set Status = 0)
+router.put('/admin-manage-students/archive/:studentID', async (req, res) => {
+  const db = await connectToDatabase();
+  const { studentID } = req.params;
+  try {
+    const [result] = await db.query(
+      'UPDATE students SET Status = 0 WHERE StudentID = ?',
+      [studentID]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+    res.json({ success: true, message: "Student archived" });
+  } catch (error) {
+    console.error("Error archiving student:", error);
+    res.status(500).json({ success: false, message: "Failed to archive student" });
+  }
+});
+
+// Archive a faculty (set Status = 0)
+router.put('/admin-manage-faculty/archive/:facultyID', async (req, res) => {
+  const db = await connectToDatabase();
+  const { facultyID } = req.params;
+  try {
+    const [result] = await db.query(
+      'UPDATE faculty SET Status = 0 WHERE FacultyID = ?',
+      [facultyID]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Faculty not found" });
+    }
+    res.json({ success: true, message: "Faculty archived" });
+  } catch (error) {
+    console.error("Error archiving faculty:", error);
+    res.status(500).json({ success: false, message: "Failed to archive faculty" });
+  }
+});
+
 export default router;
