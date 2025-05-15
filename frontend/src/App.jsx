@@ -28,7 +28,7 @@ import CreateAdvisory from "./Admin/CreateAdvisory";
 import ViewStudent from "./Pages/ViewStudents";
 import ViewAttendance from "./Pages/ViewAttendance";
 import ManageSchoolYear from "./Admin/ManageSchoolYear";
-import { Toaster } from 'react-hot-toast';
+import { Toaster } from "react-hot-toast";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -41,8 +41,8 @@ function App() {
         toastOptions={{
           duration: 4000,
           style: {
-            background: '#363636',
-            color: '#fff',
+            background: "#363636",
+            color: "#fff",
           },
         }}
       />
@@ -54,14 +54,8 @@ function App() {
           element={<ManageStudent />}
         ></Route>
         <Route path="/admin-dashboard" element={<AdminDashboard />}></Route>
-        <Route
-          path="/admin-manage-faculty"
-          element={<ManageFaculty />}
-        ></Route>
-        <Route
-          path="/admin-advisory-classes"
-          element={<ManageClass />}
-        ></Route>
+        <Route path="/admin-manage-faculty" element={<ManageFaculty />}></Route>
+        <Route path="/admin-advisory-classes" element={<ManageClass />}></Route>
 
         <Route
           path="admin-create-advisory"
@@ -83,10 +77,7 @@ function App() {
           element={<StudentGrades isFaculty={false} />}
         />
 
-        <Route
-          path="/admin-assign-subject"
-          element={<AssignSubject />}
-        ></Route>
+        <Route path="/admin-assign-subject" element={<AssignSubject />}></Route>
         <Route path="/admin-manage-grades" element={<ManageGrades />}></Route>
         <Route
           path="/admin-validation-request"
@@ -107,10 +98,7 @@ function App() {
         />
 
         <Route path="/faculty-login" element={<FacultyLogin />}></Route>
-        <Route
-          path="/faculty-dashboard"
-          element={<FacultyDashboard />}
-        ></Route>
+        <Route path="/faculty-dashboard" element={<FacultyDashboard />}></Route>
         <Route
           path="/faculty-class-advisory"
           element={<ClassAdvisory />}
