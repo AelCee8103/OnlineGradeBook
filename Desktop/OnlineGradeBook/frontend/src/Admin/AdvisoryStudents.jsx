@@ -1,0 +1,239 @@
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import axios from "axios";
+import NavbarAdmin from "../Components/NavbarAdmin";
+import AdminSidePanel from "../Components/AdminSidePanel";
+
+const AdvisoryStudents = () => {
+  const { advisoryID } = useParams();
+  const [students, setStudents] = useState([]);
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [advisoryInfo, setAdvisoryInfo] = useState({});
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const navigate = useNavigate();
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 5;
+
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const studentRes = await axios.get(
+          `http://localhost:3000/Pages/students-in-advisory/${advisoryID}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        setStudents(studentRes.data);
+        setFilteredStudents(studentRes.data);
+      } catch (error) {
+        console.error("Error fetching students:", error);
+      }
+    };
+
+    const fetchAdvisoryInfo = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        // Use the specific endpoint for a single advisory
+        const advisoryRes = await axios.get(
+          `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (advisoryRes.data) {
+          setAdvisoryInfo(advisoryRes.data);
+        } else {
+          console.warn("Advisory not found");
+          setAdvisoryInfo(null);
+        }
+      } catch (error) {
+        console.error("Error fetching advisory info:", error);
+        setAdvisoryInfo(null);
+      }
+    };
+
+    fetchStudents();
+    fetchAdvisoryInfo();
+  }, [advisoryID]);
+
+  useEffect(() => {
+    const query = searchQuery.toLowerCase();
+    const filtered = students.filter((student) => {
+      const fullName =
+        `${student.FirstName} ${student.MiddleName} ${student.LastName}`.toLowerCase();
+      return (
+        student.StudentID.toString().includes(query) || fullName.includes(query)
+      );
+    });
+    setFilteredStudents(filtered);
+  }, [searchQuery, students]);
+
+  const indexOfLastRecord = currentPage * recordsPerPage;
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+  const currentRecords = filteredStudents.slice(
+    indexOfFirstRecord,
+    indexOfLastRecord
+  );
+  const totalPages = Math.ceil(filteredStudents.length / recordsPerPage);
+
+  const nextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const prevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  return (
+    <div className="flex h-screen bg-gray-100 overflow-hidden relative">
+      <AdminSidePanel
+        isSidebarOpen={isSidebarOpen}
+        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+      />
+
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        ></div>
+      )}
+
+      <div className="flex-1 flex flex-col overflow-auto">
+        <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
+
+        <div className="p-8">
+          <button
+            className="mb-4 bg-gray-300 px-4 py-2 rounded hover:bg-gray-400"
+            onClick={() => navigate(-1)}
+          >
+            ← Back
+          </button>
+
+          <h1 className="text-3xl font-bold mb-4">
+            Students in Advisory Class
+          </h1>
+
+          {advisoryInfo ? (
+            <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="font-semibold">Grade & Section:</p>
+                <p>{advisoryInfo.Grade} - {advisoryInfo.Section}</p>
+              </div>
+              <div>
+                <p className="font-semibold">Class Advisor:</p>
+                <p>{advisoryInfo.facultyName}</p>
+              </div>
+              <div>
+                <p className="font-semibold">School Year:</p>
+                <p>{advisoryInfo.SchoolYear}</p>
+              </div>
+              <div>
+                <p className="font-semibold">Number of Students:</p>
+                <p>{students.length}</p>
+              </div>
+            </div>
+          </div>
+          ) : (
+            <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
+              <p className="text-red-500">
+                Advisory class information not found
+              </p>
+            </div>
+          )}
+
+          <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
+            <input
+              type="text"
+              placeholder="Search by ID or Name..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="mb-4 border border-gray-300 rounded-md px-4 py-2 w-full"
+            />
+
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-4 py-2 text-gray-600">No.</th>
+                  <th className="px-4 py-2 text-gray-600">Student ID</th>
+                  <th className="px-4 py-2 text-gray-600">Full Name</th>
+                  <th className="px-4 py-2 text-gray-600">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentRecords.length > 0 ? (
+                  currentRecords.map((student, index) => (
+                    <tr key={student.StudentID} className="border-b">
+                      <td className="px-4 py-2">
+                        {indexOfFirstRecord + index + 1}
+                      </td>
+                      <td className="px-4 py-2">{student.StudentID}</td>
+                      <td className="px-4 py-2">
+                        {student.FirstName} {student.MiddleName}{" "}
+                        {student.LastName}
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm"
+                          onClick={() =>
+                            navigate(
+                              `/admin/advisory/${advisoryID}/students/${student.StudentID}/grades`
+                            )
+                          }
+                        >
+                          View Grades
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="text-center py-4">
+                      No matching students found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            {filteredStudents.length > 0 && (
+              <div className="flex justify-between items-center mt-4">
+                <button
+                  onClick={prevPage}
+                  disabled={currentPage === 1}
+                  className={`px-4 py-2 rounded ${
+                    currentPage === 1
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
+                  }`}
+                >
+                  Previous
+                </button>
+                <span className="text-sm">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={nextPage}
+                  disabled={currentPage === totalPages}
+                  className={`px-4 py-2 rounded ${
+                    currentPage === totalPages
+                      ? "bg-gray-300 cursor-not-allowed"
+                      : "bg-blue-500 text-white hover:bg-blue-600"
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AdvisoryStudents;
