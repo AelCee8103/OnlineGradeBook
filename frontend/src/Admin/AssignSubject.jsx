@@ -362,11 +362,16 @@ const AssignSubject = () => {
                   disabled={!!editingAssignment}
                 >
                   <option value="">Select Advisory Class</option>
-                 {advisories.map((advisory) => (
-                  <option key={advisory.advisoryID} value={advisory.advisoryID}>
-                    {advisory.advisoryID} - {advisory.classID} - {advisory.facultyID}
-                  </option>
-                ))}
+                  {advisories.map((advisory) => {
+                    const classInfo = classes.find(c => c.ClassID === advisory.classID);
+                    const facultyInfo = faculty.find(f => f.FacultyID === advisory.facultyID);
+                    
+                    return (
+                      <option key={advisory.advisoryID} value={advisory.advisoryID}>
+                        {`Grade ${classInfo?.Grade || ''} - Section ${classInfo?.Section || ''} (${facultyInfo ? facultyInfo.LastName : 'No Advisor'})`}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
