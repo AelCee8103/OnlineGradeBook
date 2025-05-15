@@ -3,10 +3,10 @@ import NavbarAdmin from "../Components/NavbarAdmin";
 import AdminSidePanel from "../Components/AdminSidePanel";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const ManageClasses = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -20,12 +20,12 @@ const ManageClasses = () => {
   const [formData, setFormData] = useState({
     ClassID: "",
     Grade: "",
-    Section: ""
+    Section: "",
   });
 
   const [createFormData, setCreateFormData] = useState({
     Grade: "",
-    Section: ""
+    Section: "",
   });
 
   useEffect(() => {
@@ -38,7 +38,7 @@ const ManageClasses = () => {
           "http://localhost:3000/Pages/admin-advisory-classes",
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        
+
         setClasses(response.data || []);
       } catch (err) {
         console.error("Error fetching classes:", err);
@@ -64,7 +64,7 @@ const ManageClasses = () => {
     setFormData({
       ClassID: classItem.ClassID,
       Grade: classItem.Grade,
-      Section: classItem.Section
+      Section: classItem.Section,
     });
     document.getElementById("edit_modal").showModal();
   };
@@ -81,8 +81,8 @@ const ManageClasses = () => {
       );
 
       toast.success("Class updated successfully");
-      setClasses(prev =>
-        prev.map(c => (c.ClassID === formData.ClassID ? response.data : c))
+      setClasses((prev) =>
+        prev.map((c) => (c.ClassID === formData.ClassID ? response.data : c))
       );
       document.getElementById("edit_modal").close();
     } catch (error) {
@@ -95,7 +95,7 @@ const ManageClasses = () => {
   const handleCreate = async (e) => {
     e.preventDefault();
     setLoading(true);
-  
+
     try {
       if (!createFormData.Grade || !createFormData.Section) {
         throw new Error("Grade and Section are required");
@@ -115,10 +115,10 @@ const ManageClasses = () => {
         toast.success("Class created successfully");
         setCreateFormData({
           Grade: "",
-          Section: ""
+          Section: "",
         });
         document.getElementById("create_modal").close();
-        setClasses(prev => [...prev, response.data]);
+        setClasses((prev) => [...prev, response.data]);
       } else {
         throw new Error(response.data.error || "Failed to create class");
       }
@@ -149,29 +149,42 @@ const ManageClasses = () => {
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
-      <AdminSidePanel isSidebarOpen={isSidebarOpen} toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-      {isSidebarOpen && <div className="fixed inset-0 bg-black opacity-50 z-30 md:hidden" onClick={() => setIsSidebarOpen(false)}></div>}
+      <AdminSidePanel
+        isSidebarOpen={isSidebarOpen}
+        toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+      />
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black opacity-50 z-30 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        ></div>
+      )}
       <div className="flex-1 flex flex-col overflow-auto">
         <NavbarAdmin toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
         <ToastContainer position="top-right" autoClose={3000} />
         <div className="p-8">
           <h1 className="text-3xl font-bold mb-6">Class Sections</h1>
-          
+
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
             <div className="flex items-center mb-4">
               <div className="relative flex-grow">
-                <input 
-                  type="text" 
-                  placeholder="Search classes..." 
-                  onChange={handleSearchChange} 
-                  value={searchTerm} 
-                  className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10" 
+                <input
+                  type="text"
+                  placeholder="Search classes..."
+                  onChange={handleSearchChange}
+                  value={searchTerm}
+                  className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10"
                 />
-                <FontAwesomeIcon icon={faMagnifyingGlass} className="absolute left-3 top-3 text-gray-400" />
+                <FontAwesomeIcon
+                  icon={faMagnifyingGlass}
+                  className="absolute left-3 top-3 text-gray-400"
+                />
               </div>
-              <button 
+              <button
                 className="btn bg-blue-700 text-white hover:bg-blue-800 ml-4"
-                onClick={() => document.getElementById('create_modal').showModal()}
+                onClick={() =>
+                  document.getElementById("create_modal").showModal()
+                }
                 disabled={loading}
               >
                 {loading ? "Loading..." : "Create Advisory Class"}
@@ -181,7 +194,9 @@ const ManageClasses = () => {
             {/* Create Modal */}
             <dialog id="create_modal" className="modal">
               <div className="modal-box max-w-md">
-                <h3 className="font-bold text-lg mb-5">Create Advisory Class</h3>
+                <h3 className="font-bold text-lg mb-5">
+                  Create Advisory Class
+                </h3>
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div>
                     <label className="label">
@@ -195,8 +210,10 @@ const ManageClasses = () => {
                       required
                     >
                       <option value="">Select Grade</option>
-                      {[7, 8, 9, 10, 11, 12].map(grade => (
-                        <option key={grade} value={grade}>Grade {grade}</option>
+                      {[7, 8, 9, 10, 11, 12].map((grade) => (
+                        <option key={grade} value={grade}>
+                          Grade {grade}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -204,30 +221,32 @@ const ManageClasses = () => {
                     <label className="label">
                       <span className="label-text">Section</span>
                     </label>
-                    <input 
-                      type="text" 
-                      name="Section" 
+                    <input
+                      type="text"
+                      name="Section"
                       value={createFormData.Section}
                       onChange={handleCreateChange}
-                      placeholder="Section (e.g., A, B, C)" 
-                      className="input input-bordered w-full" 
-                      required 
+                      placeholder="Section (e.g., A, B, C)"
+                      className="input input-bordered w-full"
+                      required
                       maxLength="20"
                     />
                   </div>
-                  
+
                   <div className="modal-action">
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="btn bg-blue-700 text-white"
                       disabled={loading}
                     >
                       {loading ? "Creating..." : "Create"}
                     </button>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className="btn"
-                      onClick={() => document.getElementById('create_modal').close()}
+                      onClick={() =>
+                        document.getElementById("create_modal").close()
+                      }
                     >
                       Close
                     </button>
@@ -248,12 +267,12 @@ const ManageClasses = () => {
                     <label className="label">
                       <span className="label-text">Class ID</span>
                     </label>
-                    <input 
-                      type="text" 
-                      name="ClassID" 
-                      value={formData.ClassID} 
-                      className="input input-bordered w-full" 
-                      disabled 
+                    <input
+                      type="text"
+                      name="ClassID"
+                      value={formData.ClassID}
+                      className="input input-bordered w-full"
+                      disabled
                     />
                   </div>
                   <div>
@@ -267,8 +286,10 @@ const ManageClasses = () => {
                       className="select select-bordered w-full"
                       required
                     >
-                      {[7, 8, 9, 10, 11, 12].map(grade => (
-                        <option key={grade} value={grade}>Grade {grade}</option>
+                      {[7, 8, 9, 10, 11, 12].map((grade) => (
+                        <option key={grade} value={grade}>
+                          Grade {grade}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -276,28 +297,30 @@ const ManageClasses = () => {
                     <label className="label">
                       <span className="label-text">Section</span>
                     </label>
-                    <input 
-                      type="text" 
-                      name="Section" 
-                      value={formData.Section} 
-                      onChange={handleChange} 
-                      className="input input-bordered w-full" 
-                      required 
+                    <input
+                      type="text"
+                      name="Section"
+                      value={formData.Section}
+                      onChange={handleChange}
+                      className="input input-bordered w-full"
+                      required
                       maxLength="20"
                     />
                   </div>
                   <div className="modal-action">
-                    <button 
-                      type="submit" 
+                    <button
+                      type="submit"
                       className="btn bg-green-700 text-white"
                       disabled={loading}
                     >
                       {loading ? "Updating..." : "Update"}
                     </button>
-                    <button 
-                      type="button" 
+                    <button
+                      type="button"
                       className="btn"
-                      onClick={() => document.getElementById('edit_modal').close()}
+                      onClick={() =>
+                        document.getElementById("edit_modal").close()
+                      }
                     >
                       Close
                     </button>
@@ -338,16 +361,20 @@ const ManageClasses = () => {
                       <tr key={classItem.ClassID} className="border-b">
                         <td className="px-4 py-2">{classItem.ClassID}</td>
                         <td className="px-4 py-2">Grade {classItem.Grade}</td>
-                        <td className="px-4 py-2">{classItem.Section || '-'}</td>
                         <td className="px-4 py-2">
-                          <button 
-                            onClick={() => handleViewStudents(classItem.ClassID)} 
+                          {classItem.Section || "-"}
+                        </td>
+                        <td className="px-4 py-2">
+                          <button
+                            onClick={() =>
+                              handleViewStudents(classItem.ClassID)
+                            }
                             className="bg-green-600 text-white px-3 py-1 mr-2 rounded hover:bg-green-700 text-sm"
                           >
                             View
                           </button>
-                          <button 
-                            onClick={() => handleEdit(classItem)} 
+                          <button
+                            onClick={() => handleEdit(classItem)}
                             className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
                           >
                             Edit

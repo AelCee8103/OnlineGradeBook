@@ -342,7 +342,7 @@ const ManageFaculty = () => {
                         id="MiddleName"
                         value={newFaculty.MiddleName}
                         onChange={handleChanges}
-                        placeholder="Enter Middle Name (optional)"
+                        placeholder="Enter Middle Name"
                         className="input input-bordered w-full"
                         required
                       />
