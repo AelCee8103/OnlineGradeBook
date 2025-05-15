@@ -549,6 +549,34 @@ router.get("/admin-manage-subject", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// ...existing code...
+router.put("/admin-manage-subject/:id", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { id } = req.params;
+    const { SubjectName } = req.body;
+    if (!SubjectName) {
+      return res.status(400).json({ error: "Subject name is required" });
+    }
+    // Check for duplicate (case-insensitive)
+    const [dup] = await db.query(
+      "SELECT * FROM subjects WHERE LOWER(SubjectName) = LOWER(?) AND SubjectID != ?",
+      [SubjectName, id]
+    );
+    if (dup.length > 0) {
+      return res.status(400).json({ error: "Subject name already exists!" });
+    }
+    await db.query(
+      "UPDATE subjects SET SubjectName = ? WHERE SubjectID = ?",
+      [SubjectName, id]
+    );
+    res.json({ success: true, message: "Subject updated successfully" });
+  } catch (err) {
+    console.error("Error updating subject:", err);
+    res.status(500).json({ error: "Failed to update subject" });
+  }
+});
+// ...existing code...
 
 
 
