@@ -25,8 +25,14 @@ const AssignSubject = () => {
     subjectID: "",
     FacultyID: "",
     advisoryID: "",
+
+    school_yearID: "",
+
   });
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8; // Number of rows per page
+
   const Navigate = useNavigate();
 
   useEffect(() => {
@@ -143,160 +149,152 @@ const AssignSubject = () => {
     }
   };
 
-  const handleAssignedSubjectChange = (e) => {
-    const { name, value } = e.target;
-    setNewAssignedSubject((prev) => ({
-      ...prev,
-      [name]: value, // no need to transform name
-    }));
+const handleAssignedSubjectChange = (e) => {
+  const { name, value } = e.target;
+  setNewAssignedSubject(prev => ({
+    ...prev,
+    [name]: value
+  }));
 
-    // Update SubjectCode based on subjectID selection
-    if (name === "subjectID" && value) {
-      const selectedSubject = subjects.find((sub) => sub.SubjectID === value);
-      if (selectedSubject?.SubjectCode) {
-        setNewAssignedSubject((prev) => ({
-          ...prev,
-          SubjectCode: selectedSubject.SubjectCode,
-        }));
-      }
+  // Auto-fill SubjectCode if subjectID is selected and subject has a code
+  if (name === "subjectID" && value) {
+    const selectedSubject = subjects.find(sub => sub.SubjectID === value);
+    if (selectedSubject?.SubjectCode) {
+      setNewAssignedSubject(prev => ({
+        ...prev,
+        SubjectCode: selectedSubject.SubjectCode
+      }));
     }
+  }
+};
+
+const handleAssignSubject = async (e) => {
+  e.preventDefault();
+
+  // Validate required fields
+  if (
+    !newAssignedSubject.subjectID ||
+    !newAssignedSubject.FacultyID ||
+    !newAssignedSubject.advisoryID
+  ) {
+    toast.error("Please fill all required fields");
+    return;
+  }
+
+  // Get current school year
+  const currentYear = schoolYears.find((year) => year.status === 1);
+  if (!currentYear) {
+    toast.error("No active school year found");
+    return;
+  }
+
+  const payload = {
+    subjectID: newAssignedSubject.subjectID,
+    FacultyID: newAssignedSubject.FacultyID,
+    advisoryID: newAssignedSubject.advisoryID,
+    school_yearID: currentYear.school_yearID
   };
 
-  const handleAssignSubject = async (e) => {
-    e.preventDefault();
+  if (newAssignedSubject.SubjectCode) {
+    payload.SubjectCode = newAssignedSubject.SubjectCode;
+  }
 
-    // Validate required fields
-    if (
-      !newAssignedSubject.subjectID ||
-      !newAssignedSubject.FacultyID ||
-      !newAssignedSubject.advisoryID
-    ) {
-      toast.error("Please fill all required fields");
+  // Check for duplicate assignment
+  const alreadyAssigned = assignedSubjects.some(
+    (assignment) =>
+      assignment.advisoryID === newAssignedSubject.advisoryID &&
+      assignment.subjectID === newAssignedSubject.subjectID &&
+      assignment.yearID === currentYear.school_yearID &&
+      (!editingAssignment || assignment.SubjectCode !== editingAssignment.SubjectCode)
+  );
+
+  if (alreadyAssigned) {
+    toast.error("This subject is already assigned to this advisory class for the current school year.");
+    return;
+  }
+
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      toast.error("Authentication token missing");
+      Navigate("/login");
       return;
     }
 
-    // Get current school year first
-    const currentYear = schoolYears.find((year) => year.status === 1);
-    if (!currentYear) {
-      toast.error("No active school year found");
-      return;
+    const config = {
+      headers: { Authorization: `Bearer ${token}` }
+    };
+
+    let response;
+    if (editingAssignment) {
+      response = await axios.put(
+        `http://localhost:3000/Pages/admin-assign-subject/${editingAssignment.advisoryID}/${editingAssignment.SubjectCode}`,
+        payload,
+        config
+      );
+    } else {
+      response = await axios.post(
+        "http://localhost:3000/Pages/admin-assign-subject",
+        payload,
+        config
+      );
     }
 
-    // 🔍 Check for duplicates using subjectID
-    const alreadyAssigned = assignedSubjects.some(
-      (assignment) =>
-        assignment.advisoryID === newAssignedSubject.advisoryID &&
-        assignment.subjectID === newAssignedSubject.subjectID && // Changed from SubjectCode
-        assignment.yearID === currentYear.school_yearID
+    toast.success(
+      `Subject assignment ${editingAssignment ? "updated" : "added"} successfully! ✅`,
+      { autoClose: 3000 }
     );
 
-    if (alreadyAssigned) {
-      toast.error(
-        "This subject is already assigned to this advisory class for the current school year"
-      );
-      return;
-    }
+    document.getElementById("assign_subject_modal").close();
+    setNewAssignedSubject({
+      SubjectCode: "",
+      subjectID: "",
+      FacultyID: "",
+      advisoryID: ""
+    });
+    fetchAssignedSubjects();
+    setEditingAssignment(null);
+  } catch (error) {
+    console.error("Assignment error:", error);
 
-    try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        toast.error("Authentication token missing");
+    if (error.response) {
+      const { status, data } = error.response;
+
+      if (status === 400) {
+        toast.error(data.error || "Validation failed. Please check your inputs.");
+      } else if (status === 401) {
+        toast.error("Session expired. Please login again.");
         Navigate("/login");
-        return;
-      }
-
-      // Get current school year first
-      const currentYear = schoolYears.find((year) => year.status === 1);
-      if (!currentYear) {
-        toast.error("No active school year found");
-        return;
-      }
-
-      const config = {
-        headers: { Authorization: `Bearer ${token}` },
-      };
-
-      const payload = {
-        subjectID: newAssignedSubject.subjectID,
-        FacultyID: newAssignedSubject.FacultyID,
-        advisoryID: newAssignedSubject.advisoryID,
-        school_yearID: currentYear.school_yearID, // Automatically use current year
-      };
-
-      let response;
-      if (editingAssignment) {
-        // Update existing assignment
-        response = await axios.put(
-          `http://localhost:3000/Pages/admin-assign-subject/${editingAssignment.advisoryID}/${editingAssignment.SubjectCode}`,
-          payload,
-          config
-        );
+      } else if (status === 409) {
+        toast.error(data.error || "This subject is already assigned to this advisory class.");
       } else {
-        // Create new assignment
-        response = await axios.post(
-          "http://localhost:3000/Pages/admin-assign-subject",
-          payload,
-          config
-        );
+        toast.error(data.error || `Failed to ${editingAssignment ? "update" : "assign"} subject`);
       }
-
-      toast.success(
-        `Subject assignment ${
-          editingAssignment ? "updated" : "added"
-        } successfully! ✅`,
-        {
-          autoClose: 3000,
-        }
-      );
-
-      // Close modal and reset form
-      document.getElementById("assign_subject_modal").close();
-      setNewAssignedSubject({
-        subjectID: "",
-        FacultyID: "",
-        advisoryID: "",
-      });
-
-      fetchAssignedSubjects();
-      setEditingAssignment(null);
-    } catch (error) {
-      console.error("Assignment error:", error);
-
-      if (error.response) {
-        const { status, data } = error.response;
-
-        if (status === 400) {
-          toast.error(
-            data.error || "Validation failed. Please check your inputs."
-          );
-        } else if (status === 401) {
-          toast.error("Session expired. Please login again.");
-          Navigate("/login");
-        } else if (status === 409) {
-          toast.error(
-            "This subject is already assigned to this advisory class."
-          );
-        } else {
-          toast.error(
-            data.error ||
-              `Failed to ${editingAssignment ? "update" : "assign"} subject`
-          );
-        }
-      } else {
-        toast.error("Network error. Please try again.");
-      }
+    } else {
+      toast.error("Network error. Please try again.");
     }
-  };
+  }
+};
+
 
   const handleEditAssignment = (assignment) => {
     setEditingAssignment(assignment);
     setNewAssignedSubject({
+      SubjectCode: assignment.SubjectCode || "",
       subjectID: assignment.subjectID,
       FacultyID: assignment.FacultyID,
       advisoryID: assignment.advisoryID,
     });
     document.getElementById("assign_subject_modal").showModal();
   };
+
+  
+  const totalPages = Math.ceil(assignedSubjects.length / pageSize);
+  const paginatedSubjects = assignedSubjects.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+ 
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -331,8 +329,11 @@ const AssignSubject = () => {
               className="ml-4 px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800"
               onClick={() => {
                 setEditingAssignment(null);
-                setNewAssignedSubject({
-                  subjectID: "",
+
+                setNewAssignedSubject({ 
+                  SubjectCode: "",
+                  subjectID: "", 
+
                   FacultyID: "",
                   ClassID: "",
                   schoolyearID: "",
@@ -346,6 +347,7 @@ const AssignSubject = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm mt-4">
                 <thead>
+
                   <tr className="bg-gray-100">
                     <th className="px-4 py-2">Subject Code</th>
                     <th className="px-4 py-2">Subject</th>
@@ -353,47 +355,70 @@ const AssignSubject = () => {
                     <th className="px-4 py-2">Faculty</th>
                     <th className="px-4 py-2">School Year</th>{" "}
                     {/* Changed from "School Year ID" */}
+
                     <th className="px-4 py-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {assignedSubjects.map((assignment, index) => (
-                    <tr
-                      key={`assignment-${index}`}
-                      className="border-b hover:bg-gray-50"
-                    >
-                      <td className="px-4 py-2">
-                        {assignment.subjectCode || "-"}
-                      </td>
-                      <td className="px-4 py-2 font-medium">
-                        {assignment.subjectName || "-"}
-                      </td>
-                      <td className="px-4 py-2">
-                        {`Grade ${assignment.grade} - ${assignment.section}` ||
-                          "-"}
-                      </td>
-                      <td className="px-4 py-2">
-                        {assignment.facultyName || // Try facultyName first
-                          (assignment.facultyLastName // Fallback to constructed name
-                            ? `${assignment.facultyLastName}, ${assignment.facultyFirstName}`
-                            : "-")}
-                      </td>
-                      <td className="px-4 py-2">
-                        {assignment.schoolYear || "-"}
-                      </td>
-                      <td className="px-4 py-2 flex space-x-2">
-                        <button
-                          onClick={() => handleEditAssignment(assignment)}
-                          className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
-                          title="Edit"
-                        >
-                          <FontAwesomeIcon icon={faEdit} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+{paginatedSubjects.length > 0 ? (
+  paginatedSubjects.map((assignment, index) => (
+    <tr
+      key={assignment.subjectCode || `row-${index}`}
+      className="border-b hover:bg-gray-50"
+    >
+      <td className="px-4 py-2">{assignment.subjectCode || "-"}</td>
+      <td className="px-4 py-2 font-medium">{assignment.subjectName || "-"}</td>
+      <td className="px-4 py-2">
+        {assignment.grade && assignment.section
+          ? `Grade ${assignment.grade} - ${assignment.section}`
+          : "-"}
+      </td>
+      <td className="px-4 py-2">
+        {assignment.facultyName ||
+          (assignment.facultyLastName
+            ? `${assignment.facultyLastName}, ${assignment.facultyFirstName}`
+            : "-")}
+      </td>
+      <td className="px-4 py-2">{assignment.schoolYear || "-"}</td>
+      <td className="px-4 py-2 flex space-x-2">
+        <button
+          onClick={() => handleEditAssignment(assignment)}
+          className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
+          title="Edit"
+        >
+          <FontAwesomeIcon icon={faEdit} />
+        </button>
+      </td>
+    </tr>
+  ))
+) : (
+  <tr>
+    <td colSpan="6" className="text-center py-4 text-gray-500">
+      No subject assignments found
+    </td>
+  </tr>
+)}
+
                 </tbody>
               </table>
+            </div>
+            {/* Pagination */}
+            <div className="flex justify-between mt-4">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="btn"
+              >
+                Previous
+              </button>
+              <span>Page {currentPage} of {totalPages}</span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="btn bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                Next
+              </button>
             </div>
           </div>
         </div>
@@ -411,6 +436,8 @@ const AssignSubject = () => {
           </h3>
           <form onSubmit={handleAssignSubject} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+
               {/* Advisory Class */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

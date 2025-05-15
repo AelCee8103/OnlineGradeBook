@@ -4,6 +4,7 @@ import { connectToDatabase } from '../lib/db.js';
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
 
+
 const router = express.Router();
 
 
@@ -590,8 +591,11 @@ router.put("/admin-manage-subject/:id", async (req, res) => {
 
 router.post("/admin-assign-subject", async (req, res) => {
   try {
+
+
     const db = await connectToDatabase();
     const { subjectID, FacultyID, advisoryID, school_yearID } = req.body;
+
 
     // First check if this subject is already assigned to this advisory in current year
     const [existingAssignment] = await db.query(
@@ -614,7 +618,58 @@ router.post("/admin-assign-subject", async (req, res) => {
       `INSERT INTO assignsubject (subjectID, FacultyID, advisoryID, yearID) 
        VALUES (?, ?, ?, ?)`,
       [subjectID, FacultyID, advisoryID, school_yearID]
+
     );
+    if (classAssignment.length > 0) {
+      const assigned = classAssignment[0];
+      return res.status(409).json({
+        error: `This class (Grade ${assigned.Grade}-${assigned.Section}) has already been assigned to another faculty (${assigned.FirstName} ${assigned.LastName}).`
+      });
+    }
+
+    // 3. Check for duplicate assignment (by SubjectCode if provided, else by other fields)
+    let duplicateCheck;
+    if (SubjectCode) {
+      [duplicateCheck] = await db.query(
+        `SELECT * FROM assignsubject WHERE SubjectCode = ?`,
+        [SubjectCode]
+      );
+      if (duplicateCheck.length > 0) {
+        return res.status(409).json({
+          error: "This SubjectCode is already used. Please use a unique SubjectCode."
+        });
+      }
+    } else {
+      [duplicateCheck] = await db.query(
+        `SELECT * FROM assignsubject 
+         WHERE subjectID = ? AND FacultyID = ? AND yearID = ? AND advisoryID = ?`,
+        [subjectID, FacultyID, school_yearID, advisoryID]
+      );
+      if (duplicateCheck.length > 0) {
+        return res.status(409).json({
+          error: "This subject is already assigned to the selected faculty and advisory for the school year"
+        });
+      }
+    }
+
+    // Insert new assignment
+    let result;
+    if (SubjectCode) {
+      [result] = await db.query(
+        `INSERT INTO assignsubject 
+         (SubjectCode, subjectID, FacultyID, yearID, advisoryID)
+         VALUES (?, ?, ?, ?, ?)`,
+        [SubjectCode, subjectID, FacultyID, school_yearID, advisoryID]
+      );
+    } else {
+      [result] = await db.query(
+        `INSERT INTO assignsubject 
+         (subjectID, FacultyID, yearID, advisoryID)
+         VALUES (?, ?, ?, ?)`,
+        [subjectID, FacultyID, school_yearID, advisoryID]
+      );
+    }
+
 
     res.status(201).json({
       success: true,
@@ -625,6 +680,7 @@ router.post("/admin-assign-subject", async (req, res) => {
   } catch (error) {
     console.error("Error assigning subject:", error);
     res.status(500).json({ error: "Failed to assign subject" });
+
   }
 });
 
@@ -682,12 +738,14 @@ router.post("/admin-dashboard", async (req, res) => {
       return res.status(400).json({ exists: true, message: "School Year already exists." });
     }
 
-    // Insert the new school year with status = 1
-    const insertSql = "INSERT INTO schoolyear (school_yearID, year, status) VALUES (?, ?, 1)";
+    
+
+    // Insert the new school year with status = 0 (inactive by default)
+    const insertSql = "INSERT INTO schoolyear (school_yearID, year, status) VALUES (?, ?, 0)";
     const [result] = await db.query(insertSql, [SchoolYear, year]);
 
     if (result.affectedRows > 0) {
-      return res.status(201).json({ success: true, message: "School Year added successfully with active status!" });
+      return res.status(201).json({ success: true, message: "School Year added successfully with inactive status!" });
     }
 
     res.status(500).json({ error: "Failed to insert school year." });
@@ -696,6 +754,7 @@ router.post("/admin-dashboard", async (req, res) => {
     res.status(500).json({ error: "Internal server error." });
   }
 });
+
 
 
 
@@ -1123,7 +1182,10 @@ router.get("/admin-view-students/:advisoryID", authenticateToken, async (req, re
       SELECT 
         c.Grade,
         c.Section,
-        CONCAT(f.LastName, ', ', f.FirstName) as facultyName
+
+        CONCAT(f.LastName, ', ', f.FirstName) as facultyName,
+        sy.year AS schoolYear
+
       FROM advisory a
       JOIN classes c ON a.classID = c.ClassID 
       JOIN faculty f ON a.facultyID = f.FacultyID
@@ -2317,6 +2379,72 @@ router.post("/faculty/update-grade", authenticateToken, async (req, res) => {
 });
 
 
+
+
+//Validation requests
+
+// Simplified validation request route
+router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
+  const db = await connectToDatabase();
+  
+  try {
+    const { advisoryID } = req.body;
+    const facultyID = req.user.facultyID;
+    const requestDate = new Date().toISOString();
+
+    // First check for existing pending requests
+    const [existingRequests] = await db.query(
+      `SELECT COUNT(*) as count FROM validation_request 
+       WHERE advisoryID = ? AND facultyID = ? AND statusID = 0`,
+      [advisoryID, facultyID]
+    );
+
+    if (existingRequests[0].count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "You already have a pending validation request for this advisory class"
+      });
+    }
+
+    // Verify faculty's advisory assignment
+    const [advisory] = await db.query(
+      'SELECT advisoryID FROM advisory WHERE advisoryID = ? AND facultyID = ?',
+      [advisoryID, facultyID]
+    );
+
+    if (advisory.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized for this advisory class"
+      });
+    }
+
+    await db.query('START TRANSACTION');
+
+    // Create a single validation request for the advisory class
+    await db.query(
+      `INSERT INTO validation_request 
+       (facultyID, advisoryID, statusID, requestDate) 
+       VALUES (?, ?, 0, ?)`,
+      [facultyID, advisoryID, requestDate]
+    );
+
+    await db.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: "Validation request created successfully",
+      requestDate: requestDate
+    });
+
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error("Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to create validation request"
+    });
+
 router.get('/faculty/student/:studentID/grades/:subjectCode', authenticateToken, async (req, res) => {
   const { studentID, subjectCode } = req.params;
 
@@ -2367,6 +2495,7 @@ router.get('/faculty/student/:studentID/grades/:subjectCode', authenticateToken,
   } catch (err) {
     console.error('Error fetching student grades:', err);
     res.status(500).json({ success: false, message: 'Server error' });
+
   }
 });
 
@@ -2574,6 +2703,95 @@ router.put('/admin-manage-students/archive/:studentID', async (req, res) => {
   }
 });
 
+
+// Make sure this route is added if not already there:
+
+router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
+  const { advisoryID } = req.params;
+  const facultyID = req.user.id || req.user.facultyID;
+  
+  try {
+    const db = await connectToDatabase();
+
+    const [request] = await db.query(
+      `SELECT requestID, requestDate, statusID,
+        CASE 
+          WHEN statusID = 0 THEN 'pending'
+          WHEN statusID = 1 THEN 'approved'
+          WHEN statusID = 2 THEN 'rejected'
+        END as status
+       FROM validation_request 
+       WHERE advisoryID = ? 
+       AND facultyID = ? 
+       ORDER BY requestDate DESC 
+       LIMIT 1`,
+      [advisoryID, facultyID]
+    );
+
+    res.json({
+      success: true,
+      hasPendingRequest: request.length > 0 && request[0].statusID === 0,
+      status: request.length > 0 ? request[0].status : null,
+      lastRequestDate: request.length > 0 ? request[0].requestDate : null
+    });
+
+  } catch (error) {
+    console.error("Error checking pending requests:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to check pending requests"
+    });
+  }
+});
+
+
+
+// Prevent duplicate validation requests for the same faculty/advisory with pending status
+router.post('/faculty/validate-grades', authenticateToken, async (req, res) => {
+  const { advisoryID } = req.body;
+  const facultyID = req.user.id || FacultyID; // Support both token structures
+  let db;
+  try {
+    db = await connectToDatabase();
+
+    // 1. Check for existing pending request for this faculty/advisory
+    // statusID: 0 = Pending (adjust if your DB uses a different value)
+    const [existing] = await db.query(
+      `SELECT requestID, statusID FROM validation_request 
+       WHERE facultyID = ? AND advisoryID = ? AND statusID = 0
+       ORDER BY requestDate DESC LIMIT 1`,
+      [facultyID, advisoryID]
+    );
+
+    if (existing.length >  0) {
+      // There is already a pending request
+      return res.status(409).json({
+        success: false,
+        message: "A validation request is already pending for this advisory. Please wait for it to be processed before submitting another.",
+        requestID: existing[0].requestID
+      });
+    }
+
+    // 2. If no pending request, create a new one
+    const [result] = await db.query(
+      `INSERT INTO validation_request (advisoryID, facultyID, statusID, requestDate)
+       VALUES (?, ?, 0, NOW())`,
+      [advisoryID, facultyID]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Validation request submitted successfully.",
+      requestID: result.insertId
+    });
+  } catch (error) {
+    console.error("Error submitting validation request:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit validation request.",
+      error: error.message
+    });
+=======
 // Archive a faculty (set Status = 0)
 router.put('/admin-manage-faculty/archive/:facultyID', async (req, res) => {
   const db = await connectToDatabase();
@@ -2590,7 +2808,10 @@ router.put('/admin-manage-faculty/archive/:facultyID', async (req, res) => {
   } catch (error) {
     console.error("Error archiving faculty:", error);
     res.status(500).json({ success: false, message: "Failed to archive faculty" });
+
   }
 });
+
+
 
 export default router;

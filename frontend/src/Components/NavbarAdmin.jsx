@@ -100,7 +100,7 @@ const NavbarAdmin = ({ toggleSidebar }) => {
       <div className="flex-none">
         <div className="flex items-center gap-4">
           {/* Add Notification Dropdown Here */}
-          <NotificationDropdown userType="admin" />
+      
 
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${
