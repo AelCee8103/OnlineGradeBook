@@ -4,6 +4,7 @@ import { connectToDatabase } from '../lib/db.js';
 import { authenticateToken } from "../middleware/authMiddleware.js";
 
 
+
 const router = express.Router();
 
 
@@ -1135,7 +1136,7 @@ router.get('/admin-advisory-classes/:advisoryID', async (req, res) => {
         c.Grade,
         c.Section,
         CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
-        sy.year AS SchoolYear
+        sy.year AS schoolYear
       FROM advisory a
       JOIN classes c ON a.classID = c.ClassID
       JOIN faculty f ON a.facultyID = f.FacultyID
@@ -1772,23 +1773,20 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
 router.post('/admin/process-validation', authenticateToken, async (req, res) => {
   try {
     // Verify this is an admin request first
-    if (!req.user || (!req.user.adminID && req.user.role !== 'admin')) {
+    if (!req.user || !req.adminID) {
       return res.status(403).json({
         success: false,
         message: "Access denied. Only administrators can process validation requests."
       });
     }
-    
     const { requestID, action } = req.body;
-    const adminID = req.user.adminID || req.user.id;
-    
+    const adminID = req.user.adminID;
     if (!requestID || !action || !adminID) {
       return res.status(400).json({
         success: false,
         message: "Missing required information: requestID, action, or administrator identity"
       });
     }
-    
     if (action !== 'approve' && action !== 'reject') {
       return res.status(400).json({
         success: false,
@@ -1824,13 +1822,12 @@ router.post('/admin/process-validation', authenticateToken, async (req, res) => 
     
     // Set status based on action (1 = approve, 2 = reject)
     const newStatusID = action === 'approve' ? 1 : 2;
-    
-    // Update the validation request
+      // Update the validation request - only update statusID
     await db.query(
       `UPDATE validation_request 
-       SET statusID = ?, processedBy = ?, processedDate = NOW() 
+       SET statusID = ?
        WHERE requestID = ?`,
-      [newStatusID, adminID, requestID]
+      [newStatusID, requestID]
     );
     
     // Faculty info for notification
@@ -1894,7 +1891,8 @@ router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
   if (existing.length > 0) {
     return res.status(409).json({
       success: false,
-      message: "A validation request is already pending for this advisory."
+      message: "A validation request is already pending for this advisory. Please wait for it to be processed before submitting another.",
+      requestID: existing[0].requestID
     });
   }
 
@@ -2083,8 +2081,6 @@ router.get("/faculty-class-advisory", authenticateToken, async (req, res) => {
   }
 });
 
-
-
 // Make sure this route is added if not already there:
 
 router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
@@ -2144,7 +2140,7 @@ router.post('/faculty/validate-grades', authenticateToken, async (req, res) => {
       [facultyID, advisoryID]
     );
 
-    if (existing.length > 0) {
+    if (existing.length >  0) {
       // There is already a pending request
       return res.status(409).json({
         success: false,

@@ -1,5 +1,15 @@
 import jwt from "jsonwebtoken";
 
+// Common function to verify tokens
+const verifyToken = (token, secretKey) => {
+  return new Promise((resolve, reject) => {
+    jwt.verify(token, secretKey, (err, decoded) => {
+      if (err) reject(err);
+      else resolve(decoded);
+    });
+  });
+};
+
 export const authenticateToken = (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
@@ -20,7 +30,6 @@ export const authenticateToken = (req, res, next) => {
       });
     }
     
-    // Use the correct secret key - check both possible env vars
     const secretKey = process.env.JWT_SECRET || process.env.JWT_KEY;
     
     if (!secretKey) {
@@ -51,13 +60,13 @@ export const authenticateToken = (req, res, next) => {
       // Log the decoded token for debugging
       console.log("Decoded token:", JSON.stringify(decoded, null, 2));
       
-      // Normalize the user data
+      // Set user info in request object
       req.user = {
         id: decoded.AdminID || decoded.FacultyID,
         adminID: decoded.AdminID,
         facultyID: decoded.FacultyID,
-        role: decoded.role || (decoded.AdminID ? 'admin' : 'faculty'),
-        name: decoded.name || null
+        role: decoded.AdminID ? 'admin' : 'faculty',
+        name: decoded.FirstName ? `${decoded.FirstName} ${decoded.LastName}` : null
       };
       
       next();
@@ -69,4 +78,36 @@ export const authenticateToken = (req, res, next) => {
       message: "Authentication process failed"
     });
   }
+};
+
+export const verifyAdminToken = (token) => {
+  try {
+    const secretKey = process.env.JWT_SECRET || process.env.JWT_KEY;
+    
+    if (!token || !secretKey) {
+      return null;
+    }
+    
+    const decoded = jwt.verify(token, secretKey);
+    
+    // Check if this is an admin token
+    if (!decoded.AdminID) {
+      return null;
+    }
+    
+    return decoded;
+  } catch (error) {
+    console.error("Admin token verification failed:", error);
+    return null;
+  }
+};
+
+export const requireAdmin = (req, res, next) => {
+  if (!req.user || !req.user.adminID) {
+    return res.status(403).json({
+      success: false,
+      message: "Access denied. Admin privileges required."
+    });
+  }
+  next();
 };

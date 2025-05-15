@@ -26,15 +26,24 @@ export const useAxios = () => {
   }, error => {
     return Promise.reject(error);
   });
-  
-  // Response interceptor for handling common errors
+    // Response interceptor for handling common errors
   instance.interceptors.response.use(
     response => response,
     error => {
       // Handle authentication errors
       if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        // Check if we're already on a login page
+        const currentPath = window.location.pathname;
+        if (currentPath.includes('login')) {
+          return Promise.reject(error);
+        }
+
         const userType = localStorage.getItem('adminID') ? 'admin' : 'faculty';
-        toast.error(`Your session has expired. Please log in again.`);
+        
+        // Only show the toast error if it's not an expired token error during validation
+        if (!error.config.url.includes('/admin/process-validation')) {
+          toast.error(`Your session has expired. Please log in again.`);
+        }
         
         // Clear auth data
         localStorage.removeItem('token');
@@ -43,10 +52,14 @@ export const useAxios = () => {
         localStorage.removeItem('facultyID');
         localStorage.removeItem('facultyName');
         
+        // Store the current URL to redirect back after login
+        localStorage.setItem('redirectAfterLogin', window.location.pathname);
+        
         // Redirect based on user type
-        setTimeout(() => {
-          window.location.href = userType === 'admin' ? '/admin-login' : '/faculty-login';
-        }, 1000);
+        const loginPath = userType === 'admin' ? '/admin-login' : '/faculty-login';
+        if (window.location.pathname !== loginPath) {
+          window.location.href = loginPath;
+        }
       }
       
       // Handle network errors

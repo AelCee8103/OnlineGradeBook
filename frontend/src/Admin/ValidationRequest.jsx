@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminSidePanel from '../Components/AdminSidePanel';
 import NavbarAdmin from '../Components/NavbarAdmin';
@@ -12,111 +12,60 @@ const ValidationRequest = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
   const socket = useSocket();
-  // Use our axios instance with authentication interceptors
   const http = useAxios();
   
   const fetchRequests = useCallback(async () => {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        alert("Authentication token missing. Please login again.");
         navigate("/admin-login");
         return;
       }
 
       const response = await http.get("/Pages/admin/validation-requests");
-
       if (response.data.success) {
         setRequests(response.data.requests);
       } else {
-        throw new Error(response.data.message || "Failed to fetch requests");
+        console.error("Failed to fetch requests:", response.data.message);
       }
     } catch (error) {
       console.error("Error fetching requests:", error);
-      console.error("Failed to fetch validation requests:", error);
-      // Display error in the UI instead of toast
-      const errorMessage = error.response?.data?.message || "Failed to fetch validation requests";
     } finally {
       setLoading(false);
     }
   }, [navigate, http]);
-  
+
   useEffect(() => {
-    // Ensure we always fetch requests even if socket initialization fails
+    // Initial data fetch
     fetchRequests();
-    
-    // If we don't have a socket, don't try to use socket functionality
-    if (!socket) {
-      console.warn("Socket not available, falling back to HTTP only");
-      setLoading(false); // Make sure we're not stuck in loading state
-      return;
-    }
-    
-    // Define event handlers
-    const handleNewRequest = (data) => {      
-      // Refresh data from the server - notification is handled by the NotificationDropdown
-      fetchRequests();
-    };
-    
-    const handleRequestProcessed = (data) => {
-      // This handler is for requests processed by this admin - no notification needed
-      console.log(`Request ${data.requestID} processed with action: ${data.action}`);
+
+    if (!socket) return;
+
+    // Socket event handlers
+    const handleNewRequest = () => {
+      console.log('New validation request received');
       fetchRequests();
     };
 
-    const handleInitialRequests = (data) => {
-      // Use server-sent data directly
-      if (data && data.requests) {
-        setRequests(data.requests);
-        setLoading(false);
-      } else {
-        console.warn("Received empty or invalid initial requests data");
-        // Ensure we don't stay in loading state
-        setLoading(false);
-      }
+    const handleRequestProcessed = () => {
+      console.log('Request processed by another admin');
+      fetchRequests();
     };
-    
-    // Add handlers with error handling
+
+    // Setup socket listeners
     socket.on("newValidationRequest", handleNewRequest);
     socket.on("requestProcessed", handleRequestProcessed);
-    socket.on("initialRequests", handleInitialRequests);
     socket.on("socketError", (error) => {
-      console.error("Socket error:", error.message);
-      // Ensure we don't stay in loading state if socket errors
-      setLoading(false);
+      console.error("Socket error:", error);
     });
 
-    try {
-      // Request fresh data when component mounts
-      console.log("Requesting initial validation requests data...");
-      socket.emit("getInitialRequests");
-    } catch (error) {
-      console.error("Error requesting initial data:", error);
-      // Make sure we're not stuck in loading state
-      setLoading(false);
-    }
-    
-    // Add a fallback timeout to ensure we exit the loading state
-    const fallbackTimer = setTimeout(() => {
-      if (loading) {
-        console.warn("Timeout waiting for socket response, exiting loading state");
-        setLoading(false);
-      }
-    }, 5000); // 5 second timeout
-    
-    // The cleanup function for this useEffect
+    // Cleanup socket listeners
     return () => {
-      clearTimeout(fallbackTimer);
-      
-      // Make sure socket exists before trying to remove listeners
-      if (socket) {
-        socket.off("newValidationRequest", handleNewRequest);
-        socket.off("requestProcessed", handleRequestProcessed);
-        socket.off("initialRequests", handleInitialRequests);
-        socket.off("socketError");
-      }
+      socket.off("newValidationRequest", handleNewRequest);
+      socket.off("requestProcessed", handleRequestProcessed);
+      socket.off("socketError");
     };
-  }, [socket, fetchRequests, loading]);
+  }, [socket, fetchRequests]);
 
   // Process validation request (approve/reject)
   const handleProcessRequest = async (requestID, action, facultyID, advisoryID, grade, section, facultyName) => {
@@ -127,11 +76,14 @@ const ValidationRequest = () => {
       });
 
       if (response.data.success) {
-        // Update local state to reflect the change immediately
+        // Update local state immediately
         setRequests(prev => prev.filter(req => req.requestID !== requestID));
         
-        // If socket exists, emit event for real-time update to other admins
+        // Emit socket event for real-time updates
         if (socket) {
+          const adminName = localStorage.getItem('adminName');
+          const adminID = localStorage.getItem('adminID');
+          
           socket.emit('validationResponse', {
             requestID,
             action,
@@ -139,18 +91,20 @@ const ValidationRequest = () => {
             advisoryID,
             grade,
             section,
-            facultyName
+            facultyName,
+            adminName,
+            adminID
           });
         }
-      } else {
-        throw new Error(response.data.message);
       }
     } catch (error) {
       console.error('Error processing validation request:', error);
-      alert(error.message || 'Failed to process validation request');
+      const errorMessage = error.response?.data?.message || 'Failed to process validation request';
+      alert(errorMessage);
     }
   };
 
+  // Filter requests based on search term
   const filteredRequests = requests.filter((request) =>
     request.facultyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     `Grade ${request.Grade} - ${request.Section}`.toLowerCase().includes(searchTerm.toLowerCase())
@@ -162,7 +116,6 @@ const ValidationRequest = () => {
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Removed Toaster - notifications now handled by NotificationDropdown */}
       <AdminSidePanel
         isSidebarOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -172,7 +125,6 @@ const ValidationRequest = () => {
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
           <div className="container mx-auto px-6 py-8">
             <h1 className="text-3xl font-bold text-gray-800 mb-6">Validation Requests</h1>
-
             <div className="bg-white rounded-lg shadow overflow-hidden">
               <div className="p-4 border-b">
                 <input
@@ -209,8 +161,8 @@ const ValidationRequest = () => {
                                 'approve', 
                                 request.facultyID, 
                                 request.advisoryID,
-                                request.grade,
-                                request.section,
+                                request.Grade,
+                                request.Section,
                                 request.facultyName
                               )}
                               className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
@@ -223,8 +175,8 @@ const ValidationRequest = () => {
                                 'reject',
                                 request.facultyID, 
                                 request.advisoryID,
-                                request.grade,
-                                request.section,
+                                request.Grade,
+                                request.Section,
                                 request.facultyName
                               )}
                               className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"

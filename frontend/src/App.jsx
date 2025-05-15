@@ -29,14 +29,14 @@ import ViewStudent from "./Pages/ViewStudents";
 import ViewAttendance from "./Pages/ViewAttendance";
 import ManageSchoolYear from "./Admin/ManageSchoolYear";
 import { Toaster } from 'react-hot-toast';
-
+import { SocketProvider } from "./context/SocketContext";
 
 
 function App() {
   const [count, setCount] = useState(0);
 
   return (
-
+    <SocketProvider>
       <BrowserRouter>
         <Toaster
           position="top-center"
@@ -142,7 +142,7 @@ function App() {
           />
         </Routes>
       </BrowserRouter>
-
+    </SocketProvider>
   );
 }
 
