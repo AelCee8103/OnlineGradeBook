@@ -187,16 +187,14 @@ const ManageClasses = () => {
                 }
                 disabled={loading}
               >
-                {loading ? "Loading..." : "Create Advisory Class"}
+                {loading ? "Loading..." : "Create Class Section"}
               </button>
             </div>
 
             {/* Create Modal */}
             <dialog id="create_modal" className="modal">
               <div className="modal-box max-w-md">
-                <h3 className="font-bold text-lg mb-5">
-                  Create Advisory Class
-                </h3>
+                <h3 className="font-bold text-lg mb-5">Create Class Section</h3>
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div>
                     <label className="label">
@@ -365,14 +363,6 @@ const ManageClasses = () => {
                           {classItem.Section || "-"}
                         </td>
                         <td className="px-4 py-2">
-                          <button
-                            onClick={() =>
-                              handleViewStudents(classItem.ClassID)
-                            }
-                            className="bg-green-600 text-white px-3 py-1 mr-2 rounded hover:bg-green-700 text-sm"
-                          >
-                            View
-                          </button>
                           <button
                             onClick={() => handleEdit(classItem)}
                             className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"

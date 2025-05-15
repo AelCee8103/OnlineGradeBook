@@ -518,26 +518,20 @@ router.get("/students-in-advisory/:advisoryID", async (req, res) => {
 // Route to Add a Subject
 router.post("/admin-manage-subject", async (req, res) => {
   try {
-    const db = await connectToDatabase(); // Connect to database
-
-    const { SubjectID, SubjectName } = req.body;
-
-    // Validate input fields
-    if (!SubjectID || !SubjectName) {
-      return res.status(400).json({ error: "All fields are required." });
+    const db = await connectToDatabase();
+    const { SubjectName } = req.body;
+    if (!SubjectName) {
+      return res.status(400).json({ error: "Subject name is required" });
     }
-
-    // SQL Query
-    const sql = "INSERT INTO subjects (SubjectID, SubjectName) VALUES (?, ?)";
-    const [result] = await db.query(sql, [SubjectID, SubjectName]);
-
-
-    // Respond with success
-    res.status(201).json({ message: "Subject added successfully!", subjectID: result.insertId });
-
+    // Insert subject, SubjectID is auto-incremented
+    const [result] = await db.query(
+      "INSERT INTO subjects (SubjectName) VALUES (?)",
+      [SubjectName]
+    );
+    res.status(201).json({ SubjectID: result.insertId, SubjectName });
   } catch (err) {
     console.error("Error adding subject:", err);
-    res.status(500).json({ error: "Internal server error." });
+    res.status(500).json({ error: "Failed to add subject" });
   }
 });
 
@@ -2137,7 +2131,7 @@ router.put('/admin-archive-faculty/restore/:facultyId', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Faculty not found' });
     }
     res.json({ success: true, message: 'Faculty restored successfully' });
-  } catch (error) {
+  } catch ( error) {
     res.status(500).json({ success: false, message: 'Failed to restore faculty' });
   }
 });

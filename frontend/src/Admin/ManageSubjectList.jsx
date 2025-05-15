@@ -12,7 +12,6 @@ const ManageSubjectList = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [subjects, setSubjects] = useState([]);
   const [newSubject, setNewSubject] = useState({
-    SubjectID: "",
     SubjectName: "",
   });
   const Navigate = useNavigate();
@@ -50,13 +49,13 @@ const ManageSubjectList = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      toast.success("Subject added successfully! ✅");  // ✅ Show success toast
-      document.getElementById("subject_modal").close(); // Close modal
-      fetchSubjects(); // Refresh list
-      setNewSubject({ SubjectCode: "", SubjectName: ""}); // Reset form
+      toast.success("Subject added successfully! ✅");
+      document.getElementById("subject_modal").close();
+      fetchSubjects();
+      setNewSubject({ SubjectName: "" }); // Reset form
     } catch (error) {
       console.error("Error adding subject:", error);
-      toast.error("Failed to add subject ❌");  // ✅ Show error toast
+      toast.error("Failed to add subject ❌");
     }
   };
 
@@ -135,23 +134,13 @@ const ManageSubjectList = () => {
           <form onSubmit={handleAddSubject} className="space-y-3">
             <input
               type="text"
-              name="SubjectID"
-              value={newSubject.SubjectID}
-              onChange={handleSubjectChange}
-              placeholder="Subject Code"
-              className="input input-bordered w-full"
-              required
-            />
-            <input
-              type="text"
               name="SubjectName"
-              value={newSubject.subject_name}
+              value={newSubject.SubjectName}
               onChange={handleSubjectChange}
               placeholder="Subject Name"
               className="input input-bordered w-full"
               required
             />
-        
             <div className="modal-action">
               <button type="submit" className="btn bg-green-700 text-white">Submit</button>
               <button type="button" className="btn" onClick={() => document.getElementById("subject_modal").close()}>Close</button>
