@@ -16,7 +16,10 @@ const ManageSubjectList = () => {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editSubject, setEditSubject] = useState({ SubjectID: "", SubjectName: "" });
+  const [editSubject, setEditSubject] = useState({
+    SubjectID: "",
+    SubjectName: "",
+  });
   const [editInput, setEditInput] = useState("");
   const [originalEditName, setOriginalEditName] = useState("");
   const Navigate = useNavigate();
@@ -106,7 +109,8 @@ const ManageSubjectList = () => {
     const isDuplicate = subjects.some(
       (subject) =>
         subject.SubjectID !== editSubject.SubjectID &&
-        subject.SubjectName.trim().toLowerCase() === editInput.trim().toLowerCase()
+        subject.SubjectName.trim().toLowerCase() ===
+          editInput.trim().toLowerCase()
     );
     if (isDuplicate) {
       toast.error("Subject name already exists!");
@@ -278,12 +282,14 @@ const ManageSubjectList = () => {
                 type="submit"
                 className="btn bg-green-700 text-white"
                 disabled={
-                  editInput.trim().toLowerCase() === originalEditName.trim().toLowerCase() ||
+                  editInput.trim().toLowerCase() ===
+                    originalEditName.trim().toLowerCase() ||
                   editInput.trim() === "" ||
                   subjects.some(
                     (subject) =>
                       subject.SubjectID !== editSubject.SubjectID &&
-                      subject.SubjectName.trim().toLowerCase() === editInput.trim().toLowerCase()
+                      subject.SubjectName.trim().toLowerCase() ===
+                        editInput.trim().toLowerCase()
                   )
                 }
               >
