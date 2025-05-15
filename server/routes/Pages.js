@@ -76,19 +76,27 @@ router.get("/faculty-subject-classes/:subjectCode/students", authenticateToken, 
 
 
 // Get all assigned subjects (subject classes) with advisory info
+// Update the GET query in the /admin-assign-subject route:
 router.get("/admin-assign-subject", async (req, res) => {
   try {
     const db = await connectToDatabase();
     const [assignments] = await db.query(`
       SELECT 
-        a.SubjectCode AS subjectCode, a.subjectID, a.FacultyID, a.advisoryID, a.yearID,
-        s.SubjectName AS subjectName,
-        CONCAT(f.FirstName, ' ', f.MiddleName, ' ', f.LastName) AS facultyName,
-        c.Grade AS grade, c.Section AS section,
-        sy.year AS schoolYear
+        a.SubjectCode as subjectCode,
+        a.subjectID,
+        a.FacultyID,
+        a.advisoryID,
+        a.yearID,
+        s.SubjectName as subjectName,
+        f.LastName as facultyLastName,
+        f.FirstName as facultyFirstName,
+        CONCAT(f.LastName, ', ', f.FirstName) as facultyName,
+        c.Grade as grade,
+        c.Section as section,
+        sy.year as schoolYear
       FROM assignsubject a
       JOIN subjects s ON a.subjectID = s.SubjectID
-      JOIN faculty f ON a.FacultyID = f.FacultyID
+      JOIN faculty f ON a.FacultyID = f.FacultyID 
       JOIN advisory adv ON a.advisoryID = adv.advisoryID
       JOIN classes c ON adv.classID = c.ClassID
       JOIN schoolyear sy ON a.yearID = sy.school_yearID
