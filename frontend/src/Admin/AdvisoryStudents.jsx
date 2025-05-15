@@ -9,53 +9,75 @@ const AdvisoryStudents = () => {
   const [students, setStudents] = useState([]);
   const [filteredStudents, setFilteredStudents] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [advisoryInfo, setAdvisoryInfo] = useState({});
+  const [advisoryInfo, setAdvisoryInfo] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
   const recordsPerPage = 5;
 
   useEffect(() => {
-    const fetchStudents = async () => {
+    const fetchAdvisoryData = async () => {
       try {
         const token = localStorage.getItem("token");
-        const studentRes = await axios.get(
-          `http://localhost:3000/Pages/students-in-advisory/${advisoryID}`,
+        if (!token) {
+          navigate("/admin-login");
+          return;
+        }
+
+        // Fetch current school year (status = 1)
+        const syRes = await axios.get(
+          "http://localhost:3000/Pages/schoolyear",
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const currentSY = (syRes.data || []).find((sy) => sy.status === 1);
+
+        // Fetch advisory and students
+        const response = await axios.get(
+          `http://localhost:3000/Pages/admin-view-students/${advisoryID}`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
-        setStudents(studentRes.data);
-        setFilteredStudents(studentRes.data);
-      } catch (error) {
-        console.error("Error fetching students:", error);
-      }
-    };
 
-    const fetchAdvisoryInfo = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        // Use the specific endpoint for a single advisory
-        const advisoryRes = await axios.get(
-          `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        if (!response.data.success) {
+          throw new Error(response.data.error || "Invalid response format");
+        }
+
+        // Only show students with Status === 1 (not archived)
+        const activeStudents = (response.data.students || []).filter(
+          (student) => student.Status === 1
         );
 
-        if (advisoryRes.data) {
-          setAdvisoryInfo(advisoryRes.data);
-        } else {
-          console.warn("Advisory not found");
-          setAdvisoryInfo(null);
-        }
+        setAdvisoryInfo({
+          ...response.data.advisoryInfo,
+          SchoolYear: currentSY ? currentSY.year : "N/A",
+        });
+
+        setStudents(activeStudents);
+        setFilteredStudents(activeStudents);
+        setIsLoading(false);
       } catch (error) {
-        console.error("Error fetching advisory info:", error);
-        setAdvisoryInfo(null);
+        let errorMsg = "Failed to load data";
+        if (error.response) {
+          errorMsg = error.response.data?.error || errorMsg;
+        } else {
+          errorMsg += `: ${error.message}`;
+        }
+        setError(errorMsg);
+        setIsLoading(false);
+        setAdvisoryInfo({
+          Grade: "Error",
+          Section: advisoryID,
+          facultyName: "Check console",
+          SchoolYear: "N/A",
+        });
       }
     };
 
-    fetchStudents();
-    fetchAdvisoryInfo();
-  }, [advisoryID]);
+    fetchAdvisoryData();
+  }, [advisoryID, navigate]);
 
   useEffect(() => {
     const query = searchQuery.toLowerCase();
@@ -67,6 +89,7 @@ const AdvisoryStudents = () => {
       );
     });
     setFilteredStudents(filtered);
+    setCurrentPage(1); // Reset to first page when searching
   }, [searchQuery, students]);
 
   const indexOfLastRecord = currentPage * recordsPerPage;
@@ -88,6 +111,22 @@ const AdvisoryStudents = () => {
       setCurrentPage(currentPage - 1);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen bg-gray-100">
+        <div className="m-auto">Loading...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-screen bg-gray-100">
+        <div className="m-auto text-red-500">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -120,25 +159,27 @@ const AdvisoryStudents = () => {
 
           {advisoryInfo ? (
             <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <p className="font-semibold">Grade & Section:</p>
-                <p>{advisoryInfo.Grade} - {advisoryInfo.Section}</p>
-              </div>
-              <div>
-                <p className="font-semibold">Class Advisor:</p>
-                <p>{advisoryInfo.facultyName}</p>
-              </div>
-              <div>
-                <p className="font-semibold">School Year:</p>
-                <p>{advisoryInfo.SchoolYear}</p>
-              </div>
-              <div>
-                <p className="font-semibold">Number of Students:</p>
-                <p>{students.length}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="font-semibold">Grade & Section:</p>
+                  <p>
+                    {advisoryInfo.Grade} - {advisoryInfo.Section}
+                  </p>
+                </div>
+                <div>
+                  <p className="font-semibold">Class Advisor:</p>
+                  <p>{advisoryInfo.facultyName}</p>
+                </div>
+                <div>
+                  <p className="font-semibold">School Year:</p>
+                  <p>{advisoryInfo.SchoolYear}</p>
+                </div>
+                <div>
+                  <p className="font-semibold">Number of Students:</p>
+                  <p>{students.length}</p>
+                </div>
               </div>
             </div>
-          </div>
           ) : (
             <div className="bg-white shadow rounded-lg p-4 mb-6 max-w-screen-lg mx-auto">
               <p className="text-red-500">
@@ -194,7 +235,7 @@ const AdvisoryStudents = () => {
                 ) : (
                   <tr>
                     <td colSpan="4" className="text-center py-4">
-                      No matching students found.
+                      No students found in this advisory class.
                     </td>
                   </tr>
                 )}
