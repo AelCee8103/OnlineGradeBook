@@ -2816,6 +2816,43 @@ router.put('/admin-manage-faculty/archive/:facultyID', async (req, res) => {
   }
 });
 
+// Add after your other /admin-assign-subject routes
+
+router.put("/admin-assign-subject/:advisoryID/:subjectCode", async (req, res) => {
+  const { advisoryID, subjectCode } = req.params;
+  const { subjectID, FacultyID, school_yearID } = req.body;
+
+  try {
+    const db = await connectToDatabase();
+
+    // Update the assignment
+    const [result] = await db.query(
+      `UPDATE assignsubject 
+       SET subjectID = ?, FacultyID = ?, yearID = ?
+       WHERE advisoryID = ? AND SubjectCode = ?`,
+      [subjectID, FacultyID, school_yearID, advisoryID, subjectCode]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: "Subject assignment not found" 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      message: "Subject assignment updated successfully" 
+    });
+
+  } catch (error) {
+    console.error("Error updating subject assignment:", error);
+    res.status(500).json({ 
+      success: false, 
+      error: "Failed to update subject assignment" 
+    });
+  }
+});
 
 
 export default router;
