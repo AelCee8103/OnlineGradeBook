@@ -233,7 +233,18 @@ const ManageSubjectList = () => {
               required
             />
             <div className="modal-action">
-              <button type="submit" className="btn bg-green-700 text-white">
+              <button
+                type="submit"
+                className="btn bg-green-700 text-white"
+                disabled={
+                  newSubject.SubjectName.trim() === "" ||
+                  subjects.some(
+                    (subject) =>
+                      subject.SubjectName.trim().toLowerCase() ===
+                      newSubject.SubjectName.trim().toLowerCase()
+                  )
+                }
+              >
                 Submit
               </button>
               <button
