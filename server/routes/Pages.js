@@ -1769,145 +1769,91 @@ router.get('/admin/validation-requests', authenticateToken, async (req, res) => 
   }
 });
 
-// Improve the admin/process-validation endpoint
-router.post('/admin/process-validation', authenticateToken, async (req, res) => {
+router.post('/admin/process-validation', async (req, res) => {
+  const { requestID, action } = req.body; // action: 'approve' or 'reject'
+
   try {
-    // Verify this is an admin request first
-    if (!req.user || !req.adminID) {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied. Only administrators can process validation requests."
-      });
-    }
-    const { requestID, action } = req.body;
-    const adminID = req.user.adminID;
-    if (!requestID || !action || !adminID) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required information: requestID, action, or administrator identity"
-      });
-    }
-    if (action !== 'approve' && action !== 'reject') {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid action. Must be 'approve' or 'reject'."
-      });
-    }
-    
     const db = await connectToDatabase();
-    
-    // Check if the request exists
-    const [request] = await db.query(
-      `SELECT vr.*, f.FacultyID, f.FirstName, f.LastName
-       FROM validation_request vr
-       JOIN faculty f ON vr.facultyID = f.FacultyID
-       WHERE vr.requestID = ?`,
-      [requestID]
-    );
-    
-    if (request.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "Validation request not found"
-      });
-    }
-    
-    // Check if the request is already processed
-    if (request[0].statusID !== 0) {
-      return res.status(400).json({
-        success: false,
-        message: `This request has already been ${request[0].statusID === 1 ? 'approved' : 'rejected'}`
-      });
-    }
-    
-    // Set status based on action (1 = approve, 2 = reject)
-    const newStatusID = action === 'approve' ? 1 : 2;
-      // Update the validation request - only update statusID
+    const statusID = action === 'approve' ? 1 : 2;
+
     await db.query(
-      `UPDATE validation_request 
-       SET statusID = ?
-       WHERE requestID = ?`,
-      [newStatusID, requestID]
+      `UPDATE validation_request SET statusID = ? WHERE requestID = ?`,
+      [statusID, requestID]
     );
-    
-    // Faculty info for notification
-    const facultyID = request[0].facultyID;
-    const facultyName = `${request[0].LastName}, ${request[0].FirstName}`;
-    
-    // Get the io instance from the request
-    const io = req.app.get('socketio');
-    
-    // If socket.io is available, send real-time notification to faculty
-    if (io) {
-      io.to(`faculty_${facultyID}`).emit('validationResponseReceived', {
-        requestID,
-        status: action,
-        message: action === 'approve' 
-          ? 'Your grade validation request has been approved.'
-          : 'Your grade validation request has been rejected.',
-        timestamp: new Date().toISOString()
-      });
-      
-      // Also notify all admins about the action
-      io.to('admins').emit('requestProcessed', {
-        requestID,
-        action,
-        facultyID,
-        facultyName,
-        processedBy: adminID,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    res.status(200).json({
-      success: true,
-      message: `Request ${action}d successfully`,
-      facultyID,
-      facultyName
+
+    res.json({ 
+      success: true, 
+      message: `Request ${action === 'approve' ? 'approved' : 'rejected'}` 
     });
-    
+
   } catch (error) {
     console.error("Error processing validation:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to process validation request",
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: "Failed to process request" });
   }
 });
 
-
 // Simplified validation request route
 router.post("/faculty/validate-grades", authenticateToken, async (req, res) => {
-  const { advisoryID } = req.body;
-  const facultyID = req.user.facultyID;
   const db = await connectToDatabase();
+  
+  try {
+    const { advisoryID } = req.body;
+    const facultyID = req.user.facultyID;
+    const requestDate = new Date().toISOString();
 
-  // Prevent duplicate pending requests
-  const [existing] = await db.query(
-    `SELECT requestID FROM validation_request WHERE facultyID = ? AND advisoryID = ? AND statusID = 0`,
-    [facultyID, advisoryID]
-  );
-  if (existing.length > 0) {
-    return res.status(409).json({
+    // First check for existing pending requests
+    const [existingRequests] = await db.query(
+      `SELECT COUNT(*) as count FROM validation_request 
+       WHERE advisoryID = ? AND facultyID = ? AND statusID = 0`,
+      [advisoryID, facultyID]
+    );
+
+    if (existingRequests[0].count > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "You already have a pending validation request for this advisory class"
+      });
+    }
+
+    // Verify faculty's advisory assignment
+    const [advisory] = await db.query(
+      'SELECT advisoryID FROM advisory WHERE advisoryID = ? AND facultyID = ?',
+      [advisoryID, facultyID]
+    );
+
+    if (advisory.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized for this advisory class"
+      });
+    }
+
+    await db.query('START TRANSACTION');
+
+    // Create a single validation request for the advisory class
+    await db.query(
+      `INSERT INTO validation_request 
+       (facultyID, advisoryID, statusID, requestDate) 
+       VALUES (?, ?, 0, ?)`,
+      [facultyID, advisoryID, requestDate]
+    );
+
+    await db.query('COMMIT');
+
+    res.json({
+      success: true,
+      message: "Validation request created successfully",
+      requestDate: requestDate
+    });
+
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error("Error:", error);
+    res.status(500).json({
       success: false,
-      message: "A validation request is already pending for this advisory. Please wait for it to be processed before submitting another.",
-      requestID: existing[0].requestID
+      message: "Failed to create validation request"
     });
   }
-
-  // Insert new request
-  const [result] = await db.query(
-    `INSERT INTO validation_request (advisoryID, facultyID, statusID, requestDate)
-     VALUES (?, ?, 0, NOW())`,
-    [advisoryID, facultyID]
-  );
-
-  res.status(201).json({
-    success: true,
-    message: "Validation request submitted successfully.",
-    requestID: result.insertId
-  });
 });
 
 // Add this route before your existing validation route
