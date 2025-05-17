@@ -238,13 +238,19 @@ const ManageSchoolYear = () => {
                 Current Quarter: {activeQuarter || "Loading..."}
               </p>
               <button
-                className="mb-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-yellow-600"
+                className={`mb-4 px-4 py-2 rounded ${
+                  activeQuarter >= 4
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-green-500 text-white hover:bg-yellow-600"
+                }`}
                 onClick={() =>
                   document.getElementById("next_quarter_modal").showModal()
                 }
                 disabled={activeQuarter >= 4}
               >
-                Set to Next Quarter
+                {activeQuarter >= 4
+                  ? "Already at Quarter 4"
+                  : "Set to Next Quarter"}
               </button>
 
               <button
