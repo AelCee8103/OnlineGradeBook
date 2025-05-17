@@ -9,7 +9,7 @@ import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { Dialog } from "@headlessui/react";
 import { Toaster, toast } from "react-hot-toast";
-import { io } from "socket.io-client";  
+import { io } from "socket.io-client";
 import NotificationDropdown from "../Components/NotificationDropdown";
 
 const ClassAdvisory = () => {
@@ -20,7 +20,7 @@ const ClassAdvisory = () => {
     section: "",
     advisorName: "Not Assigned",
     schoolYear: "",
-    advisoryID: null
+    advisoryID: null,
   });
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,10 +31,9 @@ const ClassAdvisory = () => {
   const [selectedStudentInfo, setSelectedStudentInfo] = useState(null);
   const [lastRequestDate, setLastRequestDate] = useState(null);
   const [validationStatus, setValidationStatus] = useState({
-    hasPendingRequest: false,
-    isApproved: false,
-    isRejected: false,
-    lastRequestDate: null
+    status: null, // "pending", "approved", "rejected", or null
+    lastRequestDate: null,
+    activeQuarter: null,
   });
   const [socket, setSocket] = useState(null);
   const studentsPerPage = 5;
@@ -59,7 +58,7 @@ const ClassAdvisory = () => {
           grade: "",
           section: "",
           advisorName: data.advisorName || "Not Assigned",
-          advisoryID: null
+          advisoryID: null,
         });
         setStudents([]);
         setError("No advisory class assigned to you");
@@ -73,7 +72,7 @@ const ClassAdvisory = () => {
         grade: data.grade,
         section: data.section,
         advisorName: data.advisorName,
-        advisoryID: data.advisoryID
+        advisoryID: data.advisoryID,
       });
       setStudents(data.students || []);
     } catch (err) {
@@ -101,10 +100,9 @@ const ClassAdvisory = () => {
 
       if (response.data.success) {
         setValidationStatus({
-          hasPendingRequest: response.data.hasPendingRequest,
-          isApproved: response.data.status === 'approved',
-          isRejected: response.data.status === 'rejected',
-          lastRequestDate: response.data.lastRequestDate
+          status: response.data.status, // "pending", "approved", "rejected", or null
+          lastRequestDate: response.data.lastRequestDate,
+          activeQuarter: response.data.activeQuarter,
         });
       }
     } catch (error) {
@@ -125,44 +123,48 @@ const ClassAdvisory = () => {
 
   useEffect(() => {
     // Initialize socket connection
-    const newSocket = io('http://localhost:3000', {
+    const newSocket = io("http://localhost:3000", {
       withCredentials: true,
-      transports: ['websocket']
+      transports: ["websocket"],
     });
 
     // Get faculty information from localStorage
-    const facultyID = localStorage.getItem('facultyID');
-    const facultyName = localStorage.getItem('facultyName');
+    const facultyID = localStorage.getItem("facultyID");
+    const facultyName = localStorage.getItem("facultyName");
 
     if (facultyID) {
       // Authenticate socket connection
-      newSocket.emit('authenticate', {
-        userType: 'faculty',
+      newSocket.emit("authenticate", {
+        userType: "faculty",
         userID: facultyID,
-        facultyName: facultyName
+        facultyName: facultyName,
       });
 
       // Listen for validation response from admin
-      newSocket.on('validationResponseReceived', (data) => {
+      newSocket.on("validationResponseReceived", (data) => {
         const { status, message, requestID } = data;
-        
+
         console.log("Received validation response:", data);
-        
+
         // Update validation status - use the correct status comparison
-        setValidationStatus(prev => ({
+        setValidationStatus((prev) => ({
           ...prev,
           hasPendingRequest: false,
-          isApproved: status === 'approve', // Not 'approved'
-          isRejected: status === 'reject', // Not 'rejected'
-          lastRequestDate: new Date().toISOString()
+          isApproved: status === "approve", // Not 'approved'
+          isRejected: status === "reject", // Not 'rejected'
+          lastRequestDate: new Date().toISOString(),
         }));
 
         // Show detailed notification with the correct status check
-        const notificationTitle = status === 'approve' ? 'Validation Approved!' : 'Validation Rejected';
-        const notificationClass = status === 'approve' ? 'bg-green-600' : 'bg-red-600';
-        
+        const notificationTitle =
+          status === "approve" ? "Validation Approved!" : "Validation Rejected";
+        const notificationClass =
+          status === "approve" ? "bg-green-600" : "bg-red-600";
+
         toast.custom(
-          <div className={`${notificationClass} text-white p-4 rounded shadow-lg`}>
+          <div
+            className={`${notificationClass} text-white p-4 rounded shadow-lg`}
+          >
             <p className="font-bold">{notificationTitle}</p>
             <p>{message}</p>
             <p className="text-sm mt-1">
@@ -173,7 +175,7 @@ const ClassAdvisory = () => {
         );
 
         // Refresh advisory data if approved
-        if (status === 'approve') {
+        if (status === "approve") {
           fetchAdvisoryData();
         }
       });
@@ -184,39 +186,39 @@ const ClassAdvisory = () => {
     // Cleanup on unmount
     return () => {
       if (newSocket) {
-        newSocket.off('validationResponseReceived');
-        newSocket.off('validationStatusUpdate');
-        newSocket.off('connect_error');
+        newSocket.off("validationResponseReceived");
+        newSocket.off("validationStatusUpdate");
+        newSocket.off("connect_error");
         newSocket.disconnect();
       }
     };
   }, []);
-  
+
   // Remove the duplicate useEffect that's also listening for 'validationResponseReceived'
   // Instead, modify this useEffect to handle additional socket events
   useEffect(() => {
     if (!socket) return;
 
     // Get faculty information from localStorage
-    const facultyID = localStorage.getItem('facultyID');
+    const facultyID = localStorage.getItem("facultyID");
 
     // Handle socket events here
     const handleStatusUpdate = (data) => {
       if (data.advisoryID === advisoryData.advisoryID) {
-        setValidationStatus(prev => ({
+        setValidationStatus((prev) => ({
           ...prev,
           hasPendingRequest: false,
-          isApproved: data.status === 'approve',
-          isRejected: data.status === 'reject',
-          lastRequestDate: new Date(data.timestamp)
+          isApproved: data.status === "approve",
+          isRejected: data.status === "reject",
+          lastRequestDate: new Date(data.timestamp),
         }));
       }
     };
 
-    socket.on('validationStatusUpdate', handleStatusUpdate);
+    socket.on("validationStatusUpdate", handleStatusUpdate);
 
     return () => {
-      socket.off('validationStatusUpdate', handleStatusUpdate);
+      socket.off("validationStatusUpdate", handleStatusUpdate);
     };
   }, [socket, advisoryData.advisoryID]);
 
@@ -240,8 +242,8 @@ const ClassAdvisory = () => {
       console.error("Error fetching student details:", error);
       toast.error("Failed to fetch student details", {
         duration: 4000,
-        position: 'top-center',
-        icon: '❌'
+        position: "top-center",
+        icon: "❌",
       });
     }
   };
@@ -261,7 +263,7 @@ const ClassAdvisory = () => {
 
       if (response.data.success) {
         // Emit socket event for real-time notification
-        socket.emit('validationRequest', {
+        socket.emit("validationRequest", {
           requestID: response.data.requestID,
           facultyID: facultyID,
           facultyName: facultyName,
@@ -269,21 +271,24 @@ const ClassAdvisory = () => {
           section: advisoryData.section,
           advisoryID: advisoryData.advisoryID,
           schoolYear: advisoryData.schoolYear,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
 
-        // Update local state
-        setValidationStatus(prev => ({
+        // Update local validation status immediately
+        setValidationStatus((prev) => ({
           ...prev,
-          hasPendingRequest: true,
-          lastRequestDate: new Date()
+          status: "pending",
+          lastRequestDate: new Date(),
         }));
-        
+
         // Show detailed confirmation message
         toast.success(
           <div>
             <p className="font-bold">Validation Request Sent</p>
-            <p>Grades for Grade {advisoryData.grade} - {advisoryData.section} have been submitted for validation.</p>
+            <p>
+              Grades for Grade {advisoryData.grade} - {advisoryData.section}{" "}
+              have been submitted for validation.
+            </p>
             <p className="text-sm mt-1">Waiting for admin approval.</p>
           </div>,
           { duration: 5000 }
@@ -300,24 +305,27 @@ const ClassAdvisory = () => {
     if (error.response?.status === 403) {
       toast.error("You don't have permission to perform this action");
       navigate("/faculty-login");
-    } else if (error.response?.status === 400 && error.response.data.message.includes("pending")) {
+    } else if (
+      error.response?.status === 400 &&
+      error.response.data.message.includes("pending")
+    ) {
       toast.error("You already have a pending validation request");
     } else {
       toast.error(
-        error.response?.data?.message || 
-        error.message || 
-        "Failed to submit grades for validation"
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to submit grades for validation"
       );
     }
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(dateString).toLocaleString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -374,16 +382,16 @@ const ClassAdvisory = () => {
   return (
     <div className="flex h-screen bg-gray-100">
       <Toaster
-      position="top-center"
-      reverseOrder={false}
-      toastOptions={{
-        duration: 4000,
-        style: {
-          background: '#363636',
-          color: '#fff',
-        },
-      }}
-    />
+        position="top-center"
+        reverseOrder={false}
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: "#363636",
+            color: "#fff",
+          },
+        }}
+      />
       <FacultySidePanel
         isSidebarOpen={isSidebarOpen}
         toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -424,40 +432,57 @@ const ClassAdvisory = () => {
                 </p>
               </div>
             )}
-           <div className="mt-4 border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-500">Validation Status</p>
-                    <p className="text-lg font-semibold">
-                      {validationStatus.hasPendingRequest ? (
-                        <span className="text-yellow-600">Pending Approval</span>
-                      ) : validationStatus.isApproved ? (
-                        <span className="text-green-600">Approved</span>
-                      ) : validationStatus.isRejected ? (
-                        <span className="text-red-600">Rejected</span>
-                      ) : (
-                        <span className="text-blue-600">Ready for Validation</span>
-                      )}
-                    </p>
-                    {validationStatus.lastRequestDate && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        Last Request: {formatDate(validationStatus.lastRequestDate)}
-                      </p>
+            <div className="mt-4 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Validation Status</p>
+                  <p className="text-lg font-semibold">
+                    {validationStatus.status === "pending" && (
+                      <span className="text-yellow-600">Pending</span>
                     )}
-                  </div>
-                  <button 
-                    onClick={handleValidateGrades}
-                    disabled={isValidating || validationStatus.hasPendingRequest || validationStatus.isApproved}
-                    className={`px-4 py-2 rounded-md transition ${
-                      isValidating || validationStatus.hasPendingRequest || validationStatus.isApproved
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-green-700 hover:bg-green-800 text-white"
-                    }`}
-                  >
-                    {isValidating ? "Submitting..." : "Validate Grades"}
-                  </button>
+                    {validationStatus.status === "approved" && (
+                      <span className="text-green-600">Approved</span>
+                    )}
+                    {validationStatus.status === "rejected" && (
+                      <span className="text-red-600">Rejected</span>
+                    )}
+                    {!validationStatus.status &&
+                      (validationStatus.activeQuarter === 4 ? (
+                        <span className="text-blue-600">
+                          Ready for Validation
+                        </span>
+                      ) : (
+                        <span className="text-gray-600">
+                          Not Ready for Validation
+                        </span>
+                      ))}
+                  </p>
+                  {validationStatus.lastRequestDate && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      Last Request:{" "}
+                      {formatDate(validationStatus.lastRequestDate)}
+                    </p>
+                  )}
                 </div>
+                <button
+                  onClick={handleValidateGrades}
+                  disabled={
+                    validationStatus.activeQuarter !== 4 ||
+                    validationStatus.status === "pending" ||
+                    validationStatus.status === "approved"
+                  }
+                  className={`px-4 py-2 rounded-md transition ${
+                    validationStatus.activeQuarter !== 4 ||
+                    validationStatus.status === "pending" ||
+                    validationStatus.status === "approved"
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-green-700 hover:bg-green-800 text-white"
+                  }`}
+                >
+                  {isValidating ? "Submitting..." : "Validate Grades"}
+                </button>
               </div>
+            </div>
           </div>
 
           <div className="bg-white rounded-xl shadow border border-gray-200">
@@ -509,17 +534,23 @@ const ClassAdvisory = () => {
                             student.MiddleName
                           )}
                         </td>
-                        <td className="text-sm px-6 py-2">{student.StudentID}</td>
+                        <td className="text-sm px-6 py-2">
+                          {student.StudentID}
+                        </td>
                         <td className="px-6 py-2 flex justify-center gap-2">
                           <button
-                            onClick={() => fetchStudentDetails(student.StudentID)}
+                            onClick={() =>
+                              fetchStudentDetails(student.StudentID)
+                            }
                             className="bg-blue-500 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded-md"
                           >
                             View
                           </button>
                           <button
                             onClick={() =>
-                              navigate(`/faculty/students/${student.StudentID}/grades`)
+                              navigate(
+                                `/faculty/students/${student.StudentID}/grades`
+                              )
                             }
                             className="bg-green-500 hover:bg-green-700 text-white text-sm px-3 py-1 rounded-md"
                           >
@@ -530,7 +561,10 @@ const ClassAdvisory = () => {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="4" className="text-center py-4 text-gray-500">
+                      <td
+                        colSpan="4"
+                        className="text-center py-4 text-gray-500"
+                      >
                         No students found
                       </td>
                     </tr>
@@ -552,13 +586,16 @@ const ClassAdvisory = () => {
                   >
                     Previous
                   </button>
-                  
+
                   <span className="text-sm text-gray-700">
-                    Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+                    Page <strong>{currentPage}</strong> of{" "}
+                    <strong>{totalPages}</strong>
                   </span>
-                  
+
                   <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
                     disabled={currentPage === totalPages}
                     className={`px-4 py-2 text-sm rounded-md border ${
                       currentPage === totalPages

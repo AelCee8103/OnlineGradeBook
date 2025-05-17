@@ -2571,10 +2571,16 @@ router.put('/admin-manage-students/archive/:studentID', async (req, res) => {
 router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
   const { advisoryID } = req.params;
   const facultyID = req.user.id || req.user.facultyID;
-  
   try {
     const db = await connectToDatabase();
 
+    // Get current active quarter
+    const [[activeQuarterRow]] = await db.query(
+      "SELECT quarter FROM quarter WHERE status = 1 LIMIT 1"
+    );
+    const activeQuarter = activeQuarterRow ? activeQuarterRow.quarter : null;
+
+    // Get latest validation request
     const [request] = await db.query(
       `SELECT requestID, requestDate, statusID,
         CASE 
@@ -2592,20 +2598,14 @@ router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, asyn
 
     res.json({
       success: true,
-      hasPendingRequest: request.length > 0 && request[0].statusID === 0,
       status: request.length > 0 ? request[0].status : null,
-      lastRequestDate: request.length > 0 ? request[0].requestDate : null
+      lastRequestDate: request.length > 0 ? request[0].requestDate : null,
+      activeQuarter
     });
-
   } catch (error) {
-    console.error("Error checking pending requests:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to check pending requests"
-    });
+    res.status(500).json({ success: false, message: "Failed to check pending requests" });
   }
 });
-
 
 
 // Prevent duplicate validation requests for the same faculty/advisory with pending status
@@ -2799,4 +2799,92 @@ router.post('/admin-manage-students/bulk', async (req, res) => {
   res.json({ success: true, addedStudents, errors });
 });
 
+
+// GET all validation requests for admin
+router.get('/admin/validation-requests', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    // Join with faculty, advisory, classes, and schoolyear for details
+    const [requests] = await db.query(`
+      SELECT 
+        vr.requestID,
+        vr.facultyID,
+        CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
+        adv.advisoryID,
+        c.Grade,
+        c.Section,
+        sy.year AS schoolYear,
+        vr.requestDate,
+        vr.statusID
+      FROM validation_request vr
+      JOIN faculty f ON vr.facultyID = f.FacultyID
+      JOIN advisory adv ON vr.advisoryID = adv.advisoryID
+      JOIN classes c ON adv.classID = c.ClassID
+      JOIN class_year cy ON adv.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE sy.status = 1
+      ORDER BY vr.requestDate DESC
+    `);
+
+    res.json({ success: true, requests });
+  } catch (error) {
+    console.error("Error fetching validation requests:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch validation requests" });
+  }
+});
+
+
+router.post("/admin/process-validation", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { requestID, action } = req.body;
+
+    // Validate input
+    if (!requestID || !["approve", "reject"].includes(action)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid request" });
+    }
+
+    // Set statusID: 1 = Approved, 2 = Rejected
+    const statusID = action === "approve" ? 1 : 2;
+
+    // Update the validation_request status
+    const [result] = await db.query(
+      "UPDATE validation_request SET statusID = ? WHERE requestID = ?",
+      [statusID, requestID]
+    );
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Request not found" });
+    }
+
+    res.json({ success: true, message: "Request processed" });
+  } catch (error) {
+    console.error("Error processing validation request:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to process request" });
+  }
+});
+
+
+// Promote to next school year (calls stored procedure)
+router.post("/admin/promote-school-year", async (req, res) => {
+  const { currentYearId, nextYearId } = req.body;
+  if (!currentYearId || !nextYearId) {
+    return res.status(400).json({ success: false, message: "Missing year IDs" });
+  }
+  try {
+    const db = await connectToDatabase();
+    // Call the stored procedure
+    await db.query("CALL promote_students_new_year(?, ?)", [nextYearId, currentYearId]);
+    res.json({ success: true, message: "Promotion completed" });
+  } catch (error) {
+    console.error("Error promoting school year:", error);
+    res.status(500).json({ success: false, message: error.message || "Promotion failed" });
+  }
+});
 export default router;
