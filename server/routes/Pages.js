@@ -2893,7 +2893,10 @@ router.post("/admin/promote-school-year", async (req, res) => {
 
     // 3. Delete all validation requests for the promoted year
     await db.query("DELETE FROM validation_request WHERE advisoryID IN (SELECT advisoryID FROM class_year WHERE yearID = ?)", [currentYearId]);
-
+    // 4. Reset all quarters to inactive
+    await db.query("UPDATE quarter SET status = 0");
+    // 5. Set quarter 1 as active
+    await db.query("UPDATE quarter SET status = 1 WHERE quarter = 1");
     res.json({ success: true, message: "Promotion completed, validation requests cleared, year marked as passed." });
   } catch (error) {
     console.error("Promotion error:", error);
