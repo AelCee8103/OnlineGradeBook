@@ -199,20 +199,21 @@ const AssignSubject = () => {
     }
 
     // Check for duplicate assignment
-    const alreadyAssigned = assignedSubjects.some(
-      (assignment) =>
-        assignment.advisoryID === newAssignedSubject.advisoryID &&
-        assignment.subjectID === newAssignedSubject.subjectID &&
-        assignment.yearID === currentYear.school_yearID &&
-        (!editingAssignment ||
-          assignment.SubjectCode !== editingAssignment.SubjectCode)
-    );
-
-    if (alreadyAssigned) {
-      toast.error(
-        "This subject is already assigned to this advisory class for the current school year."
+    // Only check for duplicates when adding, not editing
+    if (!editingAssignment) {
+      const alreadyAssigned = assignedSubjects.some(
+        (assignment) =>
+          assignment.advisoryID === newAssignedSubject.advisoryID &&
+          assignment.subjectID === newAssignedSubject.subjectID &&
+          assignment.yearID === currentYear.school_yearID
       );
-      return;
+
+      if (alreadyAssigned) {
+        toast.error(
+          "This subject is already assigned to this advisory class for the current school year."
+        );
+        return;
+      }
     }
 
     try {
@@ -288,10 +289,14 @@ const AssignSubject = () => {
     }
   };
 
+  // When editing, always use SubjectCode (capital S, capital C)
   const handleEditAssignment = (assignment) => {
-    setEditingAssignment(assignment);
+    setEditingAssignment({
+      ...assignment,
+      SubjectCode: assignment.SubjectCode || assignment.subjectCode,
+    });
     setNewAssignedSubject({
-      SubjectCode: assignment.SubjectCode || "",
+      SubjectCode: assignment.SubjectCode || assignment.subjectCode || "",
       subjectID: assignment.subjectID,
       FacultyID: assignment.FacultyID,
       advisoryID: assignment.advisoryID,

@@ -591,11 +591,8 @@ router.put("/admin-manage-subject/:id", async (req, res) => {
 
 router.post("/admin-assign-subject", async (req, res) => {
   try {
-
-
     const db = await connectToDatabase();
     const { subjectID, FacultyID, advisoryID, school_yearID } = req.body;
-
 
     // First check if this subject is already assigned to this advisory in current year
     const [existingAssignment] = await db.query(
@@ -618,58 +615,7 @@ router.post("/admin-assign-subject", async (req, res) => {
       `INSERT INTO assignsubject (subjectID, FacultyID, advisoryID, yearID) 
        VALUES (?, ?, ?, ?)`,
       [subjectID, FacultyID, advisoryID, school_yearID]
-
     );
-    if (classAssignment.length > 0) {
-      const assigned = classAssignment[0];
-      return res.status(409).json({
-        error: `This class (Grade ${assigned.Grade}-${assigned.Section}) has already been assigned to another faculty (${assigned.FirstName} ${assigned.LastName}).`
-      });
-    }
-
-    // 3. Check for duplicate assignment (by SubjectCode if provided, else by other fields)
-    let duplicateCheck;
-    if (SubjectCode) {
-      [duplicateCheck] = await db.query(
-        `SELECT * FROM assignsubject WHERE SubjectCode = ?`,
-        [SubjectCode]
-      );
-      if (duplicateCheck.length > 0) {
-        return res.status(409).json({
-          error: "This SubjectCode is already used. Please use a unique SubjectCode."
-        });
-      }
-    } else {
-      [duplicateCheck] = await db.query(
-        `SELECT * FROM assignsubject 
-         WHERE subjectID = ? AND FacultyID = ? AND yearID = ? AND advisoryID = ?`,
-        [subjectID, FacultyID, school_yearID, advisoryID]
-      );
-      if (duplicateCheck.length > 0) {
-        return res.status(409).json({
-          error: "This subject is already assigned to the selected faculty and advisory for the school year"
-        });
-      }
-    }
-
-    // Insert new assignment
-    
-    if (SubjectCode) {
-      [result] = await db.query(
-        `INSERT INTO assignsubject 
-         (SubjectCode, subjectID, FacultyID, yearID, advisoryID)
-         VALUES (?, ?, ?, ?, ?)`,
-        [SubjectCode, subjectID, FacultyID, school_yearID, advisoryID]
-      );
-    } else {
-      [result] = await db.query(
-        `INSERT INTO assignsubject 
-         (subjectID, FacultyID, yearID, advisoryID)
-         VALUES (?, ?, ?, ?)`,
-        [subjectID, FacultyID, school_yearID, advisoryID]
-      );
-    }
-
 
     res.status(201).json({
       success: true,
@@ -680,7 +626,6 @@ router.post("/admin-assign-subject", async (req, res) => {
   } catch (error) {
     console.error("Error assigning subject:", error);
     res.status(500).json({ error: "Failed to assign subject" });
-
   }
 });
 
@@ -1160,61 +1105,52 @@ router.get('/faculty/student/:studentID/grades/:subjectCode', authenticateToken,
 });
 
 // Get students by advisory class
-router.get("/admin-view-students/:advisoryID", authenticateToken, async (req, res) => {
-  const db = await connectToDatabase();
-  const { advisoryID } = req.params;
-
+router.get('/admin-view-students/:advisoryID', async (req, res) => {
   try {
-    // First get current school year
-    const [currentYear] = await db.query(
-      'SELECT school_yearID FROM schoolyear WHERE status = 1'
-    );
-
-    if (!currentYear.length) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "No active school year found" 
-      });
-    }
+    const db = await connectToDatabase();
+    const { advisoryID } = req.params;
 
     // Get advisory info
-    const [advisoryInfo] = await db.query(`
-      SELECT 
-        c.Grade,
-        c.Section,
+    const [advisoryRows] = await db.query(
+      `SELECT a.advisoryID, c.Grade, c.Section, f.LastName AS facultyName
+       FROM advisory a
+       JOIN classes c ON a.classID = c.ClassID
+       LEFT JOIN faculty f ON a.facultyID = f.FacultyID
+       WHERE a.advisoryID = ?`,
+      [advisoryID]
+    );
 
-        CONCAT(f.LastName, ', ', f.FirstName) as facultyName,
-        sy.year AS schoolYear
+    if (!advisoryRows.length) {
+      return res.status(404).json({ success: false, error: "Advisory not found" });
+    }
 
-      FROM advisory a
-      JOIN classes c ON a.classID = c.ClassID 
-      JOIN faculty f ON a.facultyID = f.FacultyID
-      WHERE a.advisoryID = ?
-    `, [advisoryID]);
+    const advisoryInfo = advisoryRows[0];
 
-    // Get students in the advisory for current year and active status
-    const [students] = await db.query(`
-      SELECT DISTINCT s.*
-      FROM students s
-      JOIN student_classes sc ON s.StudentID = sc.StudentID
-      WHERE sc.advisoryID = ? 
-      AND sc.school_yearID = ?
-      AND s.Status = 1
-      ORDER BY s.LastName, s.FirstName
-    `, [advisoryID, currentYear[0].school_yearID]);
+    // Get students in this advisory for the current school year
+    const [schoolYearRows] = await db.query(
+      "SELECT school_yearID FROM schoolyear WHERE status = 1"
+    );
+    if (!schoolYearRows.length) {
+      return res.status(400).json({ success: false, error: "No active school year" });
+    }
+    const school_yearID = schoolYearRows[0].school_yearID;
+
+    const [students] = await db.query(
+      `SELECT s.StudentID, s.LastName, s.FirstName, s.MiddleName, s.Status
+       FROM student_classes sc
+       JOIN students s ON sc.StudentID = s.StudentID
+       WHERE sc.advisoryID = ? AND sc.school_yearID = ?`,
+      [advisoryID, school_yearID]
+    );
 
     res.json({
       success: true,
-      advisoryInfo: advisoryInfo[0] || null,
-      students: students
+      advisoryInfo,
+      students
     });
-
   } catch (error) {
-    console.error('Error fetching students:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch students'
-    });
+    console.error("Error in /admin-view-students/:advisoryID:", error);
+    res.status(500).json({ success: false, error: "Server error", details: error.message });
   }
 });
 
@@ -1285,45 +1221,7 @@ router.put("/admin-manage-subject/:id", async (req, res) => {
 
 
 
-router.post("/admin-assign-subject", async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-    const { subjectID, FacultyID, advisoryID, school_yearID } = req.body;
 
-    // First check if this subject is already assigned to this advisory in current year
-    const [existingAssignment] = await db.query(
-      `SELECT * FROM assignsubject 
-       WHERE subjectID = ? 
-       AND advisoryID = ? 
-       AND yearID = ?`,
-      [subjectID, advisoryID, school_yearID]
-    );
-
-    // If there's an existing assignment, return error
-    if (existingAssignment.length > 0) {
-      return res.status(409).json({
-        error: "This subject is already assigned to this advisory class for the current school year"
-      });
-    }
-
-    // If no duplicate found, proceed with insert
-    const [result] = await db.query(
-      `INSERT INTO assignsubject (subjectID, FacultyID, advisoryID, yearID) 
-       VALUES (?, ?, ?, ?)`,
-      [subjectID, FacultyID, advisoryID, school_yearID]
-    );
-
-    res.status(201).json({
-      success: true,
-      message: "Subject assigned successfully",
-      assignmentId: result.insertId
-    });
-
-  } catch (error) {
-    console.error("Error assigning subject:", error);
-    res.status(500).json({ error: "Failed to assign subject" });
-  }
-});
 
 
 
@@ -1920,45 +1818,7 @@ router.put("/admin-manage-subject/:id", async (req, res) => {
 
 
 
-router.post("/admin-assign-subject", async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-    const { subjectID, FacultyID, advisoryID, school_yearID } = req.body;
 
-    // First check if this subject is already assigned to this advisory in current year
-    const [existingAssignment] = await db.query(
-      `SELECT * FROM assignsubject 
-       WHERE subjectID = ? 
-       AND advisoryID = ? 
-       AND yearID = ?`,
-      [subjectID, advisoryID, school_yearID]
-    );
-
-    // If there's an existing assignment, return error
-    if (existingAssignment.length > 0) {
-      return res.status(409).json({
-        error: "This subject is already assigned to this advisory class for the current school year"
-      });
-    }
-
-    // If no duplicate found, proceed with insert
-    const [result] = await db.query(
-      `INSERT INTO assignsubject (subjectID, FacultyID, advisoryID, yearID) 
-       VALUES (?, ?, ?, ?)`,
-      [subjectID, FacultyID, advisoryID, school_yearID]
-    );
-
-    res.status(201).json({
-      success: true,
-      message: "Subject assigned successfully",
-      assignmentId: result.insertId
-    });
-
-  } catch (error) {
-    console.error("Error assigning subject:", error);
-    res.status(500).json({ error: "Failed to assign subject" });
-  }
-});
 
 
 
@@ -2854,5 +2714,89 @@ router.put("/admin-assign-subject/:advisoryID/:subjectCode", async (req, res) =>
   }
 });
 
+// Bulk upload students
+router.post('/admin-manage-students/bulk', async (req, res) => {
+  const db = await connectToDatabase();
+  const { students } = req.body;
+  if (!Array.isArray(students) || students.length === 0) {
+    return res.status(400).json({ success: false, message: "No students provided" });
+  }
+
+  // Get current school year
+  const [currentYear] = await db.query(
+    'SELECT school_yearID FROM schoolyear WHERE status = 1'
+  );
+  if (!currentYear.length) {
+    return res.status(400).json({ success: false, message: "No active school year found" });
+  }
+  const school_yearID = currentYear[0].school_yearID;
+
+  const addedStudents = [];
+  const errors = [];
+
+  for (const student of students) {
+    const { LastName, FirstName, MiddleName, studentType, grade } = student;
+    if (!LastName || !FirstName || !MiddleName || !studentType) {
+      errors.push(`Missing required fields for student: ${FirstName || ""} ${LastName || ""}`);
+      continue;
+    }
+    try {
+      // Set grade level based on student type
+      const studentGrade = studentType === 'new' ? 7 : parseInt(grade);
+
+      // Insert student
+      const [result] = await db.query(
+        "INSERT INTO students (LastName, FirstName, MiddleName, Status, isNew) VALUES (?, ?, ?, 1, ?)",
+        [LastName, FirstName, MiddleName, studentType === 'new' ? 1 : 0]
+      );
+      const studentID = result.insertId;
+
+      // Find available advisory for grade level
+      const [advisory] = await db.query(`
+        SELECT a.advisoryID 
+        FROM advisory a 
+        JOIN classes c ON a.classID = c.ClassID  
+        LEFT JOIN student_classes sc ON a.advisoryID = sc.advisoryID
+        JOIN class_year cy ON a.advisoryID = cy.advisoryID
+        WHERE c.Grade = ? 
+        AND cy.yearID = ?
+        GROUP BY a.advisoryID
+        HAVING COUNT(sc.StudentID) < 50 OR COUNT(sc.StudentID) IS NULL
+        ORDER BY COUNT(sc.StudentID) ASC
+        LIMIT 1
+      `, [studentGrade, school_yearID]);
+
+      if (!advisory.length) {
+        errors.push(`No available section found for Grade ${studentGrade} for student: ${FirstName} ${LastName}`);
+        continue;
+      }
+
+      // Assign student to advisory class
+      await db.query(
+        'INSERT INTO student_classes (StudentID, school_yearID, advisoryID) VALUES (?, ?, ?)',
+        [studentID, school_yearID, advisory[0].advisoryID]
+      );
+
+      addedStudents.push({
+        StudentID: studentID,
+        LastName,
+        FirstName,
+        MiddleName,
+        Status: 1,
+        isNew: studentType === 'new' ? 1 : 0,
+        grade: studentGrade,
+        advisoryID: advisory[0].advisoryID
+      });
+    } catch (err) {
+      errors.push(`Failed to add student: ${FirstName || ""} ${LastName || ""}`);
+    }
+  }
+
+  if (addedStudents.length === 0) {
+    return res.status(400).json({ success: false, message: "No students added", errors });
+  }
+
+  res.json({ success: true, addedStudents, errors });
+});
 
 export default router;

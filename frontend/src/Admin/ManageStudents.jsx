@@ -243,22 +243,21 @@ const ManageStudents = () => {
 
     // Add headers
     worksheet.columns = [
-      { header: "LastName", key: "lastName" },
-      { header: "FirstName", key: "firstName" },
-      { header: "MiddleName", key: "middleName" },
-      { header: "StudentType", key: "studentType" },
-      { header: "Grade", key: "grade" },
+      { header: "LastName", key: "LastName" },
+      { header: "FirstName", key: "FirstName" },
+      { header: "MiddleName", key: "MiddleName" },
+      { header: "studentType", key: "studentType" },
+      { header: "grade", key: "grade" },
     ];
 
     // Add sample data
     worksheet.addRow({
-      lastName: "Doe",
-      firstName: "John",
-      middleName: "Smith",
+      LastName: "Doe",
+      FirstName: "John",
+      MiddleName: "Smith",
       studentType: "new",
       grade: "7",
     });
-
     // Generate buffer
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
