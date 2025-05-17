@@ -1503,7 +1503,7 @@ router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, asyn
     const facultyID = req.user.id;
     
     const [validationRequests] = await db.query(
-      `SELECT * FROM validation_request 
+      `SELECT * FROM validation_requests 
        WHERE advisoryID = ? AND facultyID = ?
        ORDER BY requestDate DESC LIMIT 1`,
       [advisoryID, facultyID]
