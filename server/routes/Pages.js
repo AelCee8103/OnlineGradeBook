@@ -2880,16 +2880,24 @@ router.post("/admin/process-validation", async (req, res) => {
 router.post("/admin/promote-school-year", async (req, res) => {
   const { currentYearId, nextYearId } = req.body;
   if (!currentYearId || !nextYearId) {
-    return res.status(400).json({ success: false, message: "Missing year IDs" });
+    return res.status(400).json({ error: "Missing year IDs" });
   }
   try {
     const db = await connectToDatabase();
-    // Call the stored procedure
+
+    // 1. Promote students (call your stored procedure or logic)
     await db.query("CALL promote_students_new_year(?, ?)", [nextYearId, currentYearId]);
-    res.json({ success: true, message: "Promotion completed" });
+
+    // 2. Mark the current year as "has passed"
+    await db.query("UPDATE schoolyear SET hasPassed = 1 WHERE school_yearID = ?", [currentYearId]);
+
+    // 3. Delete all validation requests for the promoted year
+    await db.query("DELETE FROM validation_request WHERE advisoryID IN (SELECT advisoryID FROM class_year WHERE yearID = ?)", [currentYearId]);
+
+    res.json({ success: true, message: "Promotion completed, validation requests cleared, year marked as passed." });
   } catch (error) {
-    console.error("Error promoting school year:", error);
-    res.status(500).json({ success: false, message: error.message || "Promotion failed" });
+    console.error("Promotion error:", error);
+    res.status(500).json({ error: "Failed to promote school year" });
   }
 });
 
