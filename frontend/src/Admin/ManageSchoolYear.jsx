@@ -156,7 +156,7 @@ const ManageSchoolYear = () => {
                   >
                     <option value="">Select school year</option>
                     {schoolYears
-                      .filter((year) => year.status === 0) // Only show inactive years
+                      .filter((year) => year.status === 0 && !year.hasPassed) // Only inactive and not passed
                       .map((year) => (
                         <option
                           key={year.school_yearID}

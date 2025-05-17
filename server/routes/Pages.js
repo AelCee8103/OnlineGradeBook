@@ -332,7 +332,8 @@ router.get("/schoolyear", async (req, res) => {
       SELECT 
         school_yearID,
         year,
-        status
+        status,
+        hasPassed
       FROM schoolyear
       ORDER BY year DESC
     `;
