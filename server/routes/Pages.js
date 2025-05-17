@@ -2887,4 +2887,55 @@ router.post("/admin/promote-school-year", async (req, res) => {
     res.status(500).json({ success: false, message: error.message || "Promotion failed" });
   }
 });
+
+
+// Get student details by StudentID
+router.get("/students/:studentID", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { studentID } = req.params;
+
+    const [students] = await db.query(
+      `SELECT StudentID, LastName, FirstName, MiddleName, Status
+       FROM students
+       WHERE StudentID = ?`,
+      [studentID]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.status(200).json(students[0]);
+  } catch (error) {
+    console.error("Error fetching student details:", error);
+    res.status(500).json({ message: "Failed to fetch student details" });
+  }
+});
+
+
+
+// Get student info for faculty (by StudentID)
+router.get("/faculty/student-info/:studentID", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { studentID } = req.params;
+
+    const [students] = await db.query(
+      `SELECT StudentID, LastName, FirstName, MiddleName, Status
+       FROM students
+       WHERE StudentID = ?`,
+      [studentID]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.status(200).json(students[0]);
+  } catch (error) {
+    console.error("Error fetching student info:", error);
+    res.status(500).json({ message: "Failed to fetch student info" });
+  }
+});
 export default router;
