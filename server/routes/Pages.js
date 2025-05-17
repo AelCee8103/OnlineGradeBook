@@ -2570,7 +2570,6 @@ router.put('/admin-manage-students/archive/:studentID', async (req, res) => {
 
 router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
   const { advisoryID } = req.params;
-  const facultyID = req.user.id || req.user.facultyID;
   try {
     const db = await connectToDatabase();
 
@@ -2580,7 +2579,7 @@ router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, asyn
     );
     const activeQuarter = activeQuarterRow ? activeQuarterRow.quarter : null;
 
-    // Get latest validation request
+    // Get latest validation request for this advisory (regardless of faculty)
     const [request] = await db.query(
       `SELECT requestID, requestDate, statusID,
         CASE 
@@ -2589,11 +2588,10 @@ router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, asyn
           WHEN statusID = 2 THEN 'rejected'
         END as status
        FROM validation_request 
-       WHERE advisoryID = ? 
-       AND facultyID = ? 
+       WHERE advisoryID = ?  
        ORDER BY requestDate DESC 
        LIMIT 1`,
-      [advisoryID, facultyID]
+      [advisoryID]
     );
 
     res.json({

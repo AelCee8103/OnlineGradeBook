@@ -5,14 +5,19 @@ import NavbarAdmin from "../Components/NavbarAdmin";
 import AdminSidePanel from "../Components/AdminSidePanel";
 import NavbarFaculty from "../Components/NavbarFaculty";
 import FacultySidePanel from "../Components/FacultySidePanel";
+import { Toaster, toast } from "react-hot-toast"; // Add this import
 
 const StudentGrades = ({ isFaculty = false }) => {
-  // Change studentID to studentId to match route parameter
-  const { advisoryID, studentId } = useParams(); // Changed from studentID to studentId
+  const { advisoryID, studentId } = useParams();
   const [grades, setGrades] = useState({});
   const [studentInfo, setStudentInfo] = useState({});
   const [advisoryInfo, setAdvisoryInfo] = useState({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [validationStatus, setValidationStatus] = useState({
+    status: null, // "pending", "approved", "rejected", or null
+    lastRequestDate: null,
+  });
+  const [validationLoading, setValidationLoading] = useState(true);
   const navigate = useNavigate();
   const printRef = useRef();
 
@@ -23,7 +28,6 @@ const StudentGrades = ({ isFaculty = false }) => {
       return;
     }
 
-    // Add validation for studentId
     if (!studentId) {
       console.error("No student ID provided");
       navigate(-1);
@@ -33,7 +37,7 @@ const StudentGrades = ({ isFaculty = false }) => {
     const fetchGrades = async () => {
       try {
         const res = await axios.get(
-          `http://localhost:3000/Pages/student/${studentId}/grades`, // Changed from studentID
+          `http://localhost:3000/Pages/student/${studentId}/grades`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -41,15 +45,14 @@ const StudentGrades = ({ isFaculty = false }) => {
         setGrades(res.data);
       } catch (error) {
         console.error("Error fetching grades:", error);
-        alert("Failed to fetch grades");
+        toast.error("Failed to fetch grades");
       }
     };
 
     const fetchStudent = async () => {
       try {
-        // For faculty view, use a different endpoint
         const endpoint = isFaculty
-          ? `http://localhost:3000/Pages/faculty/student-info/${studentId}` // Changed from studentID
+          ? `http://localhost:3000/Pages/faculty/student-info/${studentId}`
           : "http://localhost:3000/Pages/admin-manage-students";
 
         const res = await axios.get(endpoint, {
@@ -64,7 +67,7 @@ const StudentGrades = ({ isFaculty = false }) => {
           setAdvisoryInfo(res.data.advisoryInfo);
         } else {
           const match = res.data.find(
-            (s) => s.StudentID.toString() === studentId // Changed from studentID
+            (s) => s.StudentID.toString() === studentId
           );
           if (!match) {
             throw new Error("Student not found");
@@ -73,14 +76,13 @@ const StudentGrades = ({ isFaculty = false }) => {
         }
       } catch (error) {
         console.error("Error fetching student info:", error);
-        alert("Failed to fetch student information");
+        toast.error("Failed to fetch student information");
         navigate(-1);
       }
     };
 
     const fetchAdvisory = async () => {
       if (!isFaculty) {
-        // Only fetch separately for admin view
         try {
           const res = await axios.get(
             `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
@@ -97,12 +99,69 @@ const StudentGrades = ({ isFaculty = false }) => {
       }
     };
 
+    // Fetch validation status for the advisory
+    const fetchValidationStatus = async () => {
+      // Only fetch if advisoryInfo is loaded (for admin) or advisoryID is present (for faculty)
+      const advisoryToCheck = advisoryInfo?.advisoryID || advisoryID;
+      if (!advisoryToCheck) {
+        setValidationStatus({ status: null, lastRequestDate: null });
+        setValidationLoading(false);
+        return;
+      }
+      const token = localStorage.getItem("token");
+      setValidationLoading(true);
+      axios
+        .get(
+          `http://localhost:3000/Pages/faculty/check-pending-request/${advisoryToCheck}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        .then((res) => {
+          if (res.data.success) {
+            setValidationStatus({
+              status: res.data.status,
+              lastRequestDate: res.data.lastRequestDate,
+            });
+          } else {
+            setValidationStatus({ status: null, lastRequestDate: null });
+          }
+        })
+        .catch(() => {
+          setValidationStatus({ status: null, lastRequestDate: null });
+        })
+        .finally(() => {
+          setValidationLoading(false);
+        });
+    };
+
     fetchGrades();
-    fetchStudent();
+    fetchStudent().then(() => {
+      fetchValidationStatus();
+    });
     if (!isFaculty) fetchAdvisory();
-  }, [studentId, advisoryID, isFaculty, navigate]); // Changed from studentID
+    // eslint-disable-next-line
+  }, [studentId, advisoryID, isFaculty, navigate, advisoryInfo?.advisoryID]);
+
+  // Only allow print if validationStatus.status === "approved"
+  const canPrint = !validationLoading && validationStatus.status === "approved";
+
+  // Feedback message for print restriction
+  let printRestrictionMsg = "";
+  if (!validationLoading) {
+    if (!validationStatus.status) {
+      printRestrictionMsg = "Cannot print. Grade is not validated yet.";
+    } else if (validationStatus.status === "pending") {
+      printRestrictionMsg =
+        "Cannot print. Validation request is still pending.";
+    } else if (validationStatus.status === "rejected") {
+      printRestrictionMsg = "Cannot print. Validation request was rejected.";
+    }
+  }
 
   const handlePrint = () => {
+    if (!canPrint) {
+      toast.error(printRestrictionMsg || "Printing not allowed.");
+      return;
+    }
     const confirmed = window.confirm(
       `Are you sure you want to print the grades for ${studentInfo.FirstName} ${studentInfo.LastName}?`
     );
@@ -118,6 +177,7 @@ const StudentGrades = ({ isFaculty = false }) => {
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
+      <Toaster position="top-center" />
       {/* Use appropriate sidebar based on user type */}
       {isFaculty ? (
         <FacultySidePanel
@@ -150,11 +210,21 @@ const StudentGrades = ({ isFaculty = false }) => {
               ← Back
             </button>
             <button
-              className="ml-4 bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
-              onClick={handlePrint}
+              className={`ml-4 px-4 py-2 rounded text-white ${
+                canPrint
+                  ? "bg-green-500 hover:bg-green-600"
+                  : "bg-gray-400 cursor-not-allowed"
+              }`}
+              onClick={canPrint ? handlePrint : undefined}
+              disabled={!canPrint}
             >
               🖨️ Print Grades
             </button>
+            {!canPrint && printRestrictionMsg && (
+              <span className="ml-4 text-red-600 font-semibold">
+                {printRestrictionMsg}
+              </span>
+            )}
           </div>
 
           <h1 className="text-3xl font-bold mb-4">Student Grades</h1>
@@ -206,32 +276,25 @@ const StudentGrades = ({ isFaculty = false }) => {
                 <tbody>
                   {Object.entries(grades).map(([subjectCode, subjectData]) => {
                     const { subjectName, quarters } = subjectData;
-                    // Get grades for each quarter, ensuring they are numbers
                     const q1 = parseFloat(quarters[1]) || null;
                     const q2 = parseFloat(quarters[2]) || null;
                     const q3 = parseFloat(quarters[3]) || null;
                     const q4 = parseFloat(quarters[4]) || null;
-
-                    // Only include valid numerical grades
                     const validGrades = [q1, q2, q3, q4].filter(
                       (grade) => grade !== null && !isNaN(grade)
                     );
-
-                    // Calculate average only if all quarters have valid grades
                     const finalGrade =
                       validGrades.length === 4
                         ? (validGrades.reduce((a, b) => a + b, 0) / 4).toFixed(
                             2
                           )
                         : "-";
-
                     const remarks =
                       finalGrade !== "-"
                         ? parseFloat(finalGrade) >= 75
                           ? "Passed"
                           : "Failed"
                         : "-";
-
                     return (
                       <tr key={subjectCode} className="border-b">
                         <td className="px-4 py-2">{subjectName}</td>
@@ -253,15 +316,12 @@ const StudentGrades = ({ isFaculty = false }) => {
                     const quarterGrades = [1, 2, 3, 4]
                       .map((q) => parseFloat(quarters[q]))
                       .filter((grade) => !isNaN(grade) && grade !== null);
-
-                    // Only return average if all quarters have valid grades
                     return quarterGrades.length === 4
                       ? quarterGrades.reduce((a, b) => a + b, 0) / 4
                       : null;
                   })
                   .filter((avg) => avg !== null);
 
-                // Only show general average if all subjects have complete grades
                 if (
                   subjectsWithCompleteGrades.length ===
                     Object.keys(grades).length &&
