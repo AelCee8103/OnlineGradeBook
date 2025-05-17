@@ -2953,4 +2953,17 @@ router.get("/student-classes/:studentID/:schoolYearID", async (req, res) => {
   );
   res.json(rows[0] || {});
 });
+
+
+router.get("/active-quarter", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const [[row]] = await db.query("SELECT quarter FROM quarter WHERE status = 1 LIMIT 1");
+    res.json({ activeQuarter: row ? row.quarter : null });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch active quarter" });
+  }
+});
+
+
 export default router;

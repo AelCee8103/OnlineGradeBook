@@ -14,6 +14,7 @@ const ManageSchoolYear = () => {
   const [error, setError] = useState(null);
   // Add new state to track promotion status
   const [isPromoted, setIsPromoted] = useState(false);
+  const [activeQuarter, setActiveQuarter] = useState(null);
 
   const fetchSchoolYears = async () => {
     try {
@@ -48,8 +49,24 @@ const ManageSchoolYear = () => {
     }
   };
 
+  const fetchActiveQuarter = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        "http://localhost:3000/Pages/active-quarter",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setActiveQuarter(res.data.activeQuarter);
+    } catch (err) {
+      setActiveQuarter(null);
+    }
+  };
+
   useEffect(() => {
     fetchSchoolYears();
+    fetchActiveQuarter();
   }, []);
 
   const handlePromoteYear = async () => {
@@ -173,11 +190,25 @@ const ManageSchoolYear = () => {
                 <div className="text-red-500 text-center mb-4">{error}</div>
               )}
 
+              <p className="mb-2 text-sm text-gray-600">
+                Current Quarter: {activeQuarter || "Loading..."}
+              </p>
+
               <button
                 onClick={handlePromoteYear}
-                disabled={loading || !currentYear || !nextYear || isPromoted}
+                disabled={
+                  loading ||
+                  !currentYear ||
+                  !nextYear ||
+                  isPromoted ||
+                  activeQuarter !== 4 // <-- Only enable if quarter 4
+                }
                 className={`w-full py-2 px-4 rounded-md transition-colors ${
-                  loading || !currentYear || !nextYear || isPromoted
+                  loading ||
+                  !currentYear ||
+                  !nextYear ||
+                  isPromoted ||
+                  activeQuarter !== 4
                     ? "bg-gray-300 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700 text-white"
                 }`}
@@ -186,6 +217,8 @@ const ManageSchoolYear = () => {
                   ? "Processing..."
                   : isPromoted
                   ? "Promotion Completed"
+                  : activeQuarter !== 4
+                  ? "Promotion only allowed in Quarter 4"
                   : "Promote to Next School Year"}
               </button>
             </div>
