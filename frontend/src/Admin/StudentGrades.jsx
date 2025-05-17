@@ -20,7 +20,40 @@ const StudentGrades = ({ isFaculty = false }) => {
   const [validationLoading, setValidationLoading] = useState(true);
   const navigate = useNavigate();
   const printRef = useRef();
-
+  useEffect(() => {
+    // Only run if advisoryID is available (from URL or advisoryInfo)
+    const advisoryToCheck = advisoryInfo?.advisoryID || advisoryID;
+    if (!advisoryToCheck) return;
+    console.log("useEffect: advisoryToCheck =", advisoryToCheck);
+    if (!advisoryToCheck) {
+      console.log("No advisoryToCheck, skipping validation fetch");
+      return;
+    }
+    const token = localStorage.getItem("token");
+    setValidationLoading(true);
+    axios
+      .get(
+        `http://localhost:3000/Pages/faculty/check-pending-request/${advisoryToCheck}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      .then((res) => {
+        if (res.data.success) {
+          setValidationStatus({
+            status: res.data.status,
+            lastRequestDate: res.data.lastRequestDate,
+          });
+        } else {
+          setValidationStatus({ status: null, lastRequestDate: null });
+        }
+      })
+      .catch(() => {
+        setValidationStatus({ status: null, lastRequestDate: null });
+      })
+      .finally(() => {
+        setValidationLoading(false);
+        console.log("Validation loading set to false");
+      });
+  }, [advisoryInfo?.advisoryID, advisoryID]);
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -101,13 +134,68 @@ const StudentGrades = ({ isFaculty = false }) => {
 
     // Fetch validation status for the advisory
     const fetchValidationStatus = async () => {
-      // Only fetch if advisoryInfo is loaded (for admin) or advisoryID is present (for faculty)
+      // Fix: declare advisoryToCheck
       const advisoryToCheck = advisoryInfo?.advisoryID || advisoryID;
+
+      console.log("About to check validation for advisoryID:", advisoryToCheck);
       if (!advisoryToCheck) {
         setValidationStatus({ status: null, lastRequestDate: null });
         setValidationLoading(false);
         return;
       }
+      const token = localStorage.getItem("token");
+      setValidationLoading(true);
+      axios
+        .get(
+          `http://localhost:3000/Pages/faculty/check-pending-request/${advisoryToCheck}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        )
+
+        .then((res) => {
+          if (res.data.success) {
+            setValidationStatus({
+              status: res.data.status,
+              lastRequestDate: res.data.lastRequestDate,
+            });
+            console.log("Validation status set to:", res.data.status); // <-- Add this
+          } else {
+            setValidationStatus({ status: null, lastRequestDate: null });
+          }
+        })
+        .then((res) => {
+          if (res.data.success) {
+            setValidationStatus({
+              status: res.data.status,
+              lastRequestDate: res.data.lastRequestDate,
+            });
+          } else {
+            setValidationStatus({ status: null, lastRequestDate: null });
+          }
+        })
+        .catch(() => {
+          setValidationStatus({ status: null, lastRequestDate: null });
+        })
+        .finally(() => {
+          setValidationLoading(false);
+        });
+    };
+
+    fetchGrades();
+    fetchStudent();
+    if (!isFaculty) fetchAdvisory();
+    // eslint-disable-next-line
+  }, [studentId, advisoryID, isFaculty, navigate, advisoryInfo?.advisoryID]);
+
+  useEffect(() => {
+    const getAndCheckValidation = async () => {
+      let advisoryToCheck = advisoryInfo?.advisoryID || advisoryID;
+      if (!advisoryToCheck && studentId) {
+        advisoryToCheck = await fetchStudentAdvisoryID(studentId);
+      }
+      if (!advisoryToCheck) return;
+
       const token = localStorage.getItem("token");
       setValidationLoading(true);
       axios
@@ -133,16 +221,16 @@ const StudentGrades = ({ isFaculty = false }) => {
         });
     };
 
-    fetchGrades();
-    fetchStudent().then(() => {
-      fetchValidationStatus();
-    });
-    if (!isFaculty) fetchAdvisory();
-    // eslint-disable-next-line
-  }, [studentId, advisoryID, isFaculty, navigate, advisoryInfo?.advisoryID]);
+    getAndCheckValidation();
+  }, [advisoryInfo?.advisoryID, advisoryID, studentId]);
 
   // Only allow print if validationStatus.status === "approved"
-  const canPrint = !validationLoading && validationStatus.status === "approved";
+  const canPrint =
+    !validationLoading &&
+    (validationStatus.status === "approved" ||
+      validationStatus.status === 1 ||
+      (typeof validationStatus.status === "string" &&
+        validationStatus.status.trim().toLowerCase() === "approved"));
 
   // Feedback message for print restriction
   let printRestrictionMsg = "";
@@ -173,6 +261,23 @@ const StudentGrades = ({ isFaculty = false }) => {
       document.body.innerHTML = originalContents;
       window.location.reload();
     }
+  };
+
+  const fetchStudentAdvisoryID = async (studentId) => {
+    const token = localStorage.getItem("token");
+    // Get current school year
+    const syRes = await axios.get("http://localhost:3000/Pages/schoolyear", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const currentSY = (syRes.data || []).find((sy) => sy.status === 1);
+    if (!currentSY) return null;
+
+    // Get student_classes for this student and year
+    const res = await axios.get(
+      `http://localhost:3000/Pages/student-classes/${studentId}/${currentSY.school_yearID}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return res.data?.advisoryID || null;
   };
 
   return (
