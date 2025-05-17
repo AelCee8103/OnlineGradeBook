@@ -17,6 +17,11 @@ const ManageClasses = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
 
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+
   const [formData, setFormData] = useState({
     ClassID: "",
     Grade: "",
@@ -132,6 +137,7 @@ const ManageClasses = () => {
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
+    setCurrentPage(1); // Reset to first page when searching
   };
 
   const handleViewStudents = (classId) => {
@@ -146,6 +152,28 @@ const ManageClasses = () => {
       (classItem.Section || "").toLowerCase().includes(searchTerm.toLowerCase())
     );
   });
+
+  // Calculate pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredClasses.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Update total pages whenever filtered results change
+  useEffect(() => {
+    setTotalPages(Math.ceil(filteredClasses.length / itemsPerPage));
+    // If current page is greater than total pages, set to page 1
+    if (currentPage > Math.ceil(filteredClasses.length / itemsPerPage) && filteredClasses.length > 0) {
+      setCurrentPage(1);
+    }
+  }, [filteredClasses, itemsPerPage, currentPage]);
+
+  // Pagination controls
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -345,7 +373,10 @@ const ManageClasses = () => {
                   {fetching ? (
                     <tr>
                       <td colSpan="4" className="text-center py-4">
-                        Loading classes...
+                        <div className="flex justify-center items-center space-x-2">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+                          <span>Loading classes...</span>
+                        </div>
                       </td>
                     </tr>
                   ) : error ? (
@@ -354,9 +385,9 @@ const ManageClasses = () => {
                         {error}
                       </td>
                     </tr>
-                  ) : filteredClasses.length > 0 ? (
-                    filteredClasses.map((classItem) => (
-                      <tr key={classItem.ClassID} className="border-b">
+                  ) : currentItems.length > 0 ? (
+                    currentItems.map((classItem) => (
+                      <tr key={classItem.ClassID} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2">{classItem.ClassID}</td>
                         <td className="px-4 py-2">Grade {classItem.Grade}</td>
                         <td className="px-4 py-2">
@@ -382,6 +413,83 @@ const ManageClasses = () => {
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {!fetching && filteredClasses.length > 0 && (
+              <div className="flex flex-col md:flex-row justify-between items-center mt-4 px-4">
+                <div className="flex items-center mb-4 md:mb-0">
+                  <span className="text-sm text-gray-700 mr-2">
+                    Show
+                  </span>
+                  <select 
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={itemsPerPage}
+                    onChange={handleItemsPerPageChange}
+                  >
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                  </select>
+                  <span className="text-sm text-gray-700 ml-2">
+                    items per page
+                  </span>
+                </div>
+                
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-700 mr-4">
+                    Page {currentPage} of {totalPages} 
+                    ({filteredClasses.length} total items)
+                  </span>
+                  <div className="flex">
+                    <button
+                      onClick={() => paginate(1)}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-1 rounded-l-md border ${
+                        currentPage === 1 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      First
+                    </button>
+                    <button
+                      onClick={() => paginate(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-1 border-t border-b ${
+                        currentPage === 1 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Prev
+                    </button>
+                    <button
+                      onClick={() => paginate(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-1 border-t border-b ${
+                        currentPage === totalPages 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => paginate(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-1 rounded-r-md border ${
+                        currentPage === totalPages 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Last
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

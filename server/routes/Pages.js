@@ -922,11 +922,19 @@ router.get('/admin-create-advisory', async (req, res) => {
   try {
     db = await connectToDatabase();
     const [advisories] = await db.query(`
-      SELECT a.advisoryID, a.classID, a.facultyID
+      SELECT 
+        a.advisoryID, 
+        a.classID, 
+        a.facultyID,
+        c.Grade,
+        c.Section,
+        sy.year AS schoolYear,
+        sy.status AS yearStatus
       FROM advisory a
-      INNER JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      INNER JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      WHERE sy.status = 1
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      ORDER BY sy.year DESC, c.Grade, c.Section
     `);
 
     res.status(200).json(advisories);
@@ -1508,24 +1516,6 @@ router.post('/admin-create-advisory', async (req, res) => {
 });
 
 
-router.get('/admin-create-advisory', async (req, res) => {
-  let db;
-  try {
-    db = await connectToDatabase();
-    const [advisories] = await db.query(`
-      SELECT a.advisoryID, a.classID, a.facultyID
-      FROM advisory a
-      INNER JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      INNER JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      WHERE sy.status = 1
-    `);
-
-    res.status(200).json(advisories);
-  } catch (error) {
-    console.error('Error fetching advisory classes:', error);
-    res.status(500).json({ error: 'Failed to fetch advisory classes' });
-  }
-});
 
 
 // Get advisory classes with faculty and class info for active school year
@@ -2105,25 +2095,6 @@ router.post('/admin-create-advisory', async (req, res) => {
 });
 
 
-router.get('/admin-create-advisory', async (req, res) => {
-  let db;
-  try {
-    db = await connectToDatabase();
-    const [advisories] = await db.query(`
-      SELECT a.advisoryID, a.classID, a.facultyID
-      FROM advisory a
-      INNER JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      INNER JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      WHERE sy.status = 1
-    `);
-
-    res.status(200).json(advisories);
-  } catch (error) {
-    console.error('Error fetching advisory classes:', error);
-    res.status(500).json({ error: 'Failed to fetch advisory classes' });
-  }
-});
-
 
 // Get advisory classes with faculty and class info for active school year
 router.get('/admin/manage-grades', async (req, res) => {
@@ -2570,11 +2541,16 @@ router.put('/admin-manage-students/archive/:studentID', async (req, res) => {
 
 router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
   const { advisoryID } = req.params;
-  const facultyID = req.user.id || req.user.facultyID;
-  
   try {
     const db = await connectToDatabase();
 
+    // Get current active quarter
+    const [[activeQuarterRow]] = await db.query(
+      "SELECT quarter FROM quarter WHERE status = 1 LIMIT 1"
+    );
+    const activeQuarter = activeQuarterRow ? activeQuarterRow.quarter : null;
+
+    // Get latest validation request for this advisory (regardless of faculty)
     const [request] = await db.query(
       `SELECT requestID, requestDate, statusID,
         CASE 
@@ -2583,29 +2559,22 @@ router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, asyn
           WHEN statusID = 2 THEN 'rejected'
         END as status
        FROM validation_request 
-       WHERE advisoryID = ? 
-       AND facultyID = ? 
+       WHERE advisoryID = ?  
        ORDER BY requestDate DESC 
        LIMIT 1`,
-      [advisoryID, facultyID]
+      [advisoryID]
     );
 
     res.json({
       success: true,
-      hasPendingRequest: request.length > 0 && request[0].statusID === 0,
       status: request.length > 0 ? request[0].status : null,
-      lastRequestDate: request.length > 0 ? request[0].requestDate : null
+      lastRequestDate: request.length > 0 ? request[0].requestDate : null,
+      activeQuarter
     });
-
   } catch (error) {
-    console.error("Error checking pending requests:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to check pending requests"
-    });
+    res.status(500).json({ success: false, message: "Failed to check pending requests" });
   }
 });
-
 
 
 // Prevent duplicate validation requests for the same faculty/advisory with pending status
@@ -2799,4 +2768,143 @@ router.post('/admin-manage-students/bulk', async (req, res) => {
   res.json({ success: true, addedStudents, errors });
 });
 
+
+// GET all validation requests for admin
+router.get('/admin/validation-requests', async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    // Join with faculty, advisory, classes, and schoolyear for details
+    const [requests] = await db.query(`
+      SELECT 
+        vr.requestID,
+        vr.facultyID,
+        CONCAT(f.LastName, ', ', f.FirstName) AS facultyName,
+        adv.advisoryID,
+        c.Grade,
+        c.Section,
+        sy.year AS schoolYear,
+        vr.requestDate,
+        vr.statusID
+      FROM validation_request vr
+      JOIN faculty f ON vr.facultyID = f.FacultyID
+      JOIN advisory adv ON vr.advisoryID = adv.advisoryID
+      JOIN classes c ON adv.classID = c.ClassID
+      JOIN class_year cy ON adv.advisoryID = cy.advisoryID
+      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE sy.status = 1
+      ORDER BY vr.requestDate DESC
+    `);
+
+    res.json({ success: true, requests });
+  } catch (error) {
+    console.error("Error fetching validation requests:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch validation requests" });
+  }
+});
+
+
+router.post("/admin/process-validation", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { requestID, action } = req.body;
+
+    // Validate input
+    if (!requestID || !["approve", "reject"].includes(action)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid request" });
+    }
+
+    // Set statusID: 1 = Approved, 2 = Rejected
+    const statusID = action === "approve" ? 1 : 2;
+
+    // Update the validation_request status
+    const [result] = await db.query(
+      "UPDATE validation_request SET statusID = ? WHERE requestID = ?",
+      [statusID, requestID]
+    );
+
+    if (result.affectedRows === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Request not found" });
+    }
+
+    res.json({ success: true, message: "Request processed" });
+  } catch (error) {
+    console.error("Error processing validation request:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to process request" });
+  }
+});
+
+
+// Promote to next school year (calls stored procedure)
+router.post("/admin/promote-school-year", async (req, res) => {
+  const { currentYearId, nextYearId } = req.body;
+  if (!currentYearId || !nextYearId) {
+    return res.status(400).json({ success: false, message: "Missing year IDs" });
+  }
+  try {
+    const db = await connectToDatabase();
+    // Call the stored procedure
+    await db.query("CALL promote_students_new_year(?, ?)", [nextYearId, currentYearId]);
+    res.json({ success: true, message: "Promotion completed" });
+  } catch (error) {
+    console.error("Error promoting school year:", error);
+    res.status(500).json({ success: false, message: error.message || "Promotion failed" });
+  }
+});
+
+
+// Get student details by StudentID
+router.get("/students/:studentID", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { studentID } = req.params;
+
+    const [students] = await db.query(
+      `SELECT StudentID, LastName, FirstName, MiddleName, Status
+       FROM students
+       WHERE StudentID = ?`,
+      [studentID]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.status(200).json(students[0]);
+  } catch (error) {
+    console.error("Error fetching student details:", error);
+    res.status(500).json({ message: "Failed to fetch student details" });
+  }
+});
+
+
+
+// Get student info for faculty (by StudentID)
+router.get("/faculty/student-info/:studentID", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { studentID } = req.params;
+
+    const [students] = await db.query(
+      `SELECT StudentID, LastName, FirstName, MiddleName, Status
+       FROM students
+       WHERE StudentID = ?`,
+      [studentID]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    res.status(200).json(students[0]);
+  } catch (error) {
+    console.error("Error fetching student info:", error);
+    res.status(500).json({ message: "Failed to fetch student info" });
+  }
+});
 export default router;

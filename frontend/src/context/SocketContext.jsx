@@ -1,57 +1,82 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 
-const SocketContext = createContext();
+const SocketContext = createContext(null);
+
+export const useSocket = () => {
+  const socket = useContext(SocketContext);
+  if (socket === undefined) {
+    console.warn('useSocket must be used within a SocketProvider');
+  }
+  return socket;
+};
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
+  const socketRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:3000', {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 20000,
-      withCredentials: true,
-      autoConnect: true
-    });
+    // Create socket connection
+    console.log('Initializing socket connection');
+    const connectSocket = () => {
+      try {
+        if (socketRef.current) {
+          console.log('Cleaning up existing socket before reconnecting');
+          socketRef.current.disconnect();
+        }
 
-    newSocket.on('connect', () => {
-      console.log('Socket connected');
-      
-      // Authenticate based on user type
-      const facultyID = localStorage.getItem('facultyID');
-      const adminID = localStorage.getItem('adminID');
-      const facultyName = localStorage.getItem('facultyName');
-      const adminName = localStorage.getItem('adminName');
+        const newSocket = io('http://localhost:3000', {
+          withCredentials: true,
+          transports: ['websocket', 'polling'],
+          timeout: 10000,
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionAttempts: 5
+        });
 
-      if (facultyID) {
-        console.log('Authenticating as faculty:', facultyID);
-        newSocket.emit('authenticate', {
-          userType: 'faculty',
-          userID: facultyID,
-          facultyName
+        socketRef.current = newSocket;
+
+        newSocket.on('connect', () => {
+          console.log('Socket connected:', newSocket.id);
+          setSocket(newSocket);
+          // Clear any reconnect timers when successfully connected
+          if (reconnectTimerRef.current) {
+            clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = null;
+          }
         });
-      } else if (adminID) {
-        console.log('Authenticating as admin:', adminID);
-        newSocket.emit('authenticate', {
-          userType: 'admin',
-          userID: adminID,
-          adminName
+
+        newSocket.on('connect_error', (error) => {
+          console.error('Socket connection error:', error.message);
+          // Only attempt to reconnect if we don't already have a timer
+          if (!reconnectTimerRef.current) {
+            reconnectTimerRef.current = setTimeout(() => {
+              console.log('Attempting to reconnect...');
+              reconnectTimerRef.current = null;
+              connectSocket();
+            }, 5000); // Try to reconnect after 5 seconds
+          }
         });
+
+        return newSocket;
+      } catch (error) {
+        console.error('Failed to initialize socket:', error);
+        return null;
       }
-    });
+    };
 
-    newSocket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
-    });
-
-    setSocket(newSocket);
-
+    const newSocket = connectSocket();
+    
+    // Cleanup function
     return () => {
-      if (newSocket) {
-        newSocket.close();
+      console.log('Cleaning up socket connection');
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
     };
   }, []);
@@ -62,13 +87,3 @@ export const SocketProvider = ({ children }) => {
     </SocketContext.Provider>
   );
 };
-
-export const useSocket = () => {
-  const socket = useContext(SocketContext);
-  if (!socket) {
-    console.warn('useSocket must be used within a SocketProvider');
-  }
-  return socket;
-};
-
-export default SocketContext;

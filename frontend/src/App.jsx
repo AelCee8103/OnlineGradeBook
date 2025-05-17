@@ -29,83 +29,86 @@ import ViewStudent from "./Pages/ViewStudents";
 import ViewAttendance from "./Pages/ViewAttendance";
 import ManageSchoolYear from "./Admin/ManageSchoolYear";
 import { Toaster } from "react-hot-toast";
+import { SocketProvider } from "./context/SocketContext";
 
 function App() {
   const [count, setCount] = useState(0);
 
   return (
-    <BrowserRouter>
-      <Toaster
-        position="top-center"
-        reverseOrder={false}
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: "#363636",
-            color: "#fff",
-          },
-        }}
-      />
+    <SocketProvider>
+      <BrowserRouter>
+        <Toaster
+          position="top-center"
+          reverseOrder={false}
+          toastOptions={{
+            duration: 4000,
+            style: {
+              background: "#363636",
+              color: "#fff",
+            },
+          }}
+        />
 
-      <Routes>
-        <Route path="/" element={<Navigate to="/admin-login" />} />
-        <Route path="/admin-login" element={<AdminLogin />} />
-        <Route path="/admin-manage-students" element={<ManageStudent />} />
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
-        <Route path="/admin-manage-faculty" element={<ManageFaculty />} />
-        <Route path="/admin-advisory-classes" element={<ManageClass />} />
-        <Route path="admin-create-advisory" element={<CreateAdvisory />} />
-        <Route path="/admin-manage-subject" element={<ManageSubjectList />} />
-        <Route
-          path="/admin/subject-classes/:subjectCode/students"
-          element={<SubjectClassStudents />}
-        />
-        <Route
-          path="/admin/advisory/:advisoryID/students/:studentId/grades"
-          element={<StudentGrades isFaculty={false} />}
-        />
-        <Route path="/admin-assign-subject" element={<AssignSubject />} />
-        <Route path="/admin-manage-grades" element={<ManageGrades />} />
-        <Route
-          path="/admin-validation-request"
-          element={<ValidationRequest />}
-        />
-        <Route path="/admin-archive-records" element={<ArchiveRecords />} />
-        <Route path="/admin-register" element={<Adminregister />} />
-        <Route
-          path="/admin-view-students/:advisoryID"
-          element={<ViewStudents />}
-        />
-        <Route
-          path="/admin/advisory/:advisoryID/students"
-          element={<AdvisoryStudents />}
-        />
-        <Route path="/faculty-login" element={<FacultyLogin />} />
-        <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
-        <Route path="/faculty-class-advisory" element={<ClassAdvisory />} />
-        <Route path="/faculty-classes" element={<Classes />} />
-        <Route path="/faculty-view-subject" element={<ViewSubject />} />
-        <Route
-          path="/faculty-view-students/:subjectCode"
-          element={<ViewStudent />}
-        />
-        <Route
-          path="/faculty-view-attendance/:subjectCode"
-          element={<ViewAttendance />}
-        />
-        <Route path="/faculty-grades" element={<Grades />} />
-        <Route path="/faculty-attendance" element={<Attendance />} />
-        <Route path="/faculty-register" element={<Register />} />
-        <Route
-          path="/faculty/students/:studentId/grades"
-          element={<StudentGrades isFaculty={true} />}
-        />
-        <Route
-          path="/admin/manage-school-year"
-          element={<ManageSchoolYear />}
-        />
-      </Routes>
-    </BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/admin-login" />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route path="/admin-manage-students" element={<ManageStudent />} />
+          <Route path="/admin-dashboard" element={<AdminDashboard />} />
+          <Route path="/admin-manage-faculty" element={<ManageFaculty />} />
+          <Route path="/admin-advisory-classes" element={<ManageClass />} />
+          <Route path="admin-create-advisory" element={<CreateAdvisory />} />
+          <Route path="/admin-manage-subject" element={<ManageSubjectList />} />
+          <Route
+            path="/admin/subject-classes/:subjectCode/students"
+            element={<SubjectClassStudents />}
+          />
+          <Route
+            path="/admin/advisory/:advisoryID/students/:studentId/grades"
+            element={<StudentGrades isFaculty={false} />}
+          />
+          <Route path="/admin-assign-subject" element={<AssignSubject />} />
+          <Route path="/admin-manage-grades" element={<ManageGrades />} />
+          <Route
+            path="/admin-validation-request"
+            element={<ValidationRequest />}
+          />
+          <Route path="/admin-archive-records" element={<ArchiveRecords />} />
+          <Route path="/admin-register" element={<Adminregister />} />
+          <Route
+            path="/admin-view-students/:advisoryID"
+            element={<ViewStudents />}
+          />
+          <Route
+            path="/admin/advisory/:advisoryID/students"
+            element={<AdvisoryStudents />}
+          />
+          <Route path="/faculty-login" element={<FacultyLogin />} />
+          <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
+          <Route path="/faculty-class-advisory" element={<ClassAdvisory />} />
+          <Route path="/faculty-classes" element={<Classes />} />
+          <Route path="/faculty-view-subject" element={<ViewSubject />} />
+          <Route
+            path="/faculty-view-students/:subjectCode"
+            element={<ViewStudent />}
+          />
+          <Route
+            path="/faculty-view-attendance/:subjectCode"
+            element={<ViewAttendance />}
+          />
+          <Route path="/faculty-grades" element={<Grades />} />
+          <Route path="/faculty-attendance" element={<Attendance />} />
+          <Route path="/faculty-register" element={<Register />} />
+          <Route
+            path="/faculty/students/:studentId/grades"
+            element={<StudentGrades isFaculty={true} />}
+          />
+          <Route
+            path="/admin/manage-school-year"
+            element={<ManageSchoolYear />}
+          />
+        </Routes>
+      </BrowserRouter>
+    </SocketProvider>
   );
 }
 

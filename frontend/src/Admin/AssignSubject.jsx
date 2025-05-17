@@ -30,32 +30,61 @@ const AssignSubject = () => {
   });
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
   const pageSize = 8; // Number of rows per page
 
   const Navigate = useNavigate();
 
   useEffect(() => {
-    fetchAssignedSubjects();
-    fetchClasses();
-    fetchSubjects();
-    fetchFaculty();
-    fetchSchoolYears();
-    fetchAdvisories();
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      try {
+        await Promise.all([
+          fetchAssignedSubjects(),
+          fetchClasses(),
+          fetchSubjects(),
+          fetchFaculty(),
+          fetchSchoolYears(),
+          fetchAdvisories(),
+        ]);
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAllData();
   }, []);
 
   const fetchAdvisories = async () => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        toast.error("Authentication required");
+        Navigate("/login");
+        return;
+      }
+
       const response = await axios.get(
         "http://localhost:3000/Pages/admin-create-advisory",
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      setAdvisories(response.data);
+
+      if (Array.isArray(response.data)) {
+        console.log("Fetched advisories:", response.data);
+        setAdvisories(response.data);
+      } else {
+        console.error("Invalid advisory data format:", response.data);
+        toast.error("Received invalid advisory data");
+        setAdvisories([]);
+      }
     } catch (error) {
       console.error("Error fetching advisories:", error);
-      toast.error("Failed to fetch advisories");
+      toast.error(error.response?.data?.error || "Failed to fetch advisories");
+      setAdvisories([]);
     }
   };
 
@@ -194,28 +223,6 @@ const AssignSubject = () => {
       school_yearID: currentYear.school_yearID,
     };
 
-    if (newAssignedSubject.SubjectCode) {
-      payload.SubjectCode = newAssignedSubject.SubjectCode;
-    }
-
-    // Check for duplicate assignment
-    // Only check for duplicates when adding, not editing
-    if (!editingAssignment) {
-      const alreadyAssigned = assignedSubjects.some(
-        (assignment) =>
-          assignment.advisoryID === newAssignedSubject.advisoryID &&
-          assignment.subjectID === newAssignedSubject.subjectID &&
-          assignment.yearID === currentYear.school_yearID
-      );
-
-      if (alreadyAssigned) {
-        toast.error(
-          "This subject is already assigned to this advisory class for the current school year."
-        );
-        return;
-      }
-    }
-
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -256,6 +263,7 @@ const AssignSubject = () => {
         subjectID: "",
         FacultyID: "",
         advisoryID: "",
+        school_yearID: "",
       });
       fetchAssignedSubjects();
       setEditingAssignment(null);
@@ -371,7 +379,14 @@ const AssignSubject = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedSubjects.length > 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                        <p className="mt-2">Loading data...</p>
+                      </td>
+                    </tr>
+                  ) : paginatedSubjects.length > 0 ? (
                     paginatedSubjects.map((assignment, index) => (
                       <tr
                         key={assignment.subjectCode || `row-${index}`}
@@ -473,27 +488,40 @@ const AssignSubject = () => {
                   disabled={!!editingAssignment}
                 >
                   <option value="">Select Advisory Class</option>
-                  {advisories.map((advisory) => {
-                    const classInfo = classes.find(
-                      (c) => c.ClassID === advisory.classID
-                    );
-                    const facultyInfo = faculty.find(
-                      (f) => f.FacultyID === advisory.facultyID
-                    );
+                  {advisories.length > 0 ? (
+                    advisories.map((advisory) => {
+                      // Find the associated class information
+                      const classInfo = classes.find(
+                        (c) => c.ClassID === advisory.classID
+                      );
+                      // Find the associated faculty information
+                      const facultyInfo = faculty.find(
+                        (f) => f.FacultyID === advisory.facultyID
+                      );
 
-                    return (
-                      <option
-                        key={advisory.advisoryID}
-                        value={advisory.advisoryID}
-                      >
-                        {`Grade ${classInfo?.Grade || ""} - Section ${
-                          classInfo?.Section || ""
-                        } (${
-                          facultyInfo ? facultyInfo.LastName : "No Advisor"
-                        })`}
-                      </option>
-                    );
-                  })}
+                      // Create a descriptive label with grade, section and faculty name
+                      const gradeLabel = classInfo
+                        ? `Grade ${classInfo.Grade}`
+                        : "Unknown Grade";
+                      const sectionLabel = classInfo
+                        ? classInfo.Section
+                        : "Unknown Section";
+                      const facultyLabel = facultyInfo
+                        ? `(Advisor: ${facultyInfo.LastName}, ${facultyInfo.FirstName})`
+                        : "(No Advisor)";
+
+                      return (
+                        <option
+                          key={advisory.advisoryID}
+                          value={advisory.advisoryID}
+                        >
+                          {`${gradeLabel} - ${sectionLabel} ${facultyLabel}`}
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <option disabled value="">No advisory classes available</option>
+                  )}
                 </select>
               </div>
 

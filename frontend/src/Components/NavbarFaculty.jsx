@@ -90,7 +90,7 @@ const NavbarFaculty = ({ toggleSidebar }) => {
       {/* Right Section */}
       <div className="flex-none">
         <div className="flex items-center gap-4">
-          <NotificationDropdown userType="faculty" />
+        
           
           {/* Socket Status Indicator */}
           <div className="hidden md:flex items-center gap-2">

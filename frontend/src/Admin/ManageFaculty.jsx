@@ -23,14 +23,17 @@ const ManageFaculty = () => {
     Department: "",
     Password: "",
   });
-  const [archiving, setArchiving] = useState(false); // <-- Archiving state
+  const [archiving, setArchiving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Pagination States
+  // Enhanced Pagination States
   const [currentPage, setCurrentPage] = useState(1);
-  const facultyPerPage = 5;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
 
   const fetchUser = async () => {
     try {
+      setIsLoading(true);
       // Only call the correct endpoint for faculty data
       const response = await axios.get(
         "http://localhost:3000/Pages/admin-manage-faculty"
@@ -38,7 +41,9 @@ const ManageFaculty = () => {
       setFaculty(response.data);
     } catch (error) {
       console.error("Error fetching data:", error);
-      // Optionally show a toast or handle error
+      toast.error("Failed to load faculty data");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -65,6 +70,7 @@ const ManageFaculty = () => {
   };
 
   const fetchFaculty = async () => {
+    setIsLoading(true);
     try {
       const response = await axios.get(
         "http://localhost:3000/Pages/admin-manage-faculty"
@@ -72,6 +78,9 @@ const ManageFaculty = () => {
       setFaculty(response.data);
     } catch (error) {
       console.error("Error fetching faculty data:", error);
+      toast.error("Failed to load faculty data");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -211,26 +220,45 @@ const ManageFaculty = () => {
     }
   };
 
-  // Pagination logic
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1); // Reset to first page when searching
+  };
+
+  // Enhanced pagination logic
   const filteredFaculty = faculty.filter(
     (f) =>
-      f.FacultyID.toString().includes(searchTerm) ||
-      f.LastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      f.FirstName.toLowerCase().includes(searchTerm.toLowerCase())
+      (f.FacultyID?.toString() || "").includes(searchTerm) ||
+      (f.LastName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (f.FirstName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (f.Email || "").toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const indexOfLastFaculty = currentPage * facultyPerPage;
-  const indexOfFirstFaculty = indexOfLastFaculty - facultyPerPage;
-  const currentFaculty = filteredFaculty.slice(
-    indexOfFirstFaculty,
-    indexOfLastFaculty
-  );
-  const totalPages = Math.ceil(filteredFaculty.length / facultyPerPage);
+  // Calculate pagination
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredFaculty.slice(indexOfFirstItem, indexOfLastItem);
 
-  const handleNextPage = () =>
-    currentPage < totalPages && setCurrentPage(currentPage + 1);
-  const handlePrevPage = () =>
-    currentPage > 1 && setCurrentPage(currentPage - 1);
+  // Update total pages whenever filtered results change
+  useEffect(() => {
+    setTotalPages(Math.ceil(filteredFaculty.length / itemsPerPage));
+    // If current page is greater than total pages, set to page 1
+    if (
+      currentPage > Math.ceil(filteredFaculty.length / itemsPerPage) &&
+      filteredFaculty.length > 0
+    ) {
+      setCurrentPage(1);
+    }
+  }, [filteredFaculty, itemsPerPage, currentPage]);
+
+  // Enhanced pagination controls
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -264,16 +292,21 @@ const ManageFaculty = () => {
 
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
             <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
-              <input
-                type="text"
-                placeholder="Search by ID or name"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="border border-gray-300 rounded-md px-4 py-2 flex-grow"
-              />
-              <FontAwesomeIcon icon={faMagnifyingGlass} className="ml-3" />
+              <div className="relative flex-grow w-full sm:w-auto">
+                <input
+                  type="text"
+                  placeholder="Search by ID, name or email"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10"
+                />
+                <FontAwesomeIcon
+                  icon={faMagnifyingGlass}
+                  className="absolute left-3 top-3 text-gray-400"
+                />
+              </div>
               <button
-                className="btn bg-blue-500 hover:bg-blue-600 text-white ml-3"
+                className="btn bg-blue-700 text-white hover:bg-blue-800 w-full sm:w-auto"
                 onClick={() =>
                   document.getElementById("faculty_modal").showModal()
                 }
@@ -344,7 +377,6 @@ const ManageFaculty = () => {
                         onChange={handleChanges}
                         placeholder="Enter Middle Name"
                         className="input input-bordered w-full"
-                        required
                       />
                     </div>
 
@@ -369,7 +401,7 @@ const ManageFaculty = () => {
                     <div className="md:col-span-2 flex flex-col">
                       <label
                         className="text-sm text-gray-600 mb-1"
-                        htmlFor="Email"
+                        htmlFor="Password"
                       >
                         Password
                       </label>
@@ -379,8 +411,9 @@ const ManageFaculty = () => {
                         id="Password"
                         value={newFaculty.Password}
                         onChange={handleChanges}
-                        placeholder="Enter Password "
+                        placeholder="Enter Password (min. 6 characters)"
                         className="input input-bordered w-full"
+                        required
                       />
                     </div>
                   </div>
@@ -414,44 +447,70 @@ const ManageFaculty = () => {
                 </h3>
                 {editingFaculty && (
                   <form onSubmit={handleUpdate} className="space-y-3">
-                    <input
-                      type="number"
-                      name="FacultyID"
-                      value={editingFaculty.FacultyID || ""}
-                      onChange={handleEditChanges}
-                      className="input input-bordered w-full"
-                      disabled
-                    />
-                    <input
-                      type="text"
-                      name="LastName"
-                      value={editingFaculty.LastName || ""}
-                      onChange={handleEditChanges}
-                      className="input input-bordered w-full"
-                      required
-                    />
-                    <input
-                      type="text"
-                      name="FirstName"
-                      value={editingFaculty.FirstName || ""}
-                      onChange={handleEditChanges}
-                      className="input input-bordered w-full"
-                      required
-                    />
-                    <input
-                      type="text"
-                      name="MiddleName"
-                      value={editingFaculty.MiddleName || ""}
-                      onChange={handleEditChanges}
-                      className="input input-bordered w-full"
-                    />
-                    <input
-                      type="email"
-                      name="Email"
-                      value={editingFaculty.Email || ""}
-                      onChange={handleEditChanges}
-                      className="input input-bordered w-full"
-                    />
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Faculty ID</span>
+                      </label>
+                      <input
+                        type="number"
+                        name="FacultyID"
+                        value={editingFaculty.FacultyID || ""}
+                        onChange={handleEditChanges}
+                        className="input input-bordered w-full"
+                        disabled
+                      />
+                    </div>
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Last Name</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="LastName"
+                        value={editingFaculty.LastName || ""}
+                        onChange={handleEditChanges}
+                        className="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">First Name</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="FirstName"
+                        value={editingFaculty.FirstName || ""}
+                        onChange={handleEditChanges}
+                        className="input input-bordered w-full"
+                        required
+                      />
+                    </div>
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Middle Name</span>
+                      </label>
+                      <input
+                        type="text"
+                        name="MiddleName"
+                        value={editingFaculty.MiddleName || ""}
+                        onChange={handleEditChanges}
+                        className="input input-bordered w-full"
+                      />
+                    </div>
+                    <div className="form-control">
+                      <label className="label">
+                        <span className="label-text">Email</span>
+                      </label>
+                      <input
+                        type="email"
+                        name="Email"
+                        value={editingFaculty.Email || ""}
+                        onChange={handleEditChanges}
+                        className="input input-bordered w-full"
+                        required
+                      />
+                    </div>
                     <div className="modal-action">
                       <button
                         type="submit"
@@ -488,9 +547,18 @@ const ManageFaculty = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentFaculty.length > 0 ? (
-                    currentFaculty.map((faculty, index) => (
-                      <tr key={index} className="border-b">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4">
+                        <div className="flex justify-center items-center space-x-2">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+                          <span>Loading faculty data...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : currentItems.length > 0 ? (
+                    currentItems.map((faculty, index) => (
+                      <tr key={index} className="border-b hover:bg-gray-50">
                         <td className="px-4 py-2">{faculty.FacultyID}</td>
                         <td className="px-4 py-2">{faculty.LastName}</td>
                         <td className="px-4 py-2">{faculty.FirstName}</td>
@@ -498,9 +566,9 @@ const ManageFaculty = () => {
                           {faculty.MiddleName || "-"}
                         </td>
                         <td className="px-4 py-2">{faculty.Email || "-"}</td>
-                        <td className="px-4 py-2">
+                        <td className="px-4 py-2 flex space-x-2">
                           <button
-                            className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm mr-4"
+                            className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm"
                             onClick={() => handleArchive(faculty)}
                             disabled={archiving}
                           >
@@ -526,26 +594,80 @@ const ManageFaculty = () => {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="flex justify-between mt-4">
-              <button
-                onClick={handlePrevPage}
-                disabled={currentPage === 1}
-                className="btn"
-              >
-                Previous
-              </button>
-              <span>
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages}
-                className="btn bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                Next
-              </button>
-            </div>
+            {/* Enhanced Pagination Controls */}
+            {!isLoading && filteredFaculty.length > 0 && (
+              <div className="flex flex-col md:flex-row justify-between items-center mt-4 px-4">
+                <div className="flex items-center mb-4 md:mb-0">
+                  <span className="text-sm text-gray-700 mr-2">Show</span>
+                  <select
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={itemsPerPage}
+                    onChange={handleItemsPerPageChange}
+                  >
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                  </select>
+                  <span className="text-sm text-gray-700 ml-2">
+                    items per page
+                  </span>
+                </div>
+
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-700 mr-4">
+                    Page {currentPage} of {totalPages}
+                    ({filteredFaculty.length} total items)
+                  </span>
+                  <div className="flex">
+                    <button
+                      onClick={() => paginate(1)}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-1 rounded-l-md border ${
+                        currentPage === 1
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      First
+                    </button>
+                    <button
+                      onClick={() => paginate(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-1 border-t border-b ${
+                        currentPage === 1
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Prev
+                    </button>
+                    <button
+                      onClick={() => paginate(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-1 border-t border-b ${
+                        currentPage === totalPages
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => paginate(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-1 rounded-r-md border ${
+                        currentPage === totalPages
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Last
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

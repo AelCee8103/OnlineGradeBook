@@ -23,12 +23,19 @@ const ManageSubjectList = () => {
   const [editInput, setEditInput] = useState("");
   const [originalEditName, setOriginalEditName] = useState("");
   const Navigate = useNavigate();
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     fetchSubjects();
   }, []);
 
   const fetchSubjects = async () => {
+    setIsLoading(true);
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(
@@ -45,6 +52,8 @@ const ManageSubjectList = () => {
         console.log("Response status:", error.response.status);
       }
       toast.error("Failed to fetch subjects");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -145,6 +154,34 @@ const ManageSubjectList = () => {
         .includes(searchTerm.toLowerCase())
   );
 
+  // Handle search change and reset to first page
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1); // Reset to first page when searching
+  };
+
+  // Pagination calculations
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredSubjects.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Update total pages whenever filtered results change
+  useEffect(() => {
+    setTotalPages(Math.ceil(filteredSubjects.length / itemsPerPage));
+    // If current page is greater than total pages, set to page 1
+    if (currentPage > Math.ceil(filteredSubjects.length / itemsPerPage) && filteredSubjects.length > 0) {
+      setCurrentPage(1);
+    }
+  }, [filteredSubjects, itemsPerPage, currentPage]);
+
+  // Pagination controls
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
       <AdminSidePanel
@@ -166,58 +203,149 @@ const ManageSubjectList = () => {
           <h1 className="text-3xl font-bold mb-6">Subject List</h1>
 
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
-            <input
-              type="text"
-              placeholder="Search by ID or Subject Name"
-              className="mb-4 border border-gray-300 rounded-md px-4 py-2"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <FontAwesomeIcon icon={faMagnifyingGlass} className="ml-3" />
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+              <div className="relative flex-grow w-full sm:w-auto mb-3 sm:mb-0">
+                <input
+                  type="text"
+                  placeholder="Search by ID or Subject Name"
+                  className="border border-gray-300 rounded-md px-4 py-2 w-full pl-10"
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                />
+                <FontAwesomeIcon 
+                  icon={faMagnifyingGlass} 
+                  className="absolute left-3 top-3 text-gray-400"
+                />
+              </div>
+              <button
+                className="px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800 w-full sm:w-auto"
+                onClick={() => document.getElementById("subject_modal").showModal()}
+              >
+                ADD SUBJECT
+              </button>
+            </div>
 
-            {/* Open Add Subject Modal */}
-            <button
-              className="ml-4 px-4 py-2 bg-blue-700 text-white rounded-md hover:bg-blue-800"
-              onClick={() =>
-                document.getElementById("subject_modal").showModal()
-              }
-            >
-              ADD SUBJECT
-            </button>
-
-            <table className="w-full text-left text-sm mt-4">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="px-4 py-2 text-gray-600">Subject ID</th>
-                  <th className="px-4 py-2 text-gray-600">Subject Name</th>
-                  <th className="px-4 py-2 text-gray-600">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSubjects.length > 0 ? (
-                  filteredSubjects.map((subject) => (
-                    <tr key={subject.SubjectID} className="border-b">
-                      <td className="px-4 py-2">{subject.SubjectID}</td>
-                      <td className="px-4 py-2">{subject.SubjectName}</td>
-                      <td className="px-4 py-2">
-                        <button
-                          className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
-                          onClick={() => openEditModal(subject)}
-                        >
-                          Edit
-                        </button>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm mt-4">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="px-4 py-2 text-gray-600">Subject ID</th>
+                    <th className="px-4 py-2 text-gray-600">Subject Name</th>
+                    <th className="px-4 py-2 text-gray-600">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="3" className="text-center py-4">
+                        <div className="flex justify-center items-center space-x-2">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+                          <span>Loading subjects...</span>
+                        </div>
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="text-center py-4">
-                      No subjects found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  ) : currentItems.length > 0 ? (
+                    currentItems.map((subject) => (
+                      <tr key={subject.SubjectID} className="border-b hover:bg-gray-50">
+                        <td className="px-4 py-2">{subject.SubjectID}</td>
+                        <td className="px-4 py-2">{subject.SubjectName}</td>
+                        <td className="px-4 py-2">
+                          <button
+                            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm"
+                            onClick={() => openEditModal(subject)}
+                          >
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="3" className="text-center py-4">
+                        No subjects found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Controls */}
+            {!isLoading && filteredSubjects.length > 0 && (
+              <div className="flex flex-col md:flex-row justify-between items-center mt-4 px-4">
+                <div className="flex items-center mb-4 md:mb-0">
+                  <span className="text-sm text-gray-700 mr-2">
+                    Show
+                  </span>
+                  <select 
+                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    value={itemsPerPage}
+                    onChange={handleItemsPerPageChange}
+                  >
+                    <option value="5">5</option>
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                  </select>
+                  <span className="text-sm text-gray-700 ml-2">
+                    items per page
+                  </span>
+                </div>
+                
+                <div className="flex items-center">
+                  <span className="text-sm text-gray-700 mr-4">
+                    Page {currentPage} of {totalPages} 
+                    ({filteredSubjects.length} total items)
+                  </span>
+                  <div className="flex">
+                    <button
+                      onClick={() => paginate(1)}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-1 rounded-l-md border ${
+                        currentPage === 1 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      First
+                    </button>
+                    <button
+                      onClick={() => paginate(Math.max(1, currentPage - 1))}
+                      disabled={currentPage === 1}
+                      className={`px-3 py-1 border-t border-b ${
+                        currentPage === 1 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Prev
+                    </button>
+                    <button
+                      onClick={() => paginate(Math.min(totalPages, currentPage + 1))}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-1 border-t border-b ${
+                        currentPage === totalPages 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => paginate(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className={`px-3 py-1 rounded-r-md border ${
+                        currentPage === totalPages 
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                          : "bg-white text-blue-500 hover:bg-blue-50"
+                      }`}
+                    >
+                      Last
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
