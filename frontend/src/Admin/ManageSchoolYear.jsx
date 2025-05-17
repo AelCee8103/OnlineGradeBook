@@ -154,6 +154,26 @@ const ManageSchoolYear = () => {
     console.log("Selected year:", selected);
   };
 
+  const handleAdvanceQuarter = async () => {
+    document.getElementById("next_quarter_modal").close(); // Close the modal
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.post(
+        "http://localhost:3000/Pages/admin/next-quarter",
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.success) {
+        toast.success(`Advanced to Quarter ${res.data.nextQuarter}`);
+        fetchActiveQuarter(); // Refresh the quarter display
+      } else {
+        toast.error(res.data.message);
+      }
+    } catch (err) {
+      toast.error("Failed to advance quarter");
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-100">
       <AdminSidePanel
@@ -217,6 +237,15 @@ const ManageSchoolYear = () => {
               <p className="mb-2 text-sm text-gray-600">
                 Current Quarter: {activeQuarter || "Loading..."}
               </p>
+              <button
+                className="mb-4 px-4 py-2 bg-green-500 text-white rounded hover:bg-yellow-600"
+                onClick={() =>
+                  document.getElementById("next_quarter_modal").showModal()
+                }
+                disabled={activeQuarter >= 4}
+              >
+                Set to Next Quarter
+              </button>
 
               <button
                 onClick={handlePromoteYear}
@@ -272,6 +301,46 @@ const ManageSchoolYear = () => {
           </div>
         </div>
       </div>
+
+      <dialog id="next_quarter_modal" className="modal">
+        <div className="modal-box">
+          <h3 className="font-bold text-lg mb-4">Advance to Next Quarter</h3>
+          <p className="mb-4">
+            Are you sure you want to advance to the next quarter?
+            <br />
+            <br />
+            <span className="text-red-600 font-semibold">
+              This action cannot be undone.
+            </span>
+            <br />
+            <br />
+            Advancing to the next quarter will:
+            <ul className="list-disc ml-6 mt-2 text-sm text-gray-700">
+              <li>
+                Move the grading period to the next quarter for all classes
+              </li>
+              <li>Lock previous quarter grades from editing</li>
+              <li>Affect all gradebook and advisory operations</li>
+            </ul>
+          </p>
+          <div className="modal-action flex gap-2">
+            <button
+              className="btn"
+              onClick={() =>
+                document.getElementById("next_quarter_modal").close()
+              }
+            >
+              Cancel
+            </button>
+            <button
+              className="btn bg-green-600 text-white hover:bg-green-700"
+              onClick={handleAdvanceQuarter}
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </dialog>
     </div>
   );
 };

@@ -3028,4 +3028,27 @@ router.get("/admin/all-advisory-validation-status/:schoolYearID", async (req, re
   }
 });
 
+router.post("/admin/next-quarter", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    // Get current active quarter
+    const [[current]] = await db.query("SELECT quarter FROM quarter WHERE status = 1 LIMIT 1");
+    if (!current) {
+      return res.status(400).json({ success: false, message: "No active quarter found." });
+    }
+    if (current.quarter >= 4) {
+      return res.status(400).json({ success: false, message: "Already at Quarter 4." });
+    }
+    const nextQuarter = current.quarter + 1;
+    // Set all quarters to inactive
+    await db.query("UPDATE quarter SET status = 0");
+    // Set next quarter to active
+    await db.query("UPDATE quarter SET status = 1 WHERE quarter = ?", [nextQuarter]);
+    res.json({ success: true, nextQuarter });
+  } catch (error) {
+    console.error("Error advancing quarter:", error);
+    res.status(500).json({ success: false, message: "Failed to advance quarter." });
+  }
+});
+
 export default router;
