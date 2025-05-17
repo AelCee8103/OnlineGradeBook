@@ -2965,5 +2965,56 @@ router.get("/active-quarter", async (req, res) => {
   }
 });
 
+router.get("/admin/all-advisory-validation-status/:schoolYearID", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const { schoolYearID } = req.params;
+
+    // Get all advisories for this school year
+    const [advisories] = await db.query(`
+      SELECT a.advisoryID
+      FROM advisory a
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      WHERE cy.yearID = ?
+    `, [schoolYearID]);
+
+    if (!advisories.length) {
+      return res.json({ allApproved: true, details: [] }); // No advisories, allow promotion
+    }
+
+    // For each advisory, get the latest validation request (if any)
+    const advisoryIDs = advisories.map(a => a.advisoryID);
+    const [validationRows] = await db.query(`
+      SELECT vr.advisoryID, vs.status_name
+      FROM validation_request vr
+      JOIN (
+        SELECT advisoryID, MAX(requestDate) as maxDate
+        FROM validation_request
+        GROUP BY advisoryID
+      ) latest ON vr.advisoryID = latest.advisoryID AND vr.requestDate = latest.maxDate
+      JOIN validation_status vs ON vr.statusID = vs.validation_statusID
+      WHERE vr.advisoryID IN (?)
+    `, [advisoryIDs]);
+
+    // Map advisoryID to status
+    const statusMap = {};
+    validationRows.forEach(row => {
+      statusMap[row.advisoryID] = row.status_name;
+    });
+
+    // Find advisories with no request or not approved
+    const details = advisories.map(a => ({
+      advisoryID: a.advisoryID,
+      status: statusMap[a.advisoryID] || null
+    }));
+
+    const allApproved = details.every(d => d.status && d.status.toLowerCase() === "approved");
+
+    res.json({ allApproved, details });
+  } catch (error) {
+    console.error("Error checking all advisory validation status:", error);
+    res.status(500).json({ error: "Failed to check advisory validation status" });
+  }
+});
 
 export default router;

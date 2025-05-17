@@ -6,6 +6,10 @@ import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const ManageSchoolYear = () => {
+  const [allAdvisoriesValidated, setAllAdvisoriesValidated] = useState(true);
+  const [advisoryValidationDetails, setAdvisoryValidationDetails] = useState(
+    []
+  );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [schoolYears, setSchoolYears] = useState([]);
   const [currentYear, setCurrentYear] = useState(null);
@@ -64,10 +68,30 @@ const ManageSchoolYear = () => {
     }
   };
 
+  const fetchAdvisoryValidationStatus = async (schoolYearID) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.get(
+        `http://localhost:3000/Pages/admin/all-advisory-validation-status/${schoolYearID}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setAllAdvisoriesValidated(res.data.allApproved);
+      setAdvisoryValidationDetails(res.data.details);
+    } catch (err) {
+      setAllAdvisoriesValidated(false);
+      setAdvisoryValidationDetails([]);
+    }
+  };
+
   useEffect(() => {
     fetchSchoolYears();
     fetchActiveQuarter();
   }, []);
+  useEffect(() => {
+    if (currentYear) {
+      fetchAdvisoryValidationStatus(currentYear.school_yearID);
+    }
+  }, [currentYear]);
 
   const handlePromoteYear = async () => {
     if (!currentYear || !nextYear) {
@@ -201,14 +225,16 @@ const ManageSchoolYear = () => {
                   !currentYear ||
                   !nextYear ||
                   isPromoted ||
-                  activeQuarter !== 4 // <-- Only enable if quarter 4
+                  activeQuarter !== 4 ||
+                  !allAdvisoriesValidated // <-- Add this
                 }
                 className={`w-full py-2 px-4 rounded-md transition-colors ${
                   loading ||
                   !currentYear ||
                   !nextYear ||
                   isPromoted ||
-                  activeQuarter !== 4
+                  activeQuarter !== 4 ||
+                  !allAdvisoriesValidated
                     ? "bg-gray-300 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-700 text-white"
                 }`}
@@ -219,8 +245,29 @@ const ManageSchoolYear = () => {
                   ? "Promotion Completed"
                   : activeQuarter !== 4
                   ? "Promotion only allowed in Quarter 4"
+                  : !allAdvisoriesValidated
+                  ? "All advisories must be validated (approved) first"
                   : "Promote to Next School Year"}
               </button>
+              {!allAdvisoriesValidated &&
+                advisoryValidationDetails.length > 0 && (
+                  <div className="text-red-600 text-sm mt-2">
+                    <strong>Advisories not validated or not approved:</strong>
+                    <ul>
+                      {advisoryValidationDetails
+                        .filter(
+                          (d) =>
+                            !d.status || d.status.toLowerCase() !== "approved"
+                        )
+                        .map((d) => (
+                          <li key={d.advisoryID}>
+                            Advisory ID: {d.advisoryID} - Status:{" "}
+                            {d.status || "No request"}
+                          </li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
             </div>
           </div>
         </div>
