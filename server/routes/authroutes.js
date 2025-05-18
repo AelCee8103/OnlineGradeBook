@@ -797,4 +797,25 @@ router.post('/attendance/update', verifyToken, async (req, res) => {
   }
 });
 
+// Update the admin dashboard verification route:
+
+router.get('/Admin-dashboard', verifyAdminToken, async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const adminID = req.AdminID;
+
+    // Get admin details
+    const [rows] = await db.query('SELECT * FROM admin WHERE AdminID = ?', [adminID]);
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    return res.status(200).json({ admin: rows[0] });
+  } catch (err) {
+    console.error("Error fetching admin data:", err.message);
+    return res.status(500).json({ message: "Server Error", error: err.message });
+  }
+});
+
 export default router;

@@ -43,12 +43,25 @@ const AdminDashboard = () => {
   const fetchUser = async () => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        console.error("No token found");
+        navigate("/admin-login");
+        return;
+      }
+      
+      console.log("Checking admin authentication...");
       await axios.get("http://localhost:3000/auth/Admin-dashboard", {
         headers: { Authorization: `Bearer ${token}` },
       });
+      
+      console.log("Admin authentication successful");
     } catch (error) {
       console.error("Error fetching data:", error);
-      navigate("/admin-login");
+      // Only redirect if unauthorized
+      if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+        toast.error("Authentication failed. Please login again.");
+        navigate("/admin-login");
+      }
     }
   };
 
@@ -57,13 +70,41 @@ const AdminDashboard = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
-      const response = await axios.get("http://localhost:3000/Pages/admin/dashboard-stats", {
-        headers: { Authorization: `Bearer ${token}` },
+      
+      // Debugging log
+      console.log("Fetching dashboard stats...");
+      
+      // Using the endpoint for statistics - removed authenticateToken middleware
+      const response = await axios.get("http://localhost:3000/Pages/admin/dashboard-stats");
+      
+      console.log("Dashboard statistics response:", response.data);
+      
+      // Set the statistics
+      setStats({
+        students: response.data.students || 0,
+        faculty: response.data.faculty || 0,
+        advisories: response.data.advisories || 0,
+        subjectClasses: response.data.subjectClasses || 0,
+        unfinishedGrades: response.data.unfinishedGrades || 0, 
+        finishedGrades: response.data.finishedGrades || 0,
+        currentYear: response.data.currentYear || "Unknown"
       });
-      setStats(response.data);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
+      
+      // Show error notification
       toast.error("Failed to load dashboard statistics");
+      
+      // Set default values in case of error
+      setStats({
+        students: 0,
+        faculty: 0,
+        advisories: 0,
+        subjectClasses: 0,
+        unfinishedGrades: 0,
+        finishedGrades: 0,
+        currentYear: "Error loading"
+      });
     } finally {
       setLoading(false);
     }

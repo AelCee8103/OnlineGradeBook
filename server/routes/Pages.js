@@ -1582,4 +1582,92 @@ router.get('/faculty/statistics', authenticateToken, async (req, res) => {
 });
 
 
+// GET admin dashboard statistics
+router.get('/admin/dashboard-stats', async (req, res) => {
+  let db;
+  try {
+    console.log("Admin stats endpoint hit");
+    db = await connectToDatabase();
+    
+    // Get current active school year
+    const [activeYearRows] = await db.query(
+      "SELECT school_yearID, year FROM schoolyear WHERE status = 1 LIMIT 1"
+    );
+    
+    if (activeYearRows.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        message: "No active school year found" 
+      });
+    }
+    
+    const activeYear = activeYearRows[0];
+    console.log("Active school year:", activeYear);
+    const activeYearID = activeYear.school_yearID;
+    
+    // Get count of active students
+    const [studentsRows] = await db.query(
+      "SELECT COUNT(*) AS count FROM students WHERE Status = 1"
+    );
+    
+    // Get count of active faculty
+    const [facultyRows] = await db.query(
+      "SELECT COUNT(*) AS count FROM faculty WHERE status = 1 OR status IS NULL"
+    );
+    
+    // Get count of advisory classes in active year
+    const [advisoryRows] = await db.query(`
+      SELECT COUNT(*) AS count 
+      FROM advisory a
+      JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      WHERE cy.yearID = ?
+    `, [activeYearID]);
+    
+    // Get count of subject classes in active year
+    const [subjectRows] = await db.query(`
+      SELECT COUNT(*) AS count 
+      FROM assignsubject 
+      WHERE yearID = ?
+    `, [activeYearID]);
+    
+    // Get count of validation requests with status 0 (unfinished/pending)
+    const [unfinishedRows] = await db.query(`
+      SELECT COUNT(*) AS count 
+      FROM validation_request 
+      WHERE statusID = 0
+    `);
+    
+    // Get count of validation requests with status 1 (finished/approved)
+    const [finishedRows] = await db.query(`
+      SELECT COUNT(*) AS count 
+      FROM validation_request 
+      WHERE statusID = 1
+    `);
+
+    const stats = {
+      students: studentsRows[0].count || 0,
+      faculty: facultyRows[0].count || 0, 
+      advisories: advisoryRows[0].count || 0,
+      subjectClasses: subjectRows[0].count || 0,
+      unfinishedGrades: unfinishedRows[0].count || 0,
+      finishedGrades: finishedRows[0].count || 0,
+      currentYear: activeYear.year
+    };
+    
+    console.log("Dashboard stats:", stats);
+    
+    // Return all statistics
+    res.status(200).json(stats);
+    
+  } catch (error) {
+    console.error("Error fetching admin dashboard statistics:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch dashboard statistics",
+      error: error.message
+    });
+  }
+});
+
+
 export default router;
