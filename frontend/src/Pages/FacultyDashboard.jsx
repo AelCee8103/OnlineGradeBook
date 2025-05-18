@@ -4,6 +4,8 @@ import FacultySidePanel from "../Components/FacultySidePanel";
 import StatCard from "../Components/StatCard";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const FacultyDashboard = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -16,6 +18,7 @@ const FacultyDashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [currentSchoolYear, setCurrentSchoolYear] = useState("");
+  const [facultyInfo, setFacultyInfo] = useState(null);
 
   const fetchUser = async () => {
     try {
@@ -26,10 +29,12 @@ const FacultyDashboard = () => {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      console.log("User Authenticated", response.data);
+      if (response.data && response.data.faculty) {
+        setFacultyInfo(response.data.faculty);
+      }
     } catch (error) {
       console.error("Authentication failed", error);
-      alert("Session expired. Redirecting to login...");
+      toast.error("Session expired. Please log in again.");
       navigate("/faculty-login");
     }
   };
@@ -38,8 +43,16 @@ const FacultyDashboard = () => {
     try {
       setLoading(true);
       const token = localStorage.getItem("token");
+      
+      if (!token) {
+        console.error("No auth token found");
+        toast.error("Authentication error. Please log in again.");
+        navigate("/faculty-login");
+        return;
+      }
 
       // Get current school year
+      let currentYear = "Unknown";
       try {
         const yearResponse = await axios.get("http://localhost:3000/Pages/schoolyear", {
           headers: { Authorization: `Bearer ${token}` },
@@ -49,29 +62,78 @@ const FacultyDashboard = () => {
           const activeYear = yearResponse.data.find((year) => year.status === 1);
           if (activeYear) {
             setCurrentSchoolYear(activeYear.year);
+            currentYear = activeYear.year;
           }
-        } else {
-          console.warn("Unexpected response format from schoolyear endpoint:", yearResponse.data);
         }
       } catch (yearError) {
         console.error("Error fetching school year:", yearError);
-        // Continue execution to fetch other statistics
       }
 
-      // Get faculty statistics from the new endpoint
-      const statsResponse = await axios.get(
-        "http://localhost:3000/Pages/faculty/statistics",
-        {
-          headers: { Authorization: `Bearer ${token}` },
+      // Get faculty statistics with better error handling
+      console.log("Fetching faculty statistics...");
+      try {
+        const facultyID = localStorage.getItem("facultyID");
+        
+        // Log details to help with debugging
+        console.log("Using token:", token.substring(0, 15) + "...");
+        console.log("Faculty ID from localStorage:", facultyID);
+        
+        const statsResponse = await axios.get(
+          "http://localhost:3000/Pages/faculty/statistics",
+          {
+            headers: { 
+              Authorization: `Bearer ${token}` 
+            },
+          }
+        );
+
+        if (statsResponse.data.success && statsResponse.data.statistics) {
+          console.log("Received statistics:", statsResponse.data.statistics);
+          setStats(statsResponse.data.statistics);
+        } else {
+          console.warn("Unexpected statistics response format:", statsResponse.data);
+          toast.warning("Statistics may be incomplete");
+          
+          // Set default values even if response format is unexpected
+          setStats({
+            students: statsResponse.data.statistics?.students || 0,
+            subjectClasses: statsResponse.data.statistics?.subjectClasses || 0,
+            unfinishedGrades: statsResponse.data.statistics?.unfinishedGrades || 0,
+            finishedGrades: statsResponse.data.statistics?.finishedGrades || 0,
+          });
         }
-      );
-
-      if (statsResponse.data.success) {
-        setStats(statsResponse.data.statistics);
+      } catch (statsError) {
+        console.error("Error fetching faculty statistics:", statsError);
+        
+        if (statsError.response) {
+          console.error("Server responded with:", statsError.response.data);
+          console.error("Status code:", statsError.response.status);
+        } else if (statsError.request) {
+          console.error("No response received");
+        }
+        
+        toast.error("Failed to load statistics data");
+        
+        // Set default stats in case of error
+        setStats({
+          students: 0,
+          subjectClasses: 0,
+          unfinishedGrades: 0,
+          finishedGrades: 0
+        });
       }
-
     } catch (error) {
-      console.error("Error fetching statistics", error);
+      console.error("Error in overall statistics fetch:", error);
+      toast.error("Failed to load dashboard statistics");
+      
+      // Set fallback data for UI
+      setStats({
+        students: 0,
+        subjectClasses: 0,
+        unfinishedGrades: 0,
+        finishedGrades: 0
+      });
+      setCurrentSchoolYear("Unknown");
     } finally {
       setLoading(false);
     }
@@ -83,6 +145,7 @@ const FacultyDashboard = () => {
   }, []);
 
   useEffect(() => {
+    // Handle browser back button
     navigate("/faculty-dashboard", { replace: true });
     window.history.pushState(null, "", window.location.href);
     const preventGoBack = () => {
@@ -113,20 +176,27 @@ const FacultyDashboard = () => {
       <div className="flex-1 flex flex-col overflow-auto">
         <NavbarFaculty toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
 
-        <div className="p-6 md:p-8 space-y-8">
-          {/* Header Section */}
-          <div className="flex justify-between items-center flex-wrap gap-4">
-            <h1 className="text-3xl font-bold text-green-800 ">
-              Faculty Dashboard
-            </h1>
-            <div className="flex items-center gap-3">
-              <span className="text-gray-600 text-lg font-medium">School Year:</span>
-              {/* Replaced dropdown with a span */}
-              <span className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 text-lg text-green-800 font-semibold">
-                {currentSchoolYear || "Loading..."}
-              </span>
+        <div className="p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-8">
+          {/* Welcome Card */}
+          <div className="bg-gradient-to-r from-green-700 to-green-600 rounded-2xl shadow-lg text-white p-4 sm:p-6 md:p-8">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+              <div>
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-bold">
+                  Welcome, {facultyInfo ? `${facultyInfo.FirstName} ${facultyInfo.LastName}` : 'Faculty'}!
+                </h1>
+                <p className="mt-1 sm:mt-2 opacity-90 text-sm sm:text-base">
+                  Here's your teaching overview for the current school year
+                </p>
+                <div className="flex items-center mt-2 sm:mt-3">
+                  <span className="text-green-200 text-sm sm:text-base">School Year:</span>
+                  <span className="ml-2 bg-white/20 rounded-xl px-3 py-1 text-sm sm:text-base font-semibold">
+                    {currentSchoolYear || "Loading..."}
+                  </span>
+                </div>
+              </div>
+              
               <button
-                className="bg-green-700 hover:bg-green-600 text-white px-5 py-2 rounded-xl shadow transition duration-300 flex items-center"
+                className="bg-white text-green-700 px-4 py-2 rounded-xl shadow transition duration-300 flex items-center gap-2 text-sm sm:text-base hover:bg-green-50 self-start sm:self-auto"
                 onClick={() => {
                   fetchUser();
                   fetchStatistics();
@@ -134,7 +204,7 @@ const FacultyDashboard = () => {
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-1"
+                  className="h-5 w-5"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -152,34 +222,38 @@ const FacultyDashboard = () => {
           </div>
 
           {/* Statistics Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatCard
-              title="Students"
-              value={loading ? "..." : (stats.students || "0").toString()}
-              subtitle="Total No. of Students"
-              icon="students"
-            />
-            <StatCard
-              title="Subject Classes"
-              value={loading ? "..." : (stats.subjectClasses || "0").toString()}
-              subtitle="Total No. of Classes"
-              icon="classes"
-            />
-            <StatCard
-              title="Unfinished Grades"
-              value={loading ? "..." : (stats.unfinishedGrades || "0").toString()}
-              subtitle="Unvalidated Grades"
-              textColor="text-yellow-500"
-              icon="pending"
-            />
-            <StatCard
-              title="Finished Grades"
-              value={loading ? "..." : (stats.finishedGrades || "0").toString()}
-              subtitle="Validated Grades"
-              textColor="text-green-600"
-              icon="validated"
-            />
+          <div>
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-700 mb-3 sm:mb-4 px-1">Academic Statistics</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+              <StatCard
+                title="Students"
+                value={loading ? "..." : (stats.students || "0").toString()}
+                subtitle="Total No. of Students"
+                icon="students"
+              />
+              <StatCard
+                title="Subject Classes"
+                value={loading ? "..." : (stats.subjectClasses || "0").toString()}
+                subtitle="Total No. of Classes"
+                icon="classes"
+              />
+              <StatCard
+                title="Unfinished Grades"
+                value={loading ? "..." : (stats.unfinishedGrades || "0").toString()}
+                subtitle="Unvalidated Grades"
+                textColor="text-yellow-500"
+                icon="pending"
+              />
+              <StatCard
+                title="Finished Grades"
+                value={loading ? "..." : (stats.finishedGrades || "0").toString()}
+                subtitle="Validated Grades"
+                textColor="text-green-600"
+                icon="validated"
+              />
+            </div>
           </div>
+
         </div>
       </div>
     </div>
