@@ -19,6 +19,11 @@ const CreateAdvisory = () => {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
+  
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [formData, setFormData] = useState({
     advisoryID: "",
@@ -35,17 +40,36 @@ const CreateAdvisory = () => {
   const fetchAdvisoryClasses = async () => {
     const token = localStorage.getItem("token");
     try {
+      setFetching(true);
       const response = await axios.get(
         "http://localhost:3000/Pages/admin-create-advisory",
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setAdvisoryClasses(response.data || []);
-      return response.data || [];
+
+      console.log("Advisory classes response (full data):", response.data);
+      console.log("Total advisory records received:", response.data?.length || 0);
+
+      // Check if data is an array and has items
+      if (Array.isArray(response.data) && response.data.length > 0) {
+        setAdvisoryClasses(response.data);
+        // Calculate total pages
+        setTotalPages(Math.ceil(response.data.length / itemsPerPage));
+        return response.data;
+      } else {
+        console.warn("Empty or invalid advisory data received:", response.data);
+        setAdvisoryClasses([]);
+        setTotalPages(1);
+        return [];
+      }
     } catch (err) {
       console.error("Error fetching advisory classes:", err);
       toast.error("Failed to load advisory classes");
       setError("Failed to load advisory classes");
+      setAdvisoryClasses([]);
+      setTotalPages(1);
       return [];
+    } finally {
+      setFetching(false);
     }
   };
 
@@ -54,23 +78,42 @@ const CreateAdvisory = () => {
     setFetching(true);
     setError(null);
     try {
-      const [advisoryData, classesRes, facultiesRes, yearsRes] =
-        await Promise.all([
-          fetchAdvisoryClasses(),
-          axios.get("http://localhost:3000/Pages/admin-advisory-classes", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get("http://localhost:3000/Pages/admin-manage-faculty", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get("http://localhost:3000/Pages/schoolyear", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-        ]);
+      // Fetch all data in parallel
+      const classesPromise = axios.get(
+        "http://localhost:3000/Pages/admin-advisory-classes",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
+      const facultiesPromise = axios.get(
+        "http://localhost:3000/Pages/admin-manage-faculty",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const yearsPromise = axios.get("http://localhost:3000/Pages/schoolyear", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const advisoryPromise = fetchAdvisoryClasses();
+
+      // Wait for all promises to resolve
+      const [advisoryData, classesRes, facultiesRes, yearsRes] = await Promise.all(
+        [advisoryPromise, classesPromise, facultiesPromise, yearsPromise]
+      );
+
+      // Set state with the results
       setClasses(classesRes.data || []);
       setFaculties(facultiesRes.data || []);
       setSchoolYears(yearsRes.data || []);
+
+      // Log the data for debugging
+      console.log("Classes data:", classesRes.data);
+      console.log("Faculties data:", facultiesRes.data);
+      console.log("School years data:", yearsRes.data);
+      console.log("Advisory classes:", advisoryData);
     } catch (err) {
       console.error("Error fetching data:", err);
       toast.error("Failed to load data");
@@ -84,6 +127,11 @@ const CreateAdvisory = () => {
     fetchAllData();
   }, []);
 
+  // Reset pagination when search term changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -91,8 +139,6 @@ const CreateAdvisory = () => {
   const handleCreateChange = (e) => {
     setCreateFormData({ ...createFormData, [e.target.name]: e.target.value });
   };
-
-  // In your component, before the return statement:
 
   // Get all facultyIDs currently assigned as advisors
   const assignedFacultyIDs = advisoryClasses.map((a) => a.facultyID);
@@ -200,9 +246,8 @@ const CreateAdvisory = () => {
       });
       document.getElementById("create_modal").close();
 
-      // Refresh data and navigate
+      // Refresh data
       await fetchAdvisoryClasses();
-      navigate("/admin-create-advisory"); // Navigate to the same page to refresh
     } catch (error) {
       console.error("Server error:", error);
       const message =
@@ -224,25 +269,60 @@ const CreateAdvisory = () => {
 
   const filteredAdvisoryClasses = advisoryClasses.filter((advisory) => {
     if (!advisory) return false;
+    
+    // Create a flag to log any issues with this advisory
+    let hasIssues = false;
+    
+    // Find class and faculty info
     const classInfo = classes.find((c) => c.ClassID === advisory.classID) || {};
-    const facultyInfo =
-      faculties.find((f) => f.FacultyID === advisory.facultyID) || {};
-
-    return (
-      (advisory.advisoryID?.toString() || "").includes(searchTerm) ||
-      (advisory.classID?.toString() || "").includes(searchTerm) ||
-      (classInfo.Grade?.toString() || "").includes(searchTerm) ||
-      (classInfo.Section || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      (facultyInfo.FirstName || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      (facultyInfo.LastName || "")
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase())
-    );
+    if (!classInfo.ClassID) {
+      console.log(`Advisory ${advisory.advisoryID} is missing valid class info`);
+      hasIssues = true;
+    }
+    
+    const facultyInfo = faculties.find((f) => f.FacultyID === advisory.facultyID) || {};
+    if (!facultyInfo.FacultyID) {
+      console.log(`Advisory ${advisory.advisoryID} is missing valid faculty info`);
+      hasIssues = true;
+    }
+    
+    // If search term is empty, include all advisories regardless of issues
+    if (!searchTerm) return true;
+    
+    // Create searchable text
+    const searchableText = [
+      advisory.advisoryID?.toString() || "",
+      advisory.classID?.toString() || "",
+      classInfo.Grade?.toString() || "",
+      (classInfo.Section || "").toLowerCase(),
+      (facultyInfo.FirstName || "").toLowerCase(),
+      (facultyInfo.LastName || "").toLowerCase(),
+    ].join(" ");
+    
+    return searchableText.toLowerCase().includes(searchTerm.toLowerCase());
   });
+
+  // Sort the advisory classes in ascending order by advisoryID
+  const sortedAdvisoryClasses = [...filteredAdvisoryClasses].sort((a, b) => {
+    return a.advisoryID - b.advisoryID;
+  });
+
+  // Pagination logic
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = sortedAdvisoryClasses.slice(indexOfFirstItem, indexOfLastItem);
+  
+  // Update totalPages whenever filtered results change
+  useEffect(() => {
+    setTotalPages(Math.ceil(sortedAdvisoryClasses.length / itemsPerPage));
+  }, [sortedAdvisoryClasses, itemsPerPage]);
+
+  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -354,7 +434,7 @@ const CreateAdvisory = () => {
                           key={year.school_yearID}
                           value={year.school_yearID}
                         >
-                          {year.school_yearID} - {year.SchoolYear}
+                          {year.school_yearID} - {year.year}
                         </option>
                       ))}
                     </select>
@@ -454,6 +534,20 @@ const CreateAdvisory = () => {
               </form>
             </dialog>
 
+            {/* Reset all filters button (add above the table) */}
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => {
+                  setSearchTerm("");
+                  setCurrentPage(1);
+                  setItemsPerPage(25); // Increase to show more items
+                }}
+                className="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded text-sm"
+              >
+                View All ({advisoryClasses.length})
+              </button>
+            </div>
+
             {/* Advisory Classes Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm mt-4">
@@ -469,7 +563,10 @@ const CreateAdvisory = () => {
                   {fetching ? (
                     <tr>
                       <td colSpan="4" className="text-center py-4">
-                        Loading advisory classes...
+                        <div className="flex justify-center items-center space-x-2">
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>
+                          <span>Loading advisory classes...</span>
+                        </div>
                       </td>
                     </tr>
                   ) : error ? (
@@ -478,36 +575,26 @@ const CreateAdvisory = () => {
                         {error}
                       </td>
                     </tr>
-                  ) : filteredAdvisoryClasses.length > 0 ? (
-                    filteredAdvisoryClasses.map((advisory) => {
-                      const classInfo =
-                        classes.find((c) => c.ClassID === advisory.classID) ||
-                        {};
-                      const facultyInfo =
-                        faculties.find(
-                          (f) => f.FacultyID === advisory.facultyID
-                        ) || {};
+                  ) : currentItems.length > 0 ? (
+                    currentItems.map((advisory) => {
+                      // Find corresponding class and faculty
+                      const classInfo = classes.find((c) => c.ClassID === advisory.classID);
+                      const facultyInfo = faculties.find((f) => f.FacultyID === advisory.facultyID);
 
                       return (
-                        <tr key={advisory.advisoryID} className="border-b">
-                          <td className="px-4 py-2">{advisory.advisoryID}</td>
+                        <tr key={advisory.advisoryID || `advisory-${Math.random()}`} className="border-b hover:bg-gray-50">
+                          <td className="px-4 py-2">{advisory.advisoryID || "N/A"}</td>
                           <td className="px-4 py-2">
-                            {classInfo.Grade
-                              ? `Grade ${classInfo.Grade} - ${classInfo.Section}`
-                              : "N/A"}
+                            {classInfo && classInfo.Grade ? `Grade ${classInfo.Grade} - ${classInfo.Section}` : "N/A"}
                           </td>
                           <td className="px-4 py-2">
-                            {" "}
-                            {facultyInfo.FirstName
-                              ? `${facultyInfo.LastName}, ${facultyInfo.FirstName}`
-                              : "N/A"}{" "}
+                            {facultyInfo && facultyInfo.LastName ? `${facultyInfo.LastName}, ${facultyInfo.FirstName}` : "N/A"}
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-4 py-2 flex space-x-2">
                             <button
-                              onClick={() =>
-                                handleViewStudents(advisory.advisoryID)
-                              }
+                              onClick={() => handleViewStudents(advisory.advisoryID)}
                               className="bg-green-600 text-white px-3 py-1 mr-2 rounded hover:bg-green-700 text-sm"
+                              disabled={!advisory.advisoryID}
                             >
                               View Students
                             </button>
@@ -530,6 +617,81 @@ const CreateAdvisory = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+            
+            {/* Pagination Controls */}
+            <div className="flex flex-col md:flex-row justify-between items-center mt-4 px-4">
+              <div className="flex items-center mb-4 md:mb-0">
+                <span className="text-sm text-gray-700 mr-2">
+                  Show
+                </span>
+                <select 
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  value={itemsPerPage}
+                  onChange={handleItemsPerPageChange}
+                >
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+                <span className="text-sm text-gray-700 ml-2">
+                  items per page
+                </span>
+              </div>
+              
+              <div className="flex items-center">
+                <span className="text-sm text-gray-700 mr-4">
+                  Page {currentPage} of {totalPages} 
+                  ({sortedAdvisoryClasses.length} total items)
+                </span>
+                <div className="flex">
+                  <button
+                    onClick={() => paginate(1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded-l-md border ${
+                      currentPage === 1 
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    First
+                  </button>
+                  <button
+                    onClick={() => paginate(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 border-t border-b ${
+                      currentPage === 1 
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => paginate(currentPage + 1)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className={`px-3 py-1 border-t border-b ${
+                      currentPage === totalPages || totalPages === 0
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => paginate(totalPages)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className={`px-3 py-1 rounded-r-md border ${
+                      currentPage === totalPages || totalPages === 0
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Last
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

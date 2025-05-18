@@ -30,32 +30,62 @@ const AssignSubject = () => {
   });
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10); // Default to 10 items per page
+  const [isLoading, setIsLoading] = useState(true);
   const pageSize = 8; // Number of rows per page
 
   const Navigate = useNavigate();
 
   useEffect(() => {
-    fetchAssignedSubjects();
-    fetchClasses();
-    fetchSubjects();
-    fetchFaculty();
-    fetchSchoolYears();
-    fetchAdvisories();
+    const fetchAllData = async () => {
+      setIsLoading(true);
+      try {
+        await Promise.all([
+          fetchAssignedSubjects(),
+          fetchClasses(),
+          fetchSubjects(),
+          fetchFaculty(),
+          fetchSchoolYears(),
+          fetchAdvisories(),
+        ]);
+      } catch (error) {
+        console.error("Error loading data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAllData();
   }, []);
 
   const fetchAdvisories = async () => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        toast.error("Authentication required");
+        Navigate("/login");
+        return;
+      }
+
       const response = await axios.get(
         "http://localhost:3000/Pages/admin-create-advisory",
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
-      setAdvisories(response.data);
+
+      if (Array.isArray(response.data)) {
+        console.log("Fetched advisories:", response.data);
+        setAdvisories(response.data);
+      } else {
+        console.error("Invalid advisory data format:", response.data);
+        toast.error("Received invalid advisory data");
+        setAdvisories([]);
+      }
     } catch (error) {
       console.error("Error fetching advisories:", error);
-      toast.error("Failed to fetch advisories");
+      toast.error(error.response?.data?.error || "Failed to fetch advisories");
+      setAdvisories([]);
     }
   };
 
@@ -194,28 +224,6 @@ const AssignSubject = () => {
       school_yearID: currentYear.school_yearID,
     };
 
-    if (newAssignedSubject.SubjectCode) {
-      payload.SubjectCode = newAssignedSubject.SubjectCode;
-    }
-
-    // Check for duplicate assignment
-    // Only check for duplicates when adding, not editing
-    if (!editingAssignment) {
-      const alreadyAssigned = assignedSubjects.some(
-        (assignment) =>
-          assignment.advisoryID === newAssignedSubject.advisoryID &&
-          assignment.subjectID === newAssignedSubject.subjectID &&
-          assignment.yearID === currentYear.school_yearID
-      );
-
-      if (alreadyAssigned) {
-        toast.error(
-          "This subject is already assigned to this advisory class for the current school year."
-        );
-        return;
-      }
-    }
-
     try {
       const token = localStorage.getItem("token");
       if (!token) {
@@ -256,6 +264,7 @@ const AssignSubject = () => {
         subjectID: "",
         FacultyID: "",
         advisoryID: "",
+        school_yearID: "",
       });
       fetchAssignedSubjects();
       setEditingAssignment(null);
@@ -304,11 +313,16 @@ const AssignSubject = () => {
     document.getElementById("assign_subject_modal").showModal();
   };
 
-  const totalPages = Math.ceil(assignedSubjects.length / pageSize);
+  const totalPages = Math.ceil(assignedSubjects.length / itemsPerPage);
   const paginatedSubjects = assignedSubjects.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -371,7 +385,14 @@ const AssignSubject = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedSubjects.length > 0 ? (
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                        <p className="mt-2">Loading data...</p>
+                      </td>
+                    </tr>
+                  ) : paginatedSubjects.length > 0 ? (
                     paginatedSubjects.map((assignment, index) => (
                       <tr
                         key={assignment.subjectCode || `row-${index}`}
@@ -421,27 +442,82 @@ const AssignSubject = () => {
                 </tbody>
               </table>
             </div>
-            {/* Pagination */}
-            <div className="flex justify-between mt-4">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="btn"
-              >
-                Previous
-              </button>
-              <span>
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages || totalPages === 0}
-                className="btn bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                Next
-              </button>
+
+            {/* Enhanced Pagination Controls */}
+            <div className="flex flex-col md:flex-row justify-between items-center mt-4 px-4">
+              <div className="flex items-center mb-4 md:mb-0">
+                <span className="text-sm text-gray-700 mr-2">Show</span>
+                <select
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  value={itemsPerPage}
+                  onChange={handleItemsPerPageChange}
+                >
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+                <span className="text-sm text-gray-700 ml-2">
+                  items per page
+                </span>
+              </div>
+
+              <div className="flex items-center">
+                <span className="text-sm text-gray-700 mr-4">
+                  Page {currentPage} of {totalPages}
+                  ({assignedSubjects.length} total items)
+                </span>
+                <div className="flex">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded-l-md border ${
+                      currentPage === 1
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    First
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 border-t border-b ${
+                      currentPage === 1
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className={`px-3 py-1 border-t border-b ${
+                      currentPage === totalPages || totalPages === 0
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className={`px-3 py-1 rounded-r-md border ${
+                      currentPage === totalPages || totalPages === 0
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Last
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center text-sm text-gray-500 mt-2">
+              Showing {Math.min((currentPage - 1) * itemsPerPage + 1, assignedSubjects.length)} to {Math.min(currentPage * itemsPerPage, assignedSubjects.length)} of {assignedSubjects.length} entries
             </div>
           </div>
         </div>
@@ -473,27 +549,40 @@ const AssignSubject = () => {
                   disabled={!!editingAssignment}
                 >
                   <option value="">Select Advisory Class</option>
-                  {advisories.map((advisory) => {
-                    const classInfo = classes.find(
-                      (c) => c.ClassID === advisory.classID
-                    );
-                    const facultyInfo = faculty.find(
-                      (f) => f.FacultyID === advisory.facultyID
-                    );
+                  {advisories.length > 0 ? (
+                    advisories.map((advisory) => {
+                      // Find the associated class information
+                      const classInfo = classes.find(
+                        (c) => c.ClassID === advisory.classID
+                      );
+                      // Find the associated faculty information
+                      const facultyInfo = faculty.find(
+                        (f) => f.FacultyID === advisory.facultyID
+                      );
 
-                    return (
-                      <option
-                        key={advisory.advisoryID}
-                        value={advisory.advisoryID}
-                      >
-                        {`Grade ${classInfo?.Grade || ""} - Section ${
-                          classInfo?.Section || ""
-                        } (${
-                          facultyInfo ? facultyInfo.LastName : "No Advisor"
-                        })`}
-                      </option>
-                    );
-                  })}
+                      // Create a descriptive label with grade, section and faculty name
+                      const gradeLabel = classInfo
+                        ? `Grade ${classInfo.Grade}`
+                        : "Unknown Grade";
+                      const sectionLabel = classInfo
+                        ? classInfo.Section
+                        : "Unknown Section";
+                      const facultyLabel = facultyInfo
+                        ? `(Advisor: ${facultyInfo.LastName}, ${facultyInfo.FirstName})`
+                        : "(No Advisor)";
+
+                      return (
+                        <option
+                          key={advisory.advisoryID}
+                          value={advisory.advisoryID}
+                        >
+                          {`${gradeLabel} - ${sectionLabel} ${facultyLabel}`}
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <option disabled value="">No advisory classes available</option>
+                  )}
                 </select>
               </div>
 
