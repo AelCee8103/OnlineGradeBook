@@ -264,14 +264,6 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
             </Link>
           </li>
         </ul>
-
-        <button
-          className="mt-6 bg-blue-700 text-white w-full py-3 rounded-lg hover:bg-blue-800 flex items-center justify-center"
-          onClick={() => setShowLogoutModal(true)}
-        >
-          <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
-          Log Out
-        </button>
       </div>
 
       {/* Mobile Sidebar */}
@@ -479,14 +471,6 @@ const AdminSidePanel = ({ isSidebarOpen, toggleSidebar }) => {
               </Link>
             </li>
           </ul>
-
-          <button
-            className="mt-6 bg-blue-700 text-white w-full py-3 rounded-lg hover:bg-blue-800 flex items-center justify-center"
-            onClick={() => setShowLogoutModal(true)}
-          >
-            <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
-            Log Out
-          </button>
         </ul>
         <div className="flex-1 p-6">
           <Outlet />

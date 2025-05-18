@@ -38,40 +38,40 @@ const CreateAdvisory = () => {
   });
 
   const fetchAdvisoryClasses = async () => {
-    const token = localStorage.getItem("token");
-    try {
-      setFetching(true);
-      const response = await axios.get(
-        "http://localhost:3000/Pages/admin-create-advisory",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+  const token = localStorage.getItem("token");
+  try {
+    setFetching(true);
+    const response = await axios.get(
+      "http://localhost:3000/Pages/admin-create-advisory", 
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
 
-      console.log("Advisory classes response (full data):", response.data);
-      console.log("Total advisory records received:", response.data?.length || 0);
+    console.log("Advisory classes response (full data):", response.data);
+    console.log("Total advisory records received:", response.data?.length || 0);
 
-      // Check if data is an array and has items
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        setAdvisoryClasses(response.data);
-        // Calculate total pages
-        setTotalPages(Math.ceil(response.data.length / itemsPerPage));
-        return response.data;
-      } else {
-        console.warn("Empty or invalid advisory data received:", response.data);
-        setAdvisoryClasses([]);
-        setTotalPages(1);
-        return [];
-      }
-    } catch (err) {
-      console.error("Error fetching advisory classes:", err);
-      toast.error("Failed to load advisory classes");
-      setError("Failed to load advisory classes");
+    // Check if data is an array and has items
+    if (Array.isArray(response.data) && response.data.length > 0) {
+      setAdvisoryClasses(response.data);
+      // Calculate total pages
+      setTotalPages(Math.ceil(response.data.length / itemsPerPage));
+      return response.data;
+    } else {
+      console.warn("Empty or invalid advisory data received:", response.data);
       setAdvisoryClasses([]);
       setTotalPages(1);
       return [];
-    } finally {
-      setFetching(false);
     }
-  };
+  } catch (err) {
+    console.error("Error fetching advisory classes:", err);
+    toast.error("Failed to load advisory classes");
+    setError("Failed to load advisory classes");
+    setAdvisoryClasses([]);
+    setTotalPages(1);
+    return [];
+  } finally {
+    setFetching(false);
+  }
+};
 
   const fetchAllData = async () => {
     const token = localStorage.getItem("token");

@@ -463,8 +463,8 @@ const ManageStudents = () => {
           {/* Students Table */}
           <div className="bg-white shadow rounded-lg p-4 max-w-screen-lg mx-auto">
             {/* Button to Open Modal */}
-            <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
-              <div className="relative flex-grow w-full sm:w-auto">
+            <div className="flex flex-col lg:flex-row items-stretch gap-3 mb-4">
+              <div className="relative flex-grow w-full">
                 <input
                   type="text"
                   placeholder="Search by ID, last name or first name"
@@ -478,26 +478,33 @@ const ManageStudents = () => {
                 />
               </div>
 
-              <div className="flex space-x-2">
+              {/* Action Buttons Container */}
+              <div className="flex flex-wrap gap-2 mt-2 lg:mt-0">
+                {/* Button 1: Add Student */}
                 <button
-                  className="btn bg-blue-500 hover:bg-blue-600 text-white"
+                  className="btn bg-blue-500 hover:bg-blue-600 text-white flex-1 min-w-[120px] h-10 px-3 md:px-4 text-xs md:text-sm font-medium rounded"
                   onClick={() => document.getElementById("my_modal_5").showModal()}
                 >
-                  Add Student
+                  <span className="hidden md:inline">Add Student</span>
+                  <span className="md:hidden">Add</span>
                 </button>
 
+                {/* Button 2: Download Template */}
                 <button
-                  className="btn bg-green-500 hover:bg-green-600 text-white"
+                  className="btn bg-green-500 hover:bg-green-600 text-white flex-1 min-w-[120px] h-10 px-3 md:px-4 text-xs md:text-sm font-medium rounded"
                   onClick={downloadTemplate}
                 >
-                  Download Template
+                  <span className="hidden md:inline">Download Template</span>
+                  <span className="md:hidden">Template</span>
                 </button>
 
+                {/* Button 3: Bulk Upload */}
                 <button
-                  className="btn bg-green-500 hover:bg-green-600 text-white"
+                  className="btn bg-green-500 hover:bg-green-600 text-white flex-1 min-w-[120px] h-10 px-3 md:px-4 text-xs md:text-sm font-medium rounded"
                   onClick={() => document.getElementById("bulk_upload_modal").showModal()}
                 >
-                  Bulk Upload
+                  <span className="hidden md:inline">Bulk Upload</span>
+                  <span className="md:hidden">Upload</span>
                 </button>
               </div>
             </div>
