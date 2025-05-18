@@ -922,19 +922,11 @@ router.get('/admin-create-advisory', async (req, res) => {
   try {
     db = await connectToDatabase();
     const [advisories] = await db.query(`
-      SELECT 
-        a.advisoryID, 
-        a.classID, 
-        a.facultyID,
-        c.Grade,
-        c.Section,
-        sy.year AS schoolYear,
-        sy.status AS yearStatus
+      SELECT a.advisoryID, a.classID, a.facultyID
       FROM advisory a
-      JOIN classes c ON a.classID = c.ClassID
-      JOIN class_year cy ON a.advisoryID = cy.advisoryID
-      JOIN schoolyear sy ON cy.yearID = sy.school_yearID
-      ORDER BY sy.year DESC, c.Grade, c.Section
+      INNER JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      INNER JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE sy.status = 1
     `);
 
     res.status(200).json(advisories);
@@ -1516,6 +1508,24 @@ router.post('/admin-create-advisory', async (req, res) => {
 });
 
 
+router.get('/admin-create-advisory', async (req, res) => {
+  let db;
+  try {
+    db = await connectToDatabase();
+    const [advisories] = await db.query(`
+      SELECT a.advisoryID, a.classID, a.facultyID
+      FROM advisory a
+      INNER JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      INNER JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE sy.status = 1
+    `);
+
+    res.status(200).json(advisories);
+  } catch (error) {
+    console.error('Error fetching advisory classes:', error);
+    res.status(500).json({ error: 'Failed to fetch advisory classes' });
+  }
+});
 
 
 // Get advisory classes with faculty and class info for active school year
@@ -2095,6 +2105,25 @@ router.post('/admin-create-advisory', async (req, res) => {
 });
 
 
+router.get('/admin-create-advisory', async (req, res) => {
+  let db;
+  try {
+    db = await connectToDatabase();
+    const [advisories] = await db.query(`
+      SELECT a.advisoryID, a.classID, a.facultyID
+      FROM advisory a
+      INNER JOIN class_year cy ON a.advisoryID = cy.advisoryID
+      INNER JOIN schoolyear sy ON cy.yearID = sy.school_yearID
+      WHERE sy.status = 1
+    `);
+
+    res.status(200).json(advisories);
+  } catch (error) {
+    console.error('Error fetching advisory classes:', error);
+    res.status(500).json({ error: 'Failed to fetch advisory classes' });
+  }
+});
+
 
 // Get advisory classes with faculty and class info for active school year
 router.get('/admin/manage-grades', async (req, res) => {
@@ -2540,6 +2569,8 @@ router.put('/admin-manage-students/archive/:studentID', async (req, res) => {
 // Make sure this route is added if not already there:
 
 router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, async (req, res) => {
+  console.log("Received advisoryID:", req.params.advisoryID); // Log the advisoryID received
+
   const { advisoryID } = req.params;
   try {
     const db = await connectToDatabase();
@@ -2565,12 +2596,16 @@ router.get("/faculty/check-pending-request/:advisoryID", authenticateToken, asyn
       [advisoryID]
     );
 
-    res.json({
+    const response = {
       success: true,
       status: request.length > 0 ? request[0].status : null,
       lastRequestDate: request.length > 0 ? request[0].requestDate : null,
       activeQuarter
-    });
+    };
+
+     // Log the response sent to frontend
+console.log("Validation status response:", response);
+    res.json(response);
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to check pending requests" });
   }
@@ -2906,5 +2941,15 @@ router.get("/faculty/student-info/:studentID", async (req, res) => {
     console.error("Error fetching student info:", error);
     res.status(500).json({ message: "Failed to fetch student info" });
   }
+});
+
+router.get("/student-classes/:studentID/:schoolYearID", async (req, res) => {
+  const db = await connectToDatabase();
+  const { studentID, schoolYearID } = req.params;
+  const [rows] = await db.query(
+    "SELECT advisoryID FROM student_classes WHERE StudentID = ? AND school_yearID = ?",
+    [studentID, schoolYearID]
+  );
+  res.json(rows[0] || {});
 });
 export default router;
