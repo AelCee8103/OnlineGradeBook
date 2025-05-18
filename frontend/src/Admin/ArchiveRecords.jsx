@@ -135,6 +135,16 @@ const ArchiveRecords = () => {
                       >
                         Restore
                       </button>
+                      <button
+                        className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm ml-2"
+                        onClick={() =>
+                          navigate(
+                            `/admin/archived-student/${student.StudentID}/grades`
+                          )
+                        }
+                      >
+                        Grades
+                      </button>
                     </td>
                   </tr>
                 ))

@@ -667,39 +667,7 @@ router.get("/admin-assign-subject", async (req, res) => {
 });
 
 
-router.post("/admin-dashboard", async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-    const { SchoolYear, year } = req.body;
 
-    if (!SchoolYear || !year) {
-      return res.status(400).json({ error: "Both School Year ID and Year are required." });
-    }
-
-    // Check if the school year already exists
-    const checkSql = "SELECT * FROM schoolyear WHERE school_yearID = ?";
-    const [existing] = await db.query(checkSql, [SchoolYear]);
-
-    if (existing.length > 0) {
-      return res.status(400).json({ exists: true, message: "School Year already exists." });
-    }
-
-    
-
-    // Insert the new school year with status = 0 (inactive by default)
-    const insertSql = "INSERT INTO schoolyear (school_yearID, year, status) VALUES (?, ?, 0)";
-    const [result] = await db.query(insertSql, [SchoolYear, year]);
-
-    if (result.affectedRows > 0) {
-      return res.status(201).json({ success: true, message: "School Year added successfully with inactive status!" });
-    }
-
-    res.status(500).json({ error: "Failed to insert school year." });
-  } catch (err) {
-    console.error("Error adding School Year:", err);
-    res.status(500).json({ error: "Internal server error." });
-  }
-});
 
 
 
@@ -1264,35 +1232,19 @@ router.get("/admin-assign-subject", async (req, res) => {
 router.post("/admin-dashboard", async (req, res) => {
   try {
     const db = await connectToDatabase();
-    const { SchoolYear, year } = req.body;
-
-    if (!SchoolYear || !year) {
-      return res.status(400).json({ error: "Both School Year ID and Year are required." });
-    }
-
-    // Check if the school year already exists
-    const checkSql = "SELECT * FROM schoolyear WHERE school_yearID = ?";
-    const [existing] = await db.query(checkSql, [SchoolYear]);
-
-    if (existing.length > 0) {
-      return res.status(400).json({ exists: true, message: "School Year already exists." });
-    }
-
-    // Insert the new school year with status = 1
-    const insertSql = "INSERT INTO schoolyear (school_yearID, year, status) VALUES (?, ?, 1)";
-    const [result] = await db.query(insertSql, [SchoolYear, year]);
-
-    if (result.affectedRows > 0) {
-      return res.status(201).json({ success: true, message: "School Year added successfully with active status!" });
-    }
-
+    const { year } = req.body;
+    if (!year) return res.status(400).json({ error: "Year is required" });
+    // Check if year already exists
+    const [existing] = await db.query("SELECT * FROM schoolyear WHERE year = ?", [year]);
+    if (existing.length > 0) return res.json({ exists: true });
+    // Insert with auto-increment ID, status = 0 (inactive by default)
+    const [result] = await db.query("INSERT INTO schoolyear (year, status) VALUES (?, 0)", [year]);
+    if (result.affectedRows > 0) return res.json({ success: true });
     res.status(500).json({ error: "Failed to insert school year." });
   } catch (err) {
-    console.error("Error adding School Year:", err);
     res.status(500).json({ error: "Internal server error." });
   }
 });
-
 
 
 router.get("/admin-subject-classes/:subjectCode/students", async (req, res) => {
@@ -1858,37 +1810,7 @@ router.get("/admin-assign-subject", async (req, res) => {
 });
 
 
-router.post("/admin-dashboard", async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-    const { SchoolYear, year } = req.body;
 
-    if (!SchoolYear || !year) {
-      return res.status(400).json({ error: "Both School Year ID and Year are required." });
-    }
-
-    // Check if the school year already exists
-    const checkSql = "SELECT * FROM schoolyear WHERE school_yearID = ?";
-    const [existing] = await db.query(checkSql, [SchoolYear]);
-
-    if (existing.length > 0) {
-      return res.status(400).json({ exists: true, message: "School Year already exists." });
-    }
-
-    // Insert the new school year with status = 1
-    const insertSql = "INSERT INTO schoolyear (school_yearID, year, status) VALUES (?, ?, 1)";
-    const [result] = await db.query(insertSql, [SchoolYear, year]);
-
-    if (result.affectedRows > 0) {
-      return res.status(201).json({ success: true, message: "School Year added successfully with active status!" });
-    }
-
-    res.status(500).json({ error: "Failed to insert school year." });
-  } catch (err) {
-    console.error("Error adding School Year:", err);
-    res.status(500).json({ error: "Internal server error." });
-  }
-});
 
 
 
@@ -3051,4 +2973,111 @@ router.post("/admin/next-quarter", async (req, res) => {
   }
 });
 
+// Place this near your other admin routes, before module.exports or export default router
+
+router.get("/admin/dashboard-stats", async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    // Get current active school year
+    const [[currentYear]] = await db.query("SELECT year FROM schoolyear WHERE status = 1 LIMIT 1");
+    // Get counts
+    const [[students]] = await db.query("SELECT COUNT(*) as count FROM students WHERE Status = 1");
+    const [[advisories]] = await db.query("SELECT COUNT(*) as count FROM advisory");
+    const [[faculty]] = await db.query("SELECT COUNT(*) as count FROM faculty WHERE status = 1 OR status IS NULL");
+    const [[subjectClasses]] = await db.query("SELECT COUNT(*) as count FROM assignsubject WHERE yearID = (SELECT school_yearID FROM schoolyear WHERE status = 1 LIMIT 1)");
+    const [[unfinishedGrades]] = await db.query("SELECT COUNT(*) as count FROM validation_request WHERE statusID = 0");
+    const [[finishedGrades]] = await db.query("SELECT COUNT(*) as count FROM validation_request WHERE statusID = 1");
+    res.json({
+      currentYear: currentYear?.year || "N/A",
+      students: students.count,
+      advisories: advisories.count,
+      faculty: faculty.count,
+      subjectClasses: subjectClasses.count,
+      unfinishedGrades: unfinishedGrades.count,
+      finishedGrades: finishedGrades.count,
+    });
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error);
+    res.status(500).json({ error: "Failed to fetch dashboard stats" });
+  }
+});
+
+
+router.get("/admin/archived-student/:studentID/advisories", async (req, res) => {
+  const { studentID } = req.params;
+  const db = await connectToDatabase();
+  try {
+    // Get student info
+    const [studentRows] = await db.query(
+      "SELECT * FROM students WHERE StudentID = ?",
+      [studentID]
+    );
+    if (!studentRows.length) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+    // Advisory history query (loosen join on yearID)
+    const [advisories] = await db.query(`
+      SELECT
+        a.advisoryID,
+        ag.yearID AS school_yearID,
+        sy.year,
+        c.Grade,
+        c.Section
+      FROM averagegrades ag
+      JOIN assignsubject asg ON ag.subject_code = asg.SubjectCode
+      JOIN advisory a ON asg.advisoryID = a.advisoryID
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN schoolyear sy ON ag.yearID = sy.school_yearID
+      WHERE ag.StudentID = ?
+      GROUP BY a.advisoryID, ag.yearID
+      ORDER BY ag.yearID
+    `, [studentID]);
+
+    res.json({
+      advisories,
+      studentInfo: studentRows[0],
+    });
+  } catch (err) {
+    console.error("Error fetching advisory history:", err);
+    res.status(500).json({ message: "Failed to fetch advisory history" });
+  }
+});
+
+router.get("/admin/archived-student/:studentID/grades/:advisoryID/:school_yearID", async (req, res) => {
+  const { studentID, advisoryID, school_yearID } = req.params;
+  const db = await connectToDatabase();
+  try {
+    // Get all subject codes for this student and year (from subjectgrades)
+    const [subjects] = await db.query(`
+      SELECT DISTINCT sg.subject_code AS SubjectCode, s.SubjectName
+      FROM subjectgrades sg
+      JOIN assignsubject a ON sg.subject_code = a.SubjectCode
+      JOIN subjects s ON a.subjectID = s.SubjectID
+      WHERE sg.StudentID = ? AND sg.yearID = ? AND a.advisoryID = ?
+    `, [studentID, school_yearID, advisoryID]);
+
+    // Get grades for each subject
+    const grades = {};
+    for (const subj of subjects) {
+      const [gradeRows] = await db.query(`
+        SELECT Quarter, GradeScore
+        FROM subjectgrades
+        WHERE StudentID = ? AND subject_code = ? AND yearID = ?
+        ORDER BY Quarter ASC
+      `, [studentID, subj.SubjectCode, school_yearID]);
+      // Organize quarters
+      const quarters = {};
+      gradeRows.forEach(row => {
+        quarters[row.Quarter] = row.GradeScore;
+      });
+      grades[subj.SubjectCode] = {
+        subjectName: subj.SubjectName,
+        quarters,
+      };
+    }
+    res.json({ grades });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch grades" });
+  }
+});
 export default router;

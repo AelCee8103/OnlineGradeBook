@@ -29,7 +29,7 @@ import ViewStudent from "./Pages/ViewStudents";
 import ViewAttendance from "./Pages/ViewAttendance";
 import ManageSchoolYear from "./Admin/ManageSchoolYear";
 import { Toaster } from "react-hot-toast";
-
+import ArchivedStudentGrades from "./Admin/ArchivedStudentGrades";
 function App() {
   const [count, setCount] = useState(0);
 
@@ -79,6 +79,10 @@ function App() {
         <Route
           path="/admin/advisory/:advisoryID/students"
           element={<AdvisoryStudents />}
+        />
+        <Route
+          path="/admin/archived-student/:studentId/grades"
+          element={<ArchivedStudentGrades />}
         />
         <Route path="/faculty-login" element={<FacultyLogin />} />
         <Route path="/faculty-dashboard" element={<FacultyDashboard />} />
