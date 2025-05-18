@@ -116,17 +116,15 @@ const FacultyDashboard = () => {
         <div className="p-6 md:p-8 space-y-8">
           {/* Header Section */}
           <div className="flex justify-between items-center flex-wrap gap-4">
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-green-700 to-green-500 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-green-800 ">
               Faculty Dashboard
             </h1>
             <div className="flex items-center gap-3">
-              <label className="text-gray-600 text-lg">School Year:</label>
-              <select
-                className="border border-gray-300 rounded-xl px-4 py-2 text-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                disabled={true}
-              >
-                <option>{currentSchoolYear || "Loading..."}</option>
-              </select>
+              <span className="text-gray-600 text-lg font-medium">School Year:</span>
+              {/* Replaced dropdown with a span */}
+              <span className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 text-lg text-green-800 font-semibold">
+                {currentSchoolYear || "Loading..."}
+              </span>
               <button
                 className="bg-green-700 hover:bg-green-600 text-white px-5 py-2 rounded-xl shadow transition duration-300 flex items-center"
                 onClick={() => {
