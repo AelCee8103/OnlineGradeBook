@@ -30,6 +30,7 @@ const AssignSubject = () => {
   });
   const [editingAssignment, setEditingAssignment] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10); // Default to 10 items per page
   const [isLoading, setIsLoading] = useState(true);
   const pageSize = 8; // Number of rows per page
 
@@ -312,11 +313,16 @@ const AssignSubject = () => {
     document.getElementById("assign_subject_modal").showModal();
   };
 
-  const totalPages = Math.ceil(assignedSubjects.length / pageSize);
+  const totalPages = Math.ceil(assignedSubjects.length / itemsPerPage);
   const paginatedSubjects = assignedSubjects.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
   );
+
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(parseInt(e.target.value));
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden relative">
@@ -436,27 +442,82 @@ const AssignSubject = () => {
                 </tbody>
               </table>
             </div>
-            {/* Pagination */}
-            <div className="flex justify-between mt-4">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="btn"
-              >
-                Previous
-              </button>
-              <span>
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages || totalPages === 0}
-                className="btn bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                Next
-              </button>
+
+            {/* Enhanced Pagination Controls */}
+            <div className="flex flex-col md:flex-row justify-between items-center mt-4 px-4">
+              <div className="flex items-center mb-4 md:mb-0">
+                <span className="text-sm text-gray-700 mr-2">Show</span>
+                <select
+                  className="border border-gray-300 rounded px-2 py-1 text-sm"
+                  value={itemsPerPage}
+                  onChange={handleItemsPerPageChange}
+                >
+                  <option value="5">5</option>
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                </select>
+                <span className="text-sm text-gray-700 ml-2">
+                  items per page
+                </span>
+              </div>
+
+              <div className="flex items-center">
+                <span className="text-sm text-gray-700 mr-4">
+                  Page {currentPage} of {totalPages}
+                  ({assignedSubjects.length} total items)
+                </span>
+                <div className="flex">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 rounded-l-md border ${
+                      currentPage === 1
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    First
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                    className={`px-3 py-1 border-t border-b ${
+                      currentPage === 1
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className={`px-3 py-1 border-t border-b ${
+                      currentPage === totalPages || totalPages === 0
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Next
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className={`px-3 py-1 rounded-r-md border ${
+                      currentPage === totalPages || totalPages === 0
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-white text-blue-500 hover:bg-blue-50"
+                    }`}
+                  >
+                    Last
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-center text-sm text-gray-500 mt-2">
+              Showing {Math.min((currentPage - 1) * itemsPerPage + 1, assignedSubjects.length)} to {Math.min(currentPage * itemsPerPage, assignedSubjects.length)} of {assignedSubjects.length} entries
             </div>
           </div>
         </div>

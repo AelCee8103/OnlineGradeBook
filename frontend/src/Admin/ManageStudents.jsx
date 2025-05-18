@@ -169,14 +169,31 @@ const ManageStudents = () => {
       return;
     }
 
+    // For transferee students, grade is required
+    if (studentData.studentType === 'transferee' && !studentData.grade) {
+      toast.error("Please select a grade level for transferee student.");
+      return;
+    }
+
     try {
       const token = localStorage.getItem("token");
+      
+      // Create the payload to match backend expectations
+      const payload = {
+        LastName: studentData.LastName,
+        FirstName: studentData.FirstName,
+        MiddleName: studentData.MiddleName,
+        studentType: studentData.studentType,
+        grade: studentData.studentType === 'transferee' ? studentData.grade : "7"
+      };
+
       const res = await axios.post(
         "http://localhost:3000/Pages/admin-manage-students",
-        studentData,
+        payload,
         {
           headers: {
             Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json"
           },
         }
       );
@@ -198,15 +215,7 @@ const ManageStudents = () => {
         toast.success("Student added successfully!");
 
         // Refresh student list
-        const updatedResponse = await axios.get(
-          "http://localhost:3000/Pages/admin-manage-students",
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-        setStudents(updatedResponse.data);
+        fetchStudents();
       }
     } catch (error) {
       console.error("Error adding student:", error);
@@ -214,7 +223,7 @@ const ManageStudents = () => {
         toast.error("Session expired. Please login again.");
         navigate("/admin-login");
       } else {
-        toast.error(error.response?.data?.message || "Failed to add student.");
+        toast.error(error.response?.data?.error || "Failed to add student.");
       }
     }
   };
