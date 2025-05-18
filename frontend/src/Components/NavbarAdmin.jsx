@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { faUser, faBars } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome"; 
-import NotificationDropdown from "../Components/NotificationDropdown"; // Adjust the import path as necessary
 import { useSocket } from "../context/SocketContext";
 
 const NavbarAdmin = ({ toggleSidebar }) => {
@@ -86,67 +85,134 @@ const NavbarAdmin = ({ toggleSidebar }) => {
     fetchAdminProfile();
   }, [socket]);
 
+  const handleLogout = () => {
+    // Clear all authentication data
+    localStorage.removeItem("token");
+    localStorage.removeItem("adminID");
+    localStorage.removeItem("adminName");
+    
+    // Disconnect socket if needed
+    if (socket) {
+      socket.emit('logout');
+    }
+    
+    // Redirect to login page
+    window.location.href = "/";
+  };
+
   return (
-    <div className="navbar bg-base-100 px-4 shadow-md">
+    <div className="navbar bg-base-100 px-2 sm:px-4 shadow-md">
       {/* Left Section - Hamburger + Logo */}
-      <div className="flex-1 flex items-center">
-        <button className="md:hidden text-2xl mr-3" onClick={toggleSidebar}>
-          <FontAwesomeIcon icon={faBars} />
+      <div className="navbar-start">
+        <button className="lg:hidden btn btn-ghost btn-circle" onClick={toggleSidebar}>
+          <FontAwesomeIcon icon={faBars} className="text-lg" />
         </button>
-        <a className="ml-4 text-xl text-blue-700 font-bold">BDCNHS GRADEBOOK</a>
+        <a className="normal-case text-base sm:text-lg md:text-xl font-bold text-blue-700 ml-0 sm:ml-2">BDCNHS GRADEBOOK</a>
+      </div>
+      
+      {/* Center Section - Can be used for navigation links on larger screens */}
+      <div className="navbar-center hidden lg:flex">
+        {/* Add any center content here if needed */}
       </div>
 
       {/* Right Section */}
-      <div className="flex-none">
-        <div className="flex items-center gap-4">
-          {/* Add Notification Dropdown Here */}
-      
-
-          <div className="flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${
-              socketStatus === 'connected' ? 'bg-yellow-400' :
-              socketStatus === 'authenticated' ? 'bg-green-400' :
-              socketStatus === 'auth_failed' ? 'bg-red-400' :
-              'bg-gray-400'
-            }`} />
-            <span className="text-sm text-gray-600">
-              {socketStatus === 'connected' ? 'Connected' :
-              socketStatus === 'authenticated' ? 'Authenticated' :
-              socketStatus === 'auth_failed' ? 'Auth Failed' :
-              'Disconnected'}
-            </span>
-          </div>
-          
-          <div className="flex grow justify-end px-2">
-            <div className="flex items-stretch">
-              <div className="dropdown dropdown-end">
-                <div tabIndex={0} role="button" className="btn btn-ghost rounded-field">Admin</div>
-                <ul
-                  tabIndex={0}
-                  className="menu dropdown-content bg-white rounded-box z-1 mt-4 w-52 p-2 shadow-sm">
-                  <li><a className="bg-">LOGOUT</a></li>
-                </ul>
-              </div>
-            </div>
-          </div>
+      <div className="navbar-end">
+        {/* Socket Status - Hide on very small screens */}
+        <div className="hidden sm:flex items-center gap-2 mr-2">
+          <div className={`w-2 h-2 rounded-full ${
+            socketStatus === 'connected' ? 'bg-yellow-400' :
+            socketStatus === 'authenticated' ? 'bg-green-400' :
+            socketStatus === 'auth_failed' ? 'bg-red-400' :
+            'bg-gray-400'
+          }`} />
+          <span className="text-xs md:text-sm text-gray-600">
+            {socketStatus === 'connected' ? 'Connected' :
+            socketStatus === 'authenticated' ? 'Authenticated' :
+            socketStatus === 'auth_failed' ? 'Auth Failed' :
+            'Disconnected'}
+          </span>
         </div>
         
-        {/* Mobile View */}
-        <div className="md:hidden">
-          <div className="relative">
-            <button className="btn btn-ghost" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-              <FontAwesomeIcon icon={faUser} className="text-xl" />
-            </button>
-            {isDropdownOpen && (
-              <ul className="absolute right-0 mt-3 p-2 shadow bg-base-100 rounded-box w-52 z-10">
-                <li className="p-2 flex items-center">
-                  <FontAwesomeIcon icon={faUser} className="text-gray-900 text-xl mr-2" />
-                  <span className="text-lg font-semibold">{adminName}</span>
-                </li>
-                <li className="px-4 text-sm text-gray-500">Admin</li>
-              </ul>
-            )}
+        {/* Admin Profile Dropdown - Desktop */}
+        <div className="dropdown dropdown-end hidden sm:block">
+          <div 
+            tabIndex={0} 
+            role="button" 
+            className="btn btn-ghost btn-sm md:btn-md rounded-btn"
+          >
+            <div className="flex items-center gap-1 md:gap-2">
+              <FontAwesomeIcon icon={faUser} className="text-md md:text-lg" />
+              <span className="text-sm md:text-base">{adminName}</span>
+            </div>
           </div>
+          <ul
+            tabIndex={0}
+            className="dropdown-content z-[100] menu p-2 shadow bg-base-100 rounded-box w-52 mt-2"
+          >
+            <li className="menu-title">
+              <span className="text-xs font-semibold text-gray-500">Admin Account</span>
+            </li>
+            <li>
+              <button onClick={handleLogout} className="text-red-600 hover:bg-red-50">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Logout
+              </button>
+            </li>
+          </ul>
+        </div>
+        
+        {/* Mobile View Profile Button */}
+        <div className="sm:hidden">
+          <button className="btn btn-ghost btn-circle" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+            <FontAwesomeIcon icon={faUser} className="text-lg" />
+          </button>
+          
+          {/* Mobile Profile Dropdown */}
+          {isDropdownOpen && (
+            <div className="fixed inset-0 bg-black bg-opacity-30 z-40" onClick={() => setIsDropdownOpen(false)}>
+              <div className="absolute right-2 top-16 w-64 bg-base-100 rounded-lg shadow-lg p-3 z-50" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-3 p-2 border-b border-gray-100 pb-3">
+                  <div className="bg-blue-100 p-2 rounded-full">
+                    <FontAwesomeIcon icon={faUser} className="text-blue-600 text-lg" />
+                  </div>
+                  <div>
+                    <div className="font-semibold">{adminName}</div>
+                    <div className="text-xs text-gray-500">Administrator</div>
+                  </div>
+                </div>
+                
+                {/* Socket status in mobile view */}
+                <div className="flex items-center gap-2 p-3 border-b border-gray-100">
+                  <div className={`w-2 h-2 rounded-full ${
+                    socketStatus === 'connected' ? 'bg-yellow-400' :
+                    socketStatus === 'authenticated' ? 'bg-green-400' :
+                    socketStatus === 'auth_failed' ? 'bg-red-400' :
+                    'bg-gray-400'
+                  }`} />
+                  <span className="text-xs text-gray-600">
+                    {socketStatus === 'connected' ? 'Connected' :
+                    socketStatus === 'authenticated' ? 'Authenticated' :
+                    socketStatus === 'auth_failed' ? 'Auth Failed' :
+                    'Disconnected'}
+                  </span>
+                </div>
+                
+                <div className="mt-2">
+                  <button 
+                    onClick={handleLogout}
+                    className="flex items-center w-full p-3 text-red-600 hover:bg-red-50 rounded-md"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Logout
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
