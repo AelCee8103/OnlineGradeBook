@@ -84,6 +84,19 @@ const CreateAdvisory = () => {
     fetchAllData();
   }, []);
 
+  useEffect(() => {
+    // Set current school year automatically when schoolYears is loaded
+    if (schoolYears.length > 0) {
+      const currentYear = schoolYears.find((y) => y.status === 1);
+      if (currentYear) {
+        setCreateFormData((prev) => ({
+          ...prev,
+          schoolYearID: currentYear.school_yearID,
+        }));
+      }
+    }
+  }, [schoolYears]);
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
@@ -333,28 +346,6 @@ const CreateAdvisory = () => {
                         >
                           {faculty.FacultyID} - {faculty.LastName},{" "}
                           {faculty.FirstName}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">
-                      <span className="label-text">School Year</span>
-                    </label>
-                    <select
-                      name="schoolYearID"
-                      value={createFormData.schoolYearID}
-                      onChange={handleCreateChange}
-                      className="select select-bordered w-full"
-                      required
-                    >
-                      <option value="">Select School Year</option>
-                      {schoolYears.map((year) => (
-                        <option
-                          key={year.school_yearID}
-                          value={year.school_yearID}
-                        >
-                          {year.school_yearID} - {year.SchoolYear}
                         </option>
                       ))}
                     </select>

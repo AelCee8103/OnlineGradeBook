@@ -71,12 +71,19 @@ const ManageClasses = () => {
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (!formData.Grade || !formData.Section) {
+      toast.error("Grade and Section are required");
+      return;
+    }
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
       const response = await axios.put(
         `http://localhost:3000/Pages/admin-advisory-classes/${formData.ClassID}`,
-        formData,
+        {
+          Grade: formData.Grade,
+          Section: formData.Section,
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
