@@ -2161,7 +2161,27 @@ router.post("/faculty/update-grade", authenticateToken, async (req, res) => {
   }
 });
 
-
+router.put('/admin-class-section/:id', async (req, res) => {
+  const { id } = req.params;
+  const { Grade, Section } = req.body;
+  if (!Grade || !Section) {
+    return res.status(400).json({ error: 'Grade and Section are required' });
+  }
+  try {
+    const db = await connectToDatabase();
+    await db.query(
+      'UPDATE classes SET Grade = ?, Section = ? WHERE ClassID = ?',
+      [Grade, Section, id]
+    );
+    const [updatedClass] = await db.query(
+      'SELECT ClassID, Grade, Section FROM classes WHERE ClassID = ?',
+      [id]
+    );
+    res.json(updatedClass[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update class' });
+  }
+});
 
 
 //Validation requests
