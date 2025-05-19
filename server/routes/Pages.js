@@ -288,6 +288,16 @@ router.post('/admin-advisory-classes', async (req, res) => {
   let db;
   try {
     db = await connectToDatabase();
+
+    // Check for duplicate section name (case-insensitive, across all grades)
+    const [dup] = await db.query(
+      "SELECT * FROM classes WHERE LOWER(Section) = LOWER(?)",
+      [Section]
+    );
+    if (dup.length > 0) {
+      return res.status(400).json({ error: 'Section name already exists.' });
+    }
+
     await db.query('START TRANSACTION');
 
     // Insert new class
@@ -306,19 +316,10 @@ router.post('/admin-advisory-classes', async (req, res) => {
     res.status(201).json(newClass[0]);
 
   } catch (error) {
-    if (db) await db.query('ROLLBACK');
-    console.error('Error creating class:', error);
-    
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ 
-        error: `Grade ${Grade} Section ${Section} already exists` 
-      });
-    }
-    
+    if (db) console.error('Error creating class:', error);
     res.status(500).json({ error: 'Failed to create class' });
   }
 });
-
 
 
 
@@ -423,7 +424,7 @@ router.put('/admin-advisory-classes/:advisoryID', async (req, res) => {
   }
 });
 // PUT update class
-router.put('/admin-advisory-classes/:id', async (req, res) => {
+router.put('/admin-advisory-classes-section/:id', async (req, res) => {
   const { id } = req.params;
   const { Grade, Section } = req.body;
 
@@ -433,6 +434,16 @@ router.put('/admin-advisory-classes/:id', async (req, res) => {
 
   try {
     const db = await connectToDatabase();
+
+    // Check for duplicate section name (case-insensitive, across all grades, excluding current)
+    const [dup] = await db.query(
+      "SELECT * FROM classes WHERE LOWER(Section) = LOWER(?) AND ClassID != ?",
+      [Section, id]
+    );
+    if (dup.length > 0) {
+      return res.status(400).json({ error: 'Section name already exists.' });
+    }
+
     await db.query(
       'UPDATE classes SET Grade = ?, Section = ? WHERE ClassID = ?',
       [Grade, Section, id]
@@ -447,13 +458,6 @@ router.put('/admin-advisory-classes/:id', async (req, res) => {
     res.json(updatedClass[0]);
   } catch (error) {
     console.error('Error updating class:', error);
-    
-    if (error.code === 'ER_DUP_ENTRY') {
-      return res.status(400).json({ 
-        error: `Grade ${Grade} Section ${Section} already exists` 
-      });
-    }
-    
     res.status(500).json({ error: 'Failed to update class' });
   }
 });

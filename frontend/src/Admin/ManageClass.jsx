@@ -79,7 +79,7 @@ const ManageClasses = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.put(
-        `http://localhost:3000/Pages/admin-class-section/${formData.ClassID}`,
+        `http://localhost:3000/Pages/admin-advisory-classes-section/${formData.ClassID}`,
         {
           Grade: formData.Grade,
           Section: formData.Section,
