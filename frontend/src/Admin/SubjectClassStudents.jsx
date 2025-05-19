@@ -200,22 +200,25 @@ const SubjectClassStudents = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {Object.entries(studentGrades).map(
-                      ([subjectCode, data]) => {
+                    {Object.entries(studentGrades)
+                      .filter(
+                        ([subjectCode, data]) =>
+                          subjectCode === subjectInfo.subjectCode?.toString()
+                      )
+                      .map(([subjectCode, data]) => {
                         const q1 = data.quarters[1] || "-";
                         const q2 = data.quarters[2] || "-";
                         const q3 = data.quarters[3] || "-";
                         const q4 = data.quarters[4] || "-";
-                        const validGrades = [q1, q2, q3, q4].filter(
-                          (n) => !isNaN(n)
-                        );
+                        const validGrades = [q1, q2, q3, q4]
+                          .map(Number)
+                          .filter((n) => !isNaN(n));
                         const avg =
                           validGrades.length === 4
                             ? (
                                 validGrades.reduce((a, b) => a + b, 0) / 4
                               ).toFixed(2)
                             : "-";
-
                         return (
                           <tr key={subjectCode} className="border-b">
                             <td className="px-4 py-2">{data.subjectName}</td>
@@ -226,8 +229,7 @@ const SubjectClassStudents = () => {
                             <td className="px-4 py-2">{avg}</td>
                           </tr>
                         );
-                      }
-                    )}
+                      })}
                   </tbody>
                 </table>
               </div>

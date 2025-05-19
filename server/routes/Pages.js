@@ -2874,27 +2874,44 @@ router.get("/students/:studentID", async (req, res) => {
 
 
 // Get student info for faculty (by StudentID)
-router.get("/faculty/student-info/:studentID", async (req, res) => {
-  try {
-    const db = await connectToDatabase();
-    const { studentID } = req.params;
+router.get("/faculty/student-info/:studentID", authenticateToken, async (req, res) => {
+  const { studentID } = req.params;
+  const db = await connectToDatabase();
 
-    const [students] = await db.query(
-      `SELECT StudentID, LastName, FirstName, MiddleName, Status
-       FROM students
-       WHERE StudentID = ?`,
-      [studentID]
-    );
+  // Get current school year
+  const [[currentYear]] = await db.query(
+    "SELECT school_yearID, year FROM schoolyear WHERE status = 1 LIMIT 1"
+  );
 
-    if (students.length === 0) {
-      return res.status(404).json({ message: "Student not found" });
-    }
+  // Get student info
+  const [[student]] = await db.query(
+    "SELECT * FROM students WHERE StudentID = ?",
+    [studentID]
+  );
 
-    res.status(200).json(students[0]);
-  } catch (error) {
-    console.error("Error fetching student info:", error);
-    res.status(500).json({ message: "Failed to fetch student info" });
-  }
+  if (!student) return res.status(404).json({ error: "Student not found" });
+
+  // Get advisory info for this student in the current year
+  const [[advisoryInfo]] = await db.query(`
+    SELECT 
+      a.advisoryID,
+      c.Grade,
+      c.Section,
+      CONCAT(f.LastName, ', ', f.FirstName) as facultyName,
+      sy.year AS SchoolYear
+    FROM student_classes sc
+    JOIN advisory a ON sc.advisoryID = a.advisoryID
+    JOIN classes c ON a.classID = c.ClassID
+    JOIN faculty f ON a.facultyID = f.FacultyID
+    JOIN schoolyear sy ON sc.school_yearID = sy.school_yearID
+    WHERE sc.StudentID = ? AND sc.school_yearID = ?
+    LIMIT 1
+  `, [studentID, currentYear.school_yearID]);
+
+  res.json({
+    ...student,
+    advisoryInfo: advisoryInfo || null,
+  });
 });
 
 router.get("/student-classes/:studentID/:schoolYearID", async (req, res) => {
@@ -3100,4 +3117,32 @@ router.get("/admin/archived-student/:studentID/grades/:advisoryID/:school_yearID
     res.status(500).json({ error: "Failed to fetch grades" });
   }
 });
+
+// Get full advisory info for a student in a school year
+router.get("/student-advisory-info/:studentID/:schoolYearID", async (req, res) => {
+  const { studentID, schoolYearID } = req.params;
+  const db = await connectToDatabase();
+  try {
+    const [rows] = await db.query(`
+      SELECT 
+        a.advisoryID,
+        c.Grade,
+        c.Section,
+        CONCAT(f.LastName, ', ', f.FirstName) as facultyName,
+        sy.year AS SchoolYear
+      FROM student_classes sc
+      JOIN advisory a ON sc.advisoryID = a.advisoryID
+      JOIN classes c ON a.classID = c.ClassID
+      JOIN faculty f ON a.facultyID = f.FacultyID
+      JOIN schoolyear sy ON sc.school_yearID = sy.school_yearID
+      WHERE sc.StudentID = ? AND sc.school_yearID = ?
+      LIMIT 1
+    `, [studentID, schoolYearID]);
+    res.json(rows[0] || {});
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch advisory info" });
+  }
+});
+
 export default router;
+

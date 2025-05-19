@@ -97,7 +97,7 @@ const StudentGrades = ({ isFaculty = false }) => {
             throw new Error("Student not found");
           }
           setStudentInfo(res.data);
-          setAdvisoryInfo(res.data.advisoryInfo);
+          setAdvisoryInfo(res.data.advisoryInfo || {});
         } else {
           const match = res.data.find(
             (s) => s.StudentID.toString() === studentId
@@ -106,29 +106,29 @@ const StudentGrades = ({ isFaculty = false }) => {
             throw new Error("Student not found");
           }
           setStudentInfo(match);
+
+          // Fetch advisory info for admin
+          const syRes = await axios.get(
+            "http://localhost:3000/Pages/schoolyear",
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          const currentSY = (syRes.data || []).find((sy) => sy.status === 1);
+          if (currentSY) {
+            const advisoryRes = await axios.get(
+              `http://localhost:3000/Pages/student-advisory-info/${studentId}/${currentSY.school_yearID}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            if (advisoryRes.data) {
+              setAdvisoryInfo(advisoryRes.data);
+            }
+          }
         }
       } catch (error) {
         console.error("Error fetching student info:", error);
         toast.error("Failed to fetch student information");
         navigate(-1);
-      }
-    };
-
-    const fetchAdvisory = async () => {
-      if (!isFaculty) {
-        try {
-          const res = await axios.get(
-            `http://localhost:3000/Pages/admin-advisory-classes/${advisoryID}`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
-          if (res.data) {
-            setAdvisoryInfo(res.data);
-          }
-        } catch (error) {
-          console.error("Error fetching advisory data:", error);
-        }
       }
     };
 
@@ -184,7 +184,7 @@ const StudentGrades = ({ isFaculty = false }) => {
 
     fetchGrades();
     fetchStudent();
-    if (!isFaculty) fetchAdvisory();
+
     // eslint-disable-next-line
   }, [studentId, advisoryID, isFaculty, navigate, advisoryInfo?.advisoryID]);
 
@@ -350,16 +350,18 @@ const StudentGrades = ({ isFaculty = false }) => {
             {advisoryInfo && (
               <div className="bg-white p-4 mb-6 rounded shadow max-w-screen-md mx-auto">
                 <p>
-                  <strong>Grade:</strong> {advisoryInfo.Grade}
+                  <strong>Grade:</strong> {advisoryInfo?.Grade || "-"}
                 </p>
                 <p>
-                  <strong>Section:</strong> {advisoryInfo.Section}
+                  <strong>Section:</strong> {advisoryInfo?.Section || "-"}
                 </p>
                 <p>
-                  <strong>Class Advisor:</strong> {advisoryInfo.facultyName}
+                  <strong>Class Advisor:</strong>{" "}
+                  {advisoryInfo?.facultyName || "-"}
                 </p>
                 <p>
-                  <strong>School Year:</strong> {advisoryInfo.SchoolYear}
+                  <strong>School Year:</strong>{" "}
+                  {advisoryInfo?.SchoolYear || "-"}
                 </p>
               </div>
             )}
